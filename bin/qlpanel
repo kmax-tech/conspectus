@@ -12,10 +12,12 @@ cmd="${1:-yazi}"
 # For yazi: build an overlay config where only theme.toml and yazi.toml are
 # generated (rest symlinked from the live config):
 #   - theme.toml   -> follow the system light/dark appearance
-#   - yazi.toml    -> replace previewers with ONLY the folder previewer, so the
-#                     3rd column does directory look-ahead but does NOT preview
-#                     files (Quick Look on the right handles files). The full
-#                     3-column layout is kept.
+#   - yazi.toml    -> [mgr] ratio = [1, 4, 0] hides yazi's 3rd column, so the
+#                     Quick Look pane is the sole preview (files and folders).
+#                     Navigation is done by entering directories (middle column).
+#                     Note: Quick Look on a folder shows its icon + metadata,
+#                     not its contents (no look-ahead) — an accepted trade for
+#                     the extra width and a single preview surface.
 if [[ "$cmd" == "yazi" ]]; then
   src="${YAZI_CONFIG_HOME:-$HOME/.config/yazi}"
   ov="$HOME/.cache/qlpanel/yazi-config"
@@ -36,19 +38,17 @@ dark  = "catppuccin-mocha"
 light = "catppuccin-latte"
 TOML
 
-  # yazi.toml: live config + a [plugin] previewers override that keeps only the
-  # folder previewer. Injected before the first [[plugin.*]] (or after an
-  # existing [plugin] table), so files get no 3rd-column preview.
+  # yazi.toml: live config + a [mgr] ratio override hiding the 3rd column.
   if [[ -f "$src/yazi.toml" ]]; then
     awk '
-      BEGIN { prev = "previewers = [\n\t{ url = \"*/\", run = \"folder\", sync = true },\n]" }
-      /^\[plugin\][[:space:]]*$/           { print; print prev; done=1; next }
-      /^\[\[plugin/ && !done               { print "[plugin]"; print prev; done=1 }
+      /^\[/            { in_mgr = ($0 ~ /^\[mgr\]/) }
+      /^\[mgr\]/       { print; print "ratio = [1, 4, 0]"; next }
+      in_mgr && /^[[:space:]]*ratio[[:space:]]*=/ { next }
       { print }
-      END { if (!done) { print "[plugin]"; print prev } }
     ' "$src/yazi.toml" > "$ov/yazi.toml"
+    grep -q '^\[mgr\]' "$ov/yazi.toml" || printf '\n[mgr]\nratio = [1, 4, 0]\n' >> "$ov/yazi.toml"
   else
-    printf '[plugin]\npreviewers = [\n\t{ url = "*/", run = "folder", sync = true },\n]\n' > "$ov/yazi.toml"
+    printf '[mgr]\nratio = [1, 4, 0]\n' > "$ov/yazi.toml"
   fi
 
   export YAZI_CONFIG_HOME="$ov"
