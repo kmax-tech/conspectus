@@ -16,6 +16,20 @@ let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/ql
 let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
 let command  = CommandLine.arguments.dropFirst().first ?? "yazi"
 
+// A Nerd Font so yazi's icon glyphs render. Override with QLPANEL_FONT /
+// QLPANEL_FONT_SIZE; falls back through installed Nerd Fonts, then plain mono.
+func terminalFont() -> NSFont {
+    let env = ProcessInfo.processInfo.environment
+    let size = Double(env["QLPANEL_FONT_SIZE"] ?? "") ?? 14
+    var names = ["JetBrainsMono Nerd Font Mono", "JetBrainsMono Nerd Font",
+                 "Hack Nerd Font Mono", "MesloLGS NF"]
+    if let override = env["QLPANEL_FONT"], !override.isEmpty { names.insert(override, at: 0) }
+    for n in names {
+        if let f = NSFont(name: n, size: size) { return f }
+    }
+    return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+}
+
 final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate {
     var window: NSWindow!
     var term: LocalProcessTerminalView!
@@ -29,6 +43,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
         // Left: embedded terminal running the file manager.
         term = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 720, height: 900))
+        term.font = terminalFont()        // Nerd Font before startProcess so cols/rows are sized right
         term.processDelegate = self
 
         // Right: Quick Look preview.
