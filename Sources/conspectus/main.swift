@@ -200,6 +200,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         window.center()
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(term)     // keystrokes go to the TUI
+        NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
         NSApp.activate(ignoringOtherApps: true)
 
         // Environment for the embedded shell: inherit ours, then point the
