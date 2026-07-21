@@ -1,11 +1,11 @@
 #!/bin/bash
-# qlpanel launcher — split window: TUI file manager (default yazi) on the left,
+# conspectus launcher — split window: TUI file manager (default yazi) on the left,
 # live Quick Look preview on the right. See README.md.
-#   qlpanel [command]   # e.g. qlpanel lf  /  qlpanel nnn
+#   conspectus [command]   # e.g. conspectus lf  /  conspectus nnn
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$REPO/.build/release/qlpanel"
-[[ -x $BIN ]] || { echo "qlpanel: not built — run $REPO/build.sh" >&2; exit 1; }
+BIN="$REPO/.build/release/conspectus"
+[[ -x $BIN ]] || { echo "conspectus: not built — run $REPO/build.sh" >&2; exit 1; }
 
 cmd="${1:-yazi}"
 
@@ -20,7 +20,7 @@ cmd="${1:-yazi}"
 #                     the extra width and a single preview surface.
 if [[ "$cmd" == "yazi" ]]; then
   src="${YAZI_CONFIG_HOME:-$HOME/.config/yazi}"
-  ov="$HOME/.cache/qlpanel/yazi-config"
+  ov="$HOME/.cache/conspectus/yazi-config"
   rm -rf "$ov"; mkdir -p "$ov"
   if [[ -d $src ]]; then
     for entry in "$src"/*; do
@@ -30,7 +30,7 @@ if [[ "$cmd" == "yazi" ]]; then
     done
   fi
 
-  # Follow system light/dark: yazi queries the terminal background (qlpanel sets
+  # Follow system light/dark: yazi queries the terminal background (conspectus sets
   # it per appearance) and picks the matching flavor.
   cat > "$ov/theme.toml" <<'TOML'
 [flavor]

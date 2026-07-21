@@ -2,7 +2,7 @@ import Cocoa
 import Quartz
 import SwiftTerm
 
-// qlpanel — a split window: a TUI file manager (yazi by default) running in an
+// conspectus — a split window: a TUI file manager (yazi by default) running in an
 // embedded terminal on the left, a live macOS Quick Look preview on the right.
 //
 // The file manager drives the preview by writing the hovered absolute path to a
@@ -10,9 +10,9 @@ import SwiftTerm
 // this through the `qlpeek send` plugin (which honours QLPEEK_FIFO). Any other
 // TUI can drive it too by writing a path to $QLPEEK_FIFO on selection.
 //
-// Usage:  qlpanel [command]     # default command: yazi
+// Usage:  conspectus [command]     # default command: yazi
 
-let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/qlpanel")
+let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/conspectus")
 let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
 let command  = CommandLine.arguments.dropFirst().first ?? "yazi"
 
@@ -116,14 +116,14 @@ func folderListing(_ dir: String) -> NSAttributedString {
     return out
 }
 
-// A Nerd Font so yazi's icon glyphs render. Override with QLPANEL_FONT /
-// QLPANEL_FONT_SIZE; falls back through installed Nerd Fonts, then plain mono.
+// A Nerd Font so yazi's icon glyphs render. Override with CONSPECTUS_FONT /
+// CONSPECTUS_FONT_SIZE; falls back through installed Nerd Fonts, then plain mono.
 func terminalFont() -> NSFont {
     let env = ProcessInfo.processInfo.environment
-    let size = Double(env["QLPANEL_FONT_SIZE"] ?? "") ?? 14
+    let size = Double(env["CONSPECTUS_FONT_SIZE"] ?? "") ?? 14
     var names = ["JetBrainsMono Nerd Font Mono", "JetBrainsMono Nerd Font",
                  "Hack Nerd Font Mono", "MesloLGS NF"]
-    if let override = env["QLPANEL_FONT"], !override.isEmpty { names.insert(override, at: 0) }
+    if let override = env["CONSPECTUS_FONT"], !override.isEmpty { names.insert(override, at: 0) }
     for n in names {
         if let f = NSFont(name: n, size: size) { return f }
     }
@@ -195,7 +195,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 900),
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
                           backing: .buffered, defer: false)
-        window.title = "qlpanel — \(command)"
+        window.title = "conspectus — \(command)"
         window.contentView = split
         window.center()
         window.makeKeyAndOrderFront(nil)
