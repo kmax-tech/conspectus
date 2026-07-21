@@ -34,11 +34,15 @@ qlpanel lf          # or any TUI file manager (preview needs its own hook)
 ## Status / limits
 
 - SwiftTerm is not kitty: no kitty graphics protocol, so yazi's *own* image
-  preview column won't render images — but that's what the Quick Look pane is
-  for. The launcher therefore hides yazi's preview column inside qlpanel: it
-  generates an overlay config under `~/.cache/qlpanel/yazi-config` (everything
-  symlinked from the live config, only `yazi.toml` gets `ratio = [1, 4, 0]`) and
-  points `YAZI_CONFIG_HOME` at it. Your normal yazi is untouched.
+  preview column won't render images inside qlpanel — but that's what the Quick
+  Look pane is for. yazi's 3rd column is kept anyway, because it also does
+  **directory look-ahead** (contents of the hovered folder), which Quick Look
+  does not replace. Quick Look is additive: full fidelity for files on the
+  right, yazi's column for look-ahead + text/simple previews.
+- The launcher builds an overlay config under `~/.cache/qlpanel/yazi-config`
+  (everything symlinked from the live config; only `theme.toml` is generated, to
+  follow the system appearance) and points `YAZI_CONFIG_HOME` at it. Your normal
+  yazi is untouched.
 - Font: JetBrainsMono Nerd Font Mono by default; override with `QLPANEL_FONT` /
   `QLPANEL_FONT_SIZE`.
 - Theme: follows the macOS system appearance — Catppuccin Latte in light mode,

@@ -9,10 +9,12 @@ BIN="$REPO/.build/release/qlpanel"
 
 cmd="${1:-yazi}"
 
-# For yazi: build an overlay config that hides yazi's own preview column (the
-# Quick Look pane on the right replaces it). Everything but yazi.toml is
-# symlinked from the live config, so keymap/theme/plugins stay in sync; only
-# the preview ratio is forced to 0.
+# For yazi: build an overlay config that only overrides theme.toml so the panel
+# follows the system light/dark appearance. Everything else — including the full
+# 3-column layout — is symlinked from the live config. The 3rd column is kept on
+# purpose: it also does directory look-ahead (contents of the hovered folder),
+# which the Quick Look pane does NOT replace. Quick Look is additive: full
+# fidelity for files on the right, yazi's own column for look-ahead + text.
 if [[ "$cmd" == "yazi" ]]; then
   src="${YAZI_CONFIG_HOME:-$HOME/.config/yazi}"
   ov="$HOME/.cache/qlpanel/yazi-config"
@@ -20,9 +22,8 @@ if [[ "$cmd" == "yazi" ]]; then
   if [[ -d $src ]]; then
     for entry in "$src"/*; do
       name="$(basename "$entry")"
-      # yazi.toml (preview off) and theme.toml (follow appearance) are generated
-      # below, not symlinked, so the panel differs from the live config here.
-      [[ "$name" == "yazi.toml" || "$name" == "theme.toml" ]] && continue
+      # theme.toml is generated below (appearance-following); rest is symlinked.
+      [[ "$name" == "theme.toml" ]] && continue
       ln -sfn "$entry" "$ov/$name"
     done
   fi
@@ -34,18 +35,6 @@ if [[ "$cmd" == "yazi" ]]; then
 dark  = "catppuccin-mocha"
 light = "catppuccin-latte"
 TOML
-  if [[ -f "$src/yazi.toml" ]]; then
-    # inject ratio right after [mgr]; drop any existing ratio inside [mgr]
-    awk '
-      /^\[/            { in_mgr = ($0 ~ /^\[mgr\]/) }
-      /^\[mgr\]/       { print; print "ratio = [1, 4, 0]"; next }
-      in_mgr && /^[[:space:]]*ratio[[:space:]]*=/ { next }
-      { print }
-    ' "$src/yazi.toml" > "$ov/yazi.toml"
-    grep -q '^\[mgr\]' "$ov/yazi.toml" || printf '\n[mgr]\nratio = [1, 4, 0]\n' >> "$ov/yazi.toml"
-  else
-    printf '[mgr]\nratio = [1, 4, 0]\n' > "$ov/yazi.toml"
-  fi
   export YAZI_CONFIG_HOME="$ov"
 fi
 
