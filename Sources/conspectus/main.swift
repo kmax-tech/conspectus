@@ -136,6 +136,9 @@ func terminalFont() -> NSFont {
 
 final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate {
     var window: NSWindow!
+    var split: NSSplitView!
+    var rightContainer: NSView!
+    var splitButton: NSButton!
     var term: LocalProcessTerminalView!
     var term2: LocalProcessTerminalView?
     var preview: QLPreviewView!
@@ -164,6 +167,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     }
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        // FIFO the left TUI writes hovered paths to (Quick Look coupling).
+        try? FileManager.default.createDirectory(atPath: cacheDir, withIntermediateDirectories: true)
+        unlink(fifoPath); mkfifo(fifoPath, 0o600)
+
         term = makeTerm()
 
         // Re-theme live when the user toggles macOS appearance.
@@ -174,72 +181,96 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 applyTheme(self.term)
                 if let t2 = self.term2 { applyTheme(t2) }
-                if self.folderScroll != nil {
-                    self.styleFolder()
-                    if let p = self.lastPath { self.update(p) }
-                }
+                self.styleFolder()
+                if let p = self.lastPath { self.update(p) }
             }
         }
 
-        let split = NSSplitView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
+        // Right pane: Quick Look preview (files) or a directory listing (folders).
+        rightContainer = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 900))
+        preview = QLPreviewView(frame: rightContainer.bounds, style: .normal) ?? QLPreviewView()
+        preview.autoresizingMask = [.width, .height]
+        folderScroll = NSScrollView(frame: rightContainer.bounds)
+        folderScroll.hasVerticalScroller = true
+        folderScroll.autoresizingMask = [.width, .height]
+        folderText = NSTextView(frame: rightContainer.bounds)
+        folderText.isEditable = false
+        folderText.isVerticallyResizable = true
+        folderText.isHorizontallyResizable = false
+        folderText.autoresizingMask = [.width]
+        folderText.textContainerInset = NSSize(width: 10, height: 10)
+        folderText.textContainer?.widthTracksTextView = true
+        folderScroll.documentView = folderText
+        folderScroll.isHidden = true
+        styleFolder()
+        rightContainer.addSubview(preview)
+        rightContainer.addSubview(folderScroll)
+
+        split = NSSplitView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
         split.isVertical = true            // vertical divider -> panes side by side
         split.dividerStyle = .thin
         split.addSubview(term)
-
-        if splitMode {
-            // Dual-pane: a second yazi. `y` here, `p` there copies between them
-            // via yazi's cross-instance yank (DDS).
-            let t2 = makeTerm()
-            term2 = t2
-            split.addSubview(t2)
-            split.setPosition(670, ofDividerAt: 0)
-        } else {
-            // FIFO the TUI writes hovered paths to (Quick Look coupling).
-            try? FileManager.default.createDirectory(atPath: cacheDir, withIntermediateDirectories: true)
-            unlink(fifoPath); mkfifo(fifoPath, 0o600)
-
-            // Right pane: Quick Look preview (files) or a directory listing
-            // (folders), swapped per hovered item type.
-            let rightContainer = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 900))
-            preview = QLPreviewView(frame: rightContainer.bounds, style: .normal) ?? QLPreviewView()
-            preview.autoresizingMask = [.width, .height]
-            folderScroll = NSScrollView(frame: rightContainer.bounds)
-            folderScroll.hasVerticalScroller = true
-            folderScroll.autoresizingMask = [.width, .height]
-            folderText = NSTextView(frame: rightContainer.bounds)
-            folderText.isEditable = false
-            folderText.isVerticallyResizable = true
-            folderText.isHorizontallyResizable = false
-            folderText.autoresizingMask = [.width]
-            folderText.textContainerInset = NSSize(width: 10, height: 10)
-            folderText.textContainer?.widthTracksTextView = true
-            folderScroll.documentView = folderText
-            folderScroll.isHidden = true
-            styleFolder()
-            rightContainer.addSubview(preview)
-            rightContainer.addSubview(folderScroll)
-            split.addSubview(rightContainer)
-            split.setPosition(760, ofDividerAt: 0)
-        }
+        split.addSubview(rightContainer)
+        split.setPosition(760, ofDividerAt: 0)
 
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 900),
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
                           backing: .buffered, defer: false)
-        window.title = splitMode ? "conspectus — split" : "conspectus — \(command)"
+        window.title = "conspectus"
         window.contentView = split
         window.center()
+
+        // Titlebar toggle: swap the right pane between Quick Look preview and a
+        // second yazi (dual-pane copy). A click never fights yazi for the keyboard.
+        let btn = NSButton(title: " Split ", target: self, action: #selector(toggleSecondPane))
+        btn.setButtonType(.pushOnPushOff)
+        btn.bezelStyle = .rounded
+        if let img = NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: "Split") {
+            btn.image = img; btn.imagePosition = .imageLeading
+        }
+        btn.sizeToFit()
+        splitButton = btn
+        let acc = NSTitlebarAccessoryViewController()
+        acc.layoutAttribute = .right
+        acc.view = btn
+        window.addTitlebarAccessoryViewController(acc)
+
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(term)     // keystrokes go to the TUI
         NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
         NSApp.activate(ignoringOtherApps: true)
 
-        if splitMode {
-            launch(term, extraEnv: [:])
-            if let t2 = term2 { launch(t2, extraEnv: [:]) }
-        } else {
-            launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath])
-            startFifoReader()
+        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath])
+        startFifoReader()
+
+        if splitMode { addSecondPane() }   // launched with `split`: start dual-pane
+    }
+
+    @objc func toggleSecondPane() { term2 == nil ? addSecondPane() : removeSecondPane() }
+
+    func addSecondPane() {
+        guard term2 == nil else { return }
+        let t2 = makeTerm()
+        term2 = t2
+        split.replaceSubview(rightContainer, with: t2)
+        split.setPosition(split.frame.width * 0.5, ofDividerAt: 0)
+        launch(t2, extraEnv: [:])
+        window.makeFirstResponder(t2)
+        splitButton?.state = .on
+        window.title = "conspectus — split"
+    }
+
+    func removeSecondPane() {
+        guard let t2 = term2 else { return }
+        term2 = nil
+        if t2.superview != nil {
+            split.replaceSubview(t2, with: rightContainer)
+            split.setPosition(split.frame.width * 0.56, ofDividerAt: 0)
         }
+        t2.terminate()
+        window.makeFirstResponder(term)
+        splitButton?.state = .off
+        window.title = "conspectus"
     }
 
     func startFifoReader() {
@@ -294,8 +325,13 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
     // MARK: LocalProcessTerminalViewDelegate
     func processTerminated(source: TerminalView, exitCode: Int32?) {
-        unlink(fifoPath)
-        NSApp.terminate(nil)
+        DispatchQueue.main.async {
+            if source === self.term {
+                unlink(fifoPath); NSApp.terminate(nil)   // left pane quit -> close app
+            } else {
+                self.removeSecondPane()                  // second pane's yazi quit -> collapse
+            }
+        }
     }
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}

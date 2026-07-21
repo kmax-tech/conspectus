@@ -40,11 +40,17 @@ conspectus split       # two yazi panes side by side (dual-pane copy)
 
 ## Dual-pane split
 
-`conspectus split` shows **two yazi panes** instead of terminal + preview — an
-orthodox (Norton/Total Commander) layout. Each pane is a separate yazi instance;
-they share yanked files via yazi's DDS, so **`y` in one pane, `p` in the other
-copies between them**. In split mode each pane keeps its full 3-column config (no
-Quick Look overlay); focus a pane by clicking it.
+Two **yazi panes** instead of terminal + preview — an orthodox (Norton/Total
+Commander) layout. Each pane is a separate yazi instance; they share yanked files
+via yazi's DDS, so **`y` in one pane, `p` in the other copies between them**.
+Focus a pane by clicking it.
+
+Toggle it two ways:
+- **`Split` button** in the titlebar — swaps the right pane between the Quick Look
+  preview and a second yazi, live. A click, so it never fights yazi for the
+  keyboard.
+- **`conspectus split`** — start already in dual-pane (each pane keeps its full
+  3-column config, no preview overlay).
 
 ## Status / limits
 
