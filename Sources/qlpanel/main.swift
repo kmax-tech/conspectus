@@ -104,7 +104,7 @@ func folderListing(_ dir: String) -> NSAttributedString {
         return a.localizedStandardCompare(b) == .orderedAscending
     }
     if sorted.isEmpty {
-        return NSAttributedString(string: "  (leer)", attributes: [.font: font, .foregroundColor: fg])
+        return NSAttributedString(string: "  (empty)", attributes: [.font: font, .foregroundColor: fg])
     }
     let out = NSMutableAttributedString()
     for name in sorted {
