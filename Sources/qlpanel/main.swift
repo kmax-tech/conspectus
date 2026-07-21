@@ -53,6 +53,40 @@ func applyTheme(_ t: LocalProcessTerminalView) {
     t.nativeForegroundColor = nsColor(p.fg)
     t.caretColor            = nsColor(p.cursor)
 }
+func activePalette() -> Palette { systemIsDark() ? mocha : latte }
+
+func isDir(_ path: String) -> Bool {
+    var d: ObjCBool = false
+    return FileManager.default.fileExists(atPath: path, isDirectory: &d) && d.boolValue
+}
+
+// Directory look-ahead for the right pane: Quick Look only shows a folder's
+// icon + metadata, so for directories we render the contents ourselves —
+// folders first, natural sort, Nerd Font glyphs, Catppuccin colors.
+func folderListing(_ dir: String) -> NSAttributedString {
+    let pal = activePalette()
+    let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
+    let font = terminalFont()
+    let names = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? [])
+        .filter { !$0.hasPrefix(".") }
+    let sorted = names.sorted { a, b in
+        let ad = isDir((dir as NSString).appendingPathComponent(a))
+        let bd = isDir((dir as NSString).appendingPathComponent(b))
+        if ad != bd { return ad }
+        return a.localizedStandardCompare(b) == .orderedAscending
+    }
+    if sorted.isEmpty {
+        return NSAttributedString(string: "  (leer)", attributes: [.font: font, .foregroundColor: fg])
+    }
+    let out = NSMutableAttributedString()
+    for name in sorted {
+        let d = isDir((dir as NSString).appendingPathComponent(name))
+        let glyph = d ? "\u{f07b}  " : "\u{f15b}  "        // nf-fa-folder / nf-fa-file
+        out.append(NSAttributedString(string: glyph + name + (d ? "/" : "") + "\n",
+                                      attributes: [.font: font, .foregroundColor: d ? blue : fg]))
+    }
+    return out
+}
 
 // A Nerd Font so yazi's icon glyphs render. Override with QLPANEL_FONT /
 // QLPANEL_FONT_SIZE; falls back through installed Nerd Fonts, then plain mono.
@@ -72,6 +106,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var window: NSWindow!
     var term: LocalProcessTerminalView!
     var preview: QLPreviewView!
+    var folderScroll: NSScrollView!
+    var folderText: NSTextView!
+    var lastPath: String?
 
     func applicationDidFinishLaunching(_ n: Notification) {
         // FIFO the embedded TUI writes hovered paths to.
@@ -89,19 +126,42 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         DistributedNotificationCenter.default.addObserver(
             forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil, queue: .main) { [weak self] _ in
-            guard let t = self?.term else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { applyTheme(t) }
+            guard let self = self else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                applyTheme(self.term)
+                self.styleFolder()
+                if let p = self.lastPath { self.update(p) }   // re-color the listing
+            }
         }
 
-        // Right: Quick Look preview.
-        preview = QLPreviewView(frame: NSRect(x: 0, y: 0, width: 620, height: 900),
-                                style: .normal) ?? QLPreviewView()
+        // Right pane: a container holding either the Quick Look preview (files)
+        // or a directory listing (folders), swapped per hovered item type.
+        let rightContainer = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 900))
+        preview = QLPreviewView(frame: rightContainer.bounds, style: .normal) ?? QLPreviewView()
+        preview.autoresizingMask = [.width, .height]
+
+        folderScroll = NSScrollView(frame: rightContainer.bounds)
+        folderScroll.hasVerticalScroller = true
+        folderScroll.autoresizingMask = [.width, .height]
+        folderText = NSTextView(frame: rightContainer.bounds)
+        folderText.isEditable = false
+        folderText.isVerticallyResizable = true
+        folderText.isHorizontallyResizable = false
+        folderText.autoresizingMask = [.width]
+        folderText.textContainerInset = NSSize(width: 10, height: 10)
+        folderText.textContainer?.widthTracksTextView = true
+        folderScroll.documentView = folderText
+        folderScroll.isHidden = true
+        styleFolder()
+
+        rightContainer.addSubview(preview)
+        rightContainer.addSubview(folderScroll)
 
         let split = NSSplitView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
         split.isVertical = true            // vertical divider -> panes side by side
         split.dividerStyle = .thin
         split.addSubview(term)
-        split.addSubview(preview)
+        split.addSubview(rightContainer)
         split.setPosition(760, ofDividerAt: 0)
 
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 900),
@@ -147,10 +207,33 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         }
     }
 
+    func styleFolder() {
+        let pal = activePalette()
+        folderScroll.drawsBackground = true
+        folderScroll.backgroundColor = nsColor(pal.bg)
+        folderText.drawsBackground = true
+        folderText.backgroundColor = nsColor(pal.bg)
+    }
+
     func update(_ path: String) {
-        let url = URL(fileURLWithPath: path)
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        DispatchQueue.main.async { self.preview.previewItem = url as QLPreviewItem }
+        var d: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &d) else { return }
+        let dir = d.boolValue
+        lastPath = path
+        DispatchQueue.main.async {
+            if dir {
+                // Folder: render its contents ourselves (Quick Look would only
+                // show the folder icon + metadata).
+                self.folderText.textStorage?.setAttributedString(folderListing(path))
+                self.folderText.scroll(NSPoint.zero)
+                self.folderScroll.isHidden = false
+                self.preview.isHidden = true
+            } else {
+                self.preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
+                self.preview.isHidden = false
+                self.folderScroll.isHidden = true
+            }
+        }
     }
 
     // MARK: LocalProcessTerminalViewDelegate

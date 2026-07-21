@@ -13,8 +13,14 @@ Quick Look panel next to your existing terminal instead of embedding one.
 
 - Left pane: [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) hosting a
   login shell that `exec`s the file manager.
-- Right pane: `QLPreviewView` — the embeddable Quick Look view, same generators
-  as Finder.
+- Right pane: a universal preview that swaps by hovered item type —
+  - **File** → `QLPreviewView` (embeddable Quick Look, same generators as Finder).
+  - **Folder** → a rendered contents listing (folders first, natural sort, Nerd
+    Font glyphs, Catppuccin colors). Quick Look on a folder only shows its icon +
+    metadata, so we render the look-ahead ourselves.
+- Because the right pane previews files *and* folders, yazi runs at 2 columns
+  (its own 3rd preview column is hidden via the overlay `yazi.toml`). You
+  navigate in the middle column and enter directories to descend.
 - Coupling: the app creates a FIFO and hands its path to the shell via
   `QLPEEK_FIFO`. The file manager writes the hovered path there on selection;
   the app swaps the preview in place. For yazi this is the `qlpeek send` plugin
