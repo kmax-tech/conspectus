@@ -41,14 +41,14 @@ TOML
   # existing [plugin] table), so files get no 3rd-column preview.
   if [[ -f "$src/yazi.toml" ]]; then
     awk '
-      BEGIN { prev = "previewers = [\n\t{ name = \"*/\", run = \"folder\", sync = true },\n]" }
+      BEGIN { prev = "previewers = [\n\t{ url = \"*/\", run = \"folder\", sync = true },\n]" }
       /^\[plugin\][[:space:]]*$/           { print; print prev; done=1; next }
       /^\[\[plugin/ && !done               { print "[plugin]"; print prev; done=1 }
       { print }
       END { if (!done) { print "[plugin]"; print prev } }
     ' "$src/yazi.toml" > "$ov/yazi.toml"
   else
-    printf '[plugin]\npreviewers = [\n\t{ name = "*/", run = "folder", sync = true },\n]\n' > "$ov/yazi.toml"
+    printf '[plugin]\npreviewers = [\n\t{ url = "*/", run = "folder", sync = true },\n]\n' > "$ov/yazi.toml"
   fi
 
   export YAZI_CONFIG_HOME="$ov"
