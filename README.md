@@ -41,6 +41,12 @@ qlpanel lf          # or any TUI file manager (preview needs its own hook)
   points `YAZI_CONFIG_HOME` at it. Your normal yazi is untouched.
 - Font: JetBrainsMono Nerd Font Mono by default; override with `QLPANEL_FONT` /
   `QLPANEL_FONT_SIZE`.
+- Theme: follows the macOS system appearance — Catppuccin Latte in light mode,
+  Mocha in dark, re-themed live on toggle. The terminal palette is set by
+  qlpanel; yazi picks the matching flavor by querying our background (OSC 11)
+  via the overlay `theme.toml` (`dark = catppuccin-mocha`, `light =
+  catppuccin-latte`). Needs both flavors installed
+  (`ya pkg add yazi-rs/flavors:catppuccin-mocha`).
 - Only yazi ships a preview hook so far (`qlpeek.yazi` plugin in the dotfiles
   repo). lf/nnn/xplr work as terminals; wire their selection hook to
   `$QLPEEK_FIFO` to get the live preview.

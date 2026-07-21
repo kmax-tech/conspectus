@@ -16,8 +16,9 @@ let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/ql
 let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
 let command  = CommandLine.arguments.dropFirst().first ?? "yazi"
 
-// Catppuccin Latte — light variant, matches yazi's catppuccin-latte flavor so
-// the whole panel (terminal + yazi UI) is one coherent light theme.
+// Follow the macOS system appearance: Catppuccin Latte in light mode, Mocha in
+// dark. yazi picks its matching flavor by querying our background via OSC 11
+// (SwiftTerm answers), so the whole panel stays one coherent theme.
 func hexByte(_ v: UInt32, _ shift: UInt32) -> UInt16 { UInt16((v >> shift) & 0xff) * 257 }
 func stColor(_ hex: String) -> SwiftTerm.Color {
     let v = UInt32(hex, radix: 16) ?? 0
@@ -29,14 +30,28 @@ func nsColor(_ hex: String) -> NSColor {
                    green: CGFloat((v >> 8) & 0xff) / 255,
                    blue: CGFloat(v & 0xff) / 255, alpha: 1)
 }
-func applyCatppuccinLatte(_ t: LocalProcessTerminalView) {
-    // 0-7 normal, 8-15 bright (Catppuccin Latte ANSI mapping)
-    let ansi = ["5C5F77", "D20F39", "40A02B", "DF8E1D", "1E66F5", "EA76CB", "179299", "ACB0BE",
-                "6C6F85", "D20F39", "40A02B", "DF8E1D", "1E66F5", "EA76CB", "179299", "BCC0CC"]
-    t.installColors(ansi.map(stColor))
-    t.nativeBackgroundColor = nsColor("EFF1F5")   // base
-    t.nativeForegroundColor = nsColor("4C4F69")   // text
-    t.caretColor            = nsColor("DC8A78")   // rosewater
+
+struct Palette { let ansi: [String]; let bg: String; let fg: String; let cursor: String }
+
+// 0-7 normal, 8-15 bright.
+let mocha = Palette(
+    ansi: ["45475A", "F38BA8", "A6E3A1", "F9E2AF", "89B4FA", "F5C2E7", "94E2D5", "BAC2DE",
+           "585B70", "F38BA8", "A6E3A1", "F9E2AF", "89B4FA", "F5C2E7", "94E2D5", "A6ADC8"],
+    bg: "1E1E2E", fg: "CDD6F4", cursor: "F5E0DC")
+let latte = Palette(
+    ansi: ["5C5F77", "D20F39", "40A02B", "DF8E1D", "1E66F5", "EA76CB", "179299", "ACB0BE",
+           "6C6F85", "D20F39", "40A02B", "DF8E1D", "1E66F5", "EA76CB", "179299", "BCC0CC"],
+    bg: "EFF1F5", fg: "4C4F69", cursor: "DC8A78")
+
+func systemIsDark() -> Bool {
+    UserDefaults.standard.string(forKey: "AppleInterfaceStyle")?.lowercased() == "dark"
+}
+func applyTheme(_ t: LocalProcessTerminalView) {
+    let p = systemIsDark() ? mocha : latte
+    t.installColors(p.ansi.map(stColor))
+    t.nativeBackgroundColor = nsColor(p.bg)
+    t.nativeForegroundColor = nsColor(p.fg)
+    t.caretColor            = nsColor(p.cursor)
 }
 
 // A Nerd Font so yazi's icon glyphs render. Override with QLPANEL_FONT /
@@ -67,8 +82,16 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // Left: embedded terminal running the file manager.
         term = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 720, height: 900))
         term.font = terminalFont()        // Nerd Font before startProcess so cols/rows are sized right
-        applyCatppuccinLatte(term)        // Catppuccin Latte to match yazi's flavor
+        applyTheme(term)                  // Catppuccin, following system light/dark
         term.processDelegate = self
+
+        // Re-theme live when the user toggles macOS appearance.
+        DistributedNotificationCenter.default.addObserver(
+            forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil, queue: .main) { [weak self] _ in
+            guard let t = self?.term else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { applyTheme(t) }
+        }
 
         // Right: Quick Look preview.
         preview = QLPreviewView(frame: NSRect(x: 0, y: 0, width: 620, height: 900),

@@ -20,10 +20,20 @@ if [[ "$cmd" == "yazi" ]]; then
   if [[ -d $src ]]; then
     for entry in "$src"/*; do
       name="$(basename "$entry")"
-      [[ "$name" == "yazi.toml" ]] && continue
+      # yazi.toml (preview off) and theme.toml (follow appearance) are generated
+      # below, not symlinked, so the panel differs from the live config here.
+      [[ "$name" == "yazi.toml" || "$name" == "theme.toml" ]] && continue
       ln -sfn "$entry" "$ov/$name"
     done
   fi
+
+  # Follow system light/dark: yazi queries the terminal background (qlpanel sets
+  # it per appearance) and picks the matching flavor.
+  cat > "$ov/theme.toml" <<'TOML'
+[flavor]
+dark  = "catppuccin-mocha"
+light = "catppuccin-latte"
+TOML
   if [[ -f "$src/yazi.toml" ]]; then
     # inject ratio right after [mgr]; drop any existing ratio inside [mgr]
     awk '
