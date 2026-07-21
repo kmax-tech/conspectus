@@ -60,9 +60,37 @@ func isDir(_ path: String) -> Bool {
     return FileManager.default.fileExists(atPath: path, isDirectory: &d) && d.boolValue
 }
 
+// Curated extension -> (Nerd Font glyph, Catppuccin color). Uses the reliable
+// Font Awesome file-type glyphs (f1c1-f1c9), so no tofu; colors approximate
+// yazi's per-type scheme rather than mirroring its exact icon set.
+func fileIcon(_ name: String, _ pal: Palette) -> (String, NSColor) {
+    func c(_ i: Int) -> NSColor { nsColor(pal.ansi[i]) }   // 1 red 2 green 3 yellow 4 blue 5 pink 6 cyan
+    let fg = nsColor(pal.fg)
+    switch (name as NSString).pathExtension.lowercased() {
+    case "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "tiff", "tif", "heic", "ico", "avif":
+        return ("\u{f1c5}", c(5))   // image
+    case "pdf":
+        return ("\u{f1c1}", c(1))   // pdf
+    case "zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "zst":
+        return ("\u{f1c6}", c(3))   // archive
+    case "mp3", "wav", "flac", "m4a", "aac", "ogg":
+        return ("\u{f1c7}", c(2))   // audio
+    case "mp4", "mov", "mkv", "avi", "webm", "m4v":
+        return ("\u{f1c8}", c(5))   // video
+    case "md", "markdown", "rst", "txt", "text", "log", "org":
+        return ("\u{f15c}", fg)     // text
+    case "py", "js", "ts", "tsx", "jsx", "lua", "c", "cpp", "h", "hpp", "go", "rs",
+         "swift", "sh", "bash", "zsh", "fish", "rb", "java", "json", "jsonl", "json5",
+         "yaml", "yml", "toml", "html", "css", "scss", "tex", "vim", "el":
+        return ("\u{f1c9}", c(2))   // code
+    default:
+        return ("\u{f15b}", fg)     // generic file
+    }
+}
+
 // Directory look-ahead for the right pane: Quick Look only shows a folder's
 // icon + metadata, so for directories we render the contents ourselves —
-// folders first, natural sort, Nerd Font glyphs, Catppuccin colors.
+// folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type.
 func folderListing(_ dir: String) -> NSAttributedString {
     let pal = activePalette()
     let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
@@ -81,9 +109,9 @@ func folderListing(_ dir: String) -> NSAttributedString {
     let out = NSMutableAttributedString()
     for name in sorted {
         let d = isDir((dir as NSString).appendingPathComponent(name))
-        let glyph = d ? "\u{f07b}  " : "\u{f15b}  "        // nf-fa-folder / nf-fa-file
-        out.append(NSAttributedString(string: glyph + name + (d ? "/" : "") + "\n",
-                                      attributes: [.font: font, .foregroundColor: d ? blue : fg]))
+        let (glyph, color) = d ? ("\u{f07b}", blue) : fileIcon(name, pal)   // nf-fa-folder for dirs
+        out.append(NSAttributedString(string: glyph + "  " + name + (d ? "/" : "") + "\n",
+                                      attributes: [.font: font, .foregroundColor: color]))
     }
     return out
 }
@@ -226,12 +254,15 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                 // show the folder icon + metadata).
                 self.folderText.textStorage?.setAttributedString(folderListing(path))
                 self.folderText.scroll(NSPoint.zero)
-                self.folderScroll.isHidden = false
                 self.preview.isHidden = true
+                self.folderScroll.isHidden = false
             } else {
-                self.preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
-                self.preview.isHidden = false
+                // File: unhide the preview BEFORE setting its item — QLPreviewView
+                // does not render an item assigned while it is hidden.
                 self.folderScroll.isHidden = true
+                self.preview.isHidden = false
+                self.preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
+                self.preview.refreshPreviewItem()
             }
         }
     }
