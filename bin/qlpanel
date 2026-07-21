@@ -1,0 +1,9 @@
+#!/bin/bash
+# qlpanel launcher — split window: TUI file manager (default yazi) on the left,
+# live Quick Look preview on the right. See README.md.
+#   qlpanel [command]   # e.g. qlpanel lf  /  qlpanel nnn
+set -euo pipefail
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+BIN="$REPO/.build/release/qlpanel"
+[[ -x $BIN ]] || { echo "qlpanel: not built — run $REPO/build.sh" >&2; exit 1; }
+exec "$BIN" "$@"
