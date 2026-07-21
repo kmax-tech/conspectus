@@ -35,7 +35,12 @@ qlpanel lf          # or any TUI file manager (preview needs its own hook)
 
 - SwiftTerm is not kitty: no kitty graphics protocol, so yazi's *own* image
   preview column won't render images — but that's what the Quick Look pane is
-  for. Consider narrowing/disabling yazi's preview column inside qlpanel.
+  for. The launcher therefore hides yazi's preview column inside qlpanel: it
+  generates an overlay config under `~/.cache/qlpanel/yazi-config` (everything
+  symlinked from the live config, only `yazi.toml` gets `ratio = [1, 4, 0]`) and
+  points `YAZI_CONFIG_HOME` at it. Your normal yazi is untouched.
+- Font: JetBrainsMono Nerd Font Mono by default; override with `QLPANEL_FONT` /
+  `QLPANEL_FONT_SIZE`.
 - Only yazi ships a preview hook so far (`qlpeek.yazi` plugin in the dotfiles
   repo). lf/nnn/xplr work as terminals; wire their selection hook to
   `$QLPEEK_FIFO` to get the live preview.

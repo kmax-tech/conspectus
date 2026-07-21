@@ -6,4 +6,37 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$REPO/.build/release/qlpanel"
 [[ -x $BIN ]] || { echo "qlpanel: not built — run $REPO/build.sh" >&2; exit 1; }
-exec "$BIN" "$@"
+
+cmd="${1:-yazi}"
+
+# For yazi: build an overlay config that hides yazi's own preview column (the
+# Quick Look pane on the right replaces it). Everything but yazi.toml is
+# symlinked from the live config, so keymap/theme/plugins stay in sync; only
+# the preview ratio is forced to 0.
+if [[ "$cmd" == "yazi" ]]; then
+  src="${YAZI_CONFIG_HOME:-$HOME/.config/yazi}"
+  ov="$HOME/.cache/qlpanel/yazi-config"
+  rm -rf "$ov"; mkdir -p "$ov"
+  if [[ -d $src ]]; then
+    for entry in "$src"/*; do
+      name="$(basename "$entry")"
+      [[ "$name" == "yazi.toml" ]] && continue
+      ln -sfn "$entry" "$ov/$name"
+    done
+  fi
+  if [[ -f "$src/yazi.toml" ]]; then
+    # inject ratio right after [mgr]; drop any existing ratio inside [mgr]
+    awk '
+      /^\[/            { in_mgr = ($0 ~ /^\[mgr\]/) }
+      /^\[mgr\]/       { print; print "ratio = [1, 4, 0]"; next }
+      in_mgr && /^[[:space:]]*ratio[[:space:]]*=/ { next }
+      { print }
+    ' "$src/yazi.toml" > "$ov/yazi.toml"
+    grep -q '^\[mgr\]' "$ov/yazi.toml" || printf '\n[mgr]\nratio = [1, 4, 0]\n' >> "$ov/yazi.toml"
+  else
+    printf '[mgr]\nratio = [1, 4, 0]\n' > "$ov/yazi.toml"
+  fi
+  export YAZI_CONFIG_HOME="$ov"
+fi
+
+exec "$BIN" "$cmd"
