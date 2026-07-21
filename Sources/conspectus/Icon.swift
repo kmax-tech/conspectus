@@ -19,8 +19,8 @@ func conspectusIcon() -> NSImage {
     let glass = ["16295E", "8E1428", "A66A16", "14532B", "35164F", "16295E", "8E1428", "A66A16"]
 
     // background: near-black with vignette
-    let bgPath = CGPath(roundedRect: CGRect(x: S*0.02, y: S*0.02, width: S*0.96, height: S*0.96),
-                        cornerWidth: S*0.22, cornerHeight: S*0.22, transform: nil)
+    let bgPath = CGPath(roundedRect: CGRect(x: S*0.09, y: S*0.09, width: S*0.82, height: S*0.82),
+                        cornerWidth: S*0.185, cornerHeight: S*0.185, transform: nil)
     ctx.saveGState(); ctx.addPath(bgPath); ctx.clip()
     ctx.setFillColor(col("15151F").cgColor); ctx.fill(CGRect(x: 0, y: 0, width: S, height: S))
     let vg = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
@@ -30,7 +30,7 @@ func conspectusIcon() -> NSImage {
     ctx.restoreGState()
 
     ctx.translateBy(x: S/2, y: S/2)
-    let R = S * 0.40
+    let R = S * 0.31
 
     func goldStroke(_ path: CGPath, _ w: CGFloat) {
         ctx.addPath(path); ctx.setStrokeColor(lead.cgColor); ctx.setLineWidth(w*1.5); ctx.strokePath()
