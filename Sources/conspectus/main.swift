@@ -10,11 +10,15 @@ import SwiftTerm
 // this through the `qlpeek send` plugin (which honours QLPEEK_FIFO). Any other
 // TUI can drive it too by writing a path to $QLPEEK_FIFO on selection.
 //
-// Usage:  conspectus [command]     # default command: yazi
+// Usage:
+//   conspectus [command]        # TUI (default yazi) + Quick Look preview
+//   conspectus split [command]  # two TUI panes side by side (dual-pane copy)
 
 let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/conspectus")
 let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
-let command  = CommandLine.arguments.dropFirst().first ?? "yazi"
+let cliArgs   = Array(CommandLine.arguments.dropFirst())
+let splitMode = cliArgs.first == "split" || cliArgs.first == "-s"
+let command   = splitMode ? (cliArgs.dropFirst().first ?? "yazi") : (cliArgs.first ?? "yazi")
 
 // Follow the macOS system appearance: Catppuccin Latte in light mode, Mocha in
 // dark. yazi picks its matching flavor by querying our background via OSC 11
@@ -133,22 +137,34 @@ func terminalFont() -> NSFont {
 final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate {
     var window: NSWindow!
     var term: LocalProcessTerminalView!
+    var term2: LocalProcessTerminalView?
     var preview: QLPreviewView!
     var folderScroll: NSScrollView!
     var folderText: NSTextView!
     var lastPath: String?
 
-    func applicationDidFinishLaunching(_ n: Notification) {
-        // FIFO the embedded TUI writes hovered paths to.
-        try? FileManager.default.createDirectory(atPath: cacheDir, withIntermediateDirectories: true)
-        unlink(fifoPath)
-        mkfifo(fifoPath, 0o600)
+    func makeTerm() -> LocalProcessTerminalView {
+        let t = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 700, height: 900))
+        t.font = terminalFont()           // Nerd Font before startProcess so cols/rows are sized right
+        applyTheme(t)                     // Catppuccin, following system light/dark
+        t.processDelegate = self
+        return t
+    }
 
-        // Left: embedded terminal running the file manager.
-        term = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 720, height: 900))
-        term.font = terminalFont()        // Nerd Font before startProcess so cols/rows are sized right
-        applyTheme(term)                  // Catppuccin, following system light/dark
-        term.processDelegate = self
+    // Login shell so PATH/config load, then exec the file manager. YAZI_ID/LEVEL
+    // stripped so each pane is a fresh, separate yazi instance (they discover
+    // each other via the DDS for cross-instance yank/paste).
+    func launch(_ t: LocalProcessTerminalView, extraEnv: [String: String]) {
+        var env = ProcessInfo.processInfo.environment
+        env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
+        env["YAZI_ID"] = nil; env["YAZI_LEVEL"] = nil
+        for (k, v) in extraEnv { env[k] = v }
+        t.startProcess(executable: "/bin/zsh", args: ["-l", "-c", "exec \(command)"],
+                       environment: env.map { "\($0.key)=\($0.value)" })
+    }
+
+    func applicationDidFinishLaunching(_ n: Notification) {
+        term = makeTerm()
 
         // Re-theme live when the user toggles macOS appearance.
         DistributedNotificationCenter.default.addObserver(
@@ -157,45 +173,59 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
             guard let self = self else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 applyTheme(self.term)
-                self.styleFolder()
-                if let p = self.lastPath { self.update(p) }   // re-color the listing
+                if let t2 = self.term2 { applyTheme(t2) }
+                if self.folderScroll != nil {
+                    self.styleFolder()
+                    if let p = self.lastPath { self.update(p) }
+                }
             }
         }
-
-        // Right pane: a container holding either the Quick Look preview (files)
-        // or a directory listing (folders), swapped per hovered item type.
-        let rightContainer = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 900))
-        preview = QLPreviewView(frame: rightContainer.bounds, style: .normal) ?? QLPreviewView()
-        preview.autoresizingMask = [.width, .height]
-
-        folderScroll = NSScrollView(frame: rightContainer.bounds)
-        folderScroll.hasVerticalScroller = true
-        folderScroll.autoresizingMask = [.width, .height]
-        folderText = NSTextView(frame: rightContainer.bounds)
-        folderText.isEditable = false
-        folderText.isVerticallyResizable = true
-        folderText.isHorizontallyResizable = false
-        folderText.autoresizingMask = [.width]
-        folderText.textContainerInset = NSSize(width: 10, height: 10)
-        folderText.textContainer?.widthTracksTextView = true
-        folderScroll.documentView = folderText
-        folderScroll.isHidden = true
-        styleFolder()
-
-        rightContainer.addSubview(preview)
-        rightContainer.addSubview(folderScroll)
 
         let split = NSSplitView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
         split.isVertical = true            // vertical divider -> panes side by side
         split.dividerStyle = .thin
         split.addSubview(term)
-        split.addSubview(rightContainer)
-        split.setPosition(760, ofDividerAt: 0)
+
+        if splitMode {
+            // Dual-pane: a second yazi. `y` here, `p` there copies between them
+            // via yazi's cross-instance yank (DDS).
+            let t2 = makeTerm()
+            term2 = t2
+            split.addSubview(t2)
+            split.setPosition(670, ofDividerAt: 0)
+        } else {
+            // FIFO the TUI writes hovered paths to (Quick Look coupling).
+            try? FileManager.default.createDirectory(atPath: cacheDir, withIntermediateDirectories: true)
+            unlink(fifoPath); mkfifo(fifoPath, 0o600)
+
+            // Right pane: Quick Look preview (files) or a directory listing
+            // (folders), swapped per hovered item type.
+            let rightContainer = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 900))
+            preview = QLPreviewView(frame: rightContainer.bounds, style: .normal) ?? QLPreviewView()
+            preview.autoresizingMask = [.width, .height]
+            folderScroll = NSScrollView(frame: rightContainer.bounds)
+            folderScroll.hasVerticalScroller = true
+            folderScroll.autoresizingMask = [.width, .height]
+            folderText = NSTextView(frame: rightContainer.bounds)
+            folderText.isEditable = false
+            folderText.isVerticallyResizable = true
+            folderText.isHorizontallyResizable = false
+            folderText.autoresizingMask = [.width]
+            folderText.textContainerInset = NSSize(width: 10, height: 10)
+            folderText.textContainer?.widthTracksTextView = true
+            folderScroll.documentView = folderText
+            folderScroll.isHidden = true
+            styleFolder()
+            rightContainer.addSubview(preview)
+            rightContainer.addSubview(folderScroll)
+            split.addSubview(rightContainer)
+            split.setPosition(760, ofDividerAt: 0)
+        }
 
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 900),
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
                           backing: .buffered, defer: false)
-        window.title = "conspectus — \(command)"
+        window.title = splitMode ? "conspectus — split" : "conspectus — \(command)"
         window.contentView = split
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -203,20 +233,13 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
         NSApp.activate(ignoringOtherApps: true)
 
-        // Environment for the embedded shell: inherit ours, then point the
-        // preview hook at our FIFO and set a sane TERM.
-        var env = ProcessInfo.processInfo.environment
-        env["TERM"] = "xterm-256color"
-        env["COLORTERM"] = "truecolor"
-        env["QLPEEK_FIFO"] = fifoPath
-        let envArray = env.map { "\($0.key)=\($0.value)" }
-
-        // Login shell so PATH/config load, then exec the file manager.
-        term.startProcess(executable: "/bin/zsh",
-                          args: ["-l", "-c", "exec \(command)"],
-                          environment: envArray)
-
-        startFifoReader()
+        if splitMode {
+            launch(term, extraEnv: [:])
+            if let t2 = term2 { launch(t2, extraEnv: [:]) }
+        } else {
+            launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath])
+            startFifoReader()
+        }
     }
 
     func startFifoReader() {
@@ -237,6 +260,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     }
 
     func styleFolder() {
+        guard let folderScroll = folderScroll, let folderText = folderText else { return }
         let pal = activePalette()
         folderScroll.drawsBackground = true
         folderScroll.backgroundColor = nsColor(pal.bg)

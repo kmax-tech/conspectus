@@ -32,10 +32,19 @@ Any other TUI can drive the preview by writing an absolute path to
 ## Build & run
 
 ```sh
-./build.sh          # swift build -c release (first run fetches SwiftTerm)
-conspectus             # default: yazi
+./build.sh             # swift build -c release (first run fetches SwiftTerm)
+conspectus             # default: yazi + Quick Look preview
 conspectus lf          # or any TUI file manager (preview needs its own hook)
+conspectus split       # two yazi panes side by side (dual-pane copy)
 ```
+
+## Dual-pane split
+
+`conspectus split` shows **two yazi panes** instead of terminal + preview — an
+orthodox (Norton/Total Commander) layout. Each pane is a separate yazi instance;
+they share yanked files via yazi's DDS, so **`y` in one pane, `p` in the other
+copies between them**. In split mode each pane keeps its full 3-column config (no
+Quick Look overlay); focus a pane by clicking it.
 
 ## Status / limits
 

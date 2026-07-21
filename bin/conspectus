@@ -1,11 +1,17 @@
 #!/bin/bash
-# conspectus launcher — split window: TUI file manager (default yazi) on the left,
-# live Quick Look preview on the right. See README.md.
-#   conspectus [command]   # e.g. conspectus lf  /  conspectus nnn
+# conspectus launcher — TUI file manager + live Quick Look preview.
+#   conspectus [command]        # e.g. conspectus lf  /  conspectus nnn
+#   conspectus split [command]  # two yazi panes (dual-pane copy via cross-yank)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$REPO/.build/release/conspectus"
 [[ -x $BIN ]] || { echo "conspectus: not built — run $REPO/build.sh" >&2; exit 1; }
+
+# Dual-pane split: each pane keeps its full yazi config (3-column preview), so
+# no Quick Look overlay — hand the args straight to the binary.
+if [[ "${1:-}" == "split" || "${1:-}" == "-s" ]]; then
+  exec "$BIN" "$@"
+fi
 
 cmd="${1:-yazi}"
 
