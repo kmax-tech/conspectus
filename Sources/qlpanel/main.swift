@@ -16,8 +16,8 @@ let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/ql
 let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
 let command  = CommandLine.arguments.dropFirst().first ?? "yazi"
 
-// Catppuccin Mocha — matches the user's kitty theme so the embedded terminal
-// looks like the rest of the setup, not SwiftTerm's default palette.
+// Catppuccin Latte — light variant, matches yazi's catppuccin-latte flavor so
+// the whole panel (terminal + yazi UI) is one coherent light theme.
 func hexByte(_ v: UInt32, _ shift: UInt32) -> UInt16 { UInt16((v >> shift) & 0xff) * 257 }
 func stColor(_ hex: String) -> SwiftTerm.Color {
     let v = UInt32(hex, radix: 16) ?? 0
@@ -29,14 +29,14 @@ func nsColor(_ hex: String) -> NSColor {
                    green: CGFloat((v >> 8) & 0xff) / 255,
                    blue: CGFloat(v & 0xff) / 255, alpha: 1)
 }
-func applyCatppuccinMocha(_ t: LocalProcessTerminalView) {
-    // 0-7 normal, 8-15 bright (Catppuccin Mocha ANSI mapping)
-    let ansi = ["45475A", "F38BA8", "A6E3A1", "F9E2AF", "89B4FA", "F5C2E7", "94E2D5", "BAC2DE",
-                "585B70", "F38BA8", "A6E3A1", "F9E2AF", "89B4FA", "F5C2E7", "94E2D5", "A6ADC8"]
+func applyCatppuccinLatte(_ t: LocalProcessTerminalView) {
+    // 0-7 normal, 8-15 bright (Catppuccin Latte ANSI mapping)
+    let ansi = ["5C5F77", "D20F39", "40A02B", "DF8E1D", "1E66F5", "EA76CB", "179299", "ACB0BE",
+                "6C6F85", "D20F39", "40A02B", "DF8E1D", "1E66F5", "EA76CB", "179299", "BCC0CC"]
     t.installColors(ansi.map(stColor))
-    t.nativeBackgroundColor = nsColor("1E1E2E")   // base
-    t.nativeForegroundColor = nsColor("CDD6F4")   // text
-    t.caretColor            = nsColor("F5E0DC")   // rosewater
+    t.nativeBackgroundColor = nsColor("EFF1F5")   // base
+    t.nativeForegroundColor = nsColor("4C4F69")   // text
+    t.caretColor            = nsColor("DC8A78")   // rosewater
 }
 
 // A Nerd Font so yazi's icon glyphs render. Override with QLPANEL_FONT /
@@ -67,7 +67,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // Left: embedded terminal running the file manager.
         term = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 720, height: 900))
         term.font = terminalFont()        // Nerd Font before startProcess so cols/rows are sized right
-        applyCatppuccinMocha(term)        // Catppuccin Mocha to match kitty
+        applyCatppuccinLatte(term)        // Catppuccin Latte to match yazi's flavor
         term.processDelegate = self
 
         // Right: Quick Look preview.
