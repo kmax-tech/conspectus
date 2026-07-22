@@ -102,9 +102,10 @@ func applyTheme(_ t: LocalProcessTerminalView) {
 
 // A Nerd Font so yazi's icon glyphs render. Override with CONSPECTUS_FONT /
 // CONSPECTUS_FONT_SIZE; falls back through installed Nerd Fonts, then plain mono.
-func terminalFont() -> NSFont {
+// `size` overrides the configured size (used by the smaller shortcut bar).
+func terminalFont(size overrideSize: Double? = nil) -> NSFont {
     let env = ProcessInfo.processInfo.environment
-    let size = Double(env["CONSPECTUS_FONT_SIZE"] ?? "") ?? 14
+    let size = overrideSize ?? (Double(env["CONSPECTUS_FONT_SIZE"] ?? "") ?? 14)
     var names = ["JetBrainsMono Nerd Font Mono", "JetBrainsMono Nerd Font",
                  "Hack Nerd Font Mono", "MesloLGS NF"]
     if let override = env["CONSPECTUS_FONT"], !override.isEmpty { names.insert(override, at: 0) }
@@ -151,13 +152,57 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var split: NSSplitView!
     var rightContainer: NSView!
     var splitButton: NSButton!
+    var previewButton: NSButton!
     var term: LocalProcessTerminalView!
     var term2: LocalProcessTerminalView?
     var preview: QLPreviewView!
     var folderScroll: NSScrollView!
     var folderText: NSTextView!
+    var hintBar: NSView!
+    var hintText: NSTextField!
+    var cheatPanel: NSPanel?
+    var cheatText: NSTextView?
     var lastPath: String?
     var lastWasDir = false
+
+    // Bottom shortcut bar: training wheels until the muscle memory sits.
+    // Toggled with ⌘/ ; visibility persists across launches (UserDefaults).
+    let hintBarHeight: CGFloat = 26
+    let showHintsKey = "ConspectusShowHints"
+    // The most-used yazi keys (defaults) plus conspectus's own shortcuts.
+    // y→p means: y (yank), then p (paste) — across panes in split mode too.
+    // cc/cf are yazi's copy-to-clipboard submenu (path / filename).
+    let shortcutHints: [(key: String, label: String)] = [
+        ("y→p", "copy"), ("x→p", "move"), ("d", "trash"), ("r", "rename"),
+        ("a", "new"), ("cc", "path"), ("cf", "name"), ("␣", "select"),
+        ("/", "find"),
+        ("⌘D", "split"), ("⌘E", "preview"), ("⌘K", "all keys"), ("⌘/", "bar"),
+    ]
+
+    // Full cheat sheet (⌘K): yazi's default mgr keymap, grouped, plus the
+    // conspectus keys. Deliberately the *defaults* — the user's own
+    // keymap.toml is not parsed (stated in the panel footer); parsing TOML
+    // would need a dependency and is a separate decision.
+    let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
+        ("Navigate", [("h / ←", "parent directory"), ("l / →", "enter / open"),
+                      ("j / k", "down / up"), ("g g", "to top"), ("G", "to bottom"),
+                      ("H / L", "history back / forward"), ("z", "jump (zoxide)"), ("Z", "jump (fzf)")]),
+        ("Select", [("Space", "toggle + move down"), ("v", "visual mode"),
+                    ("Esc", "clear selection"), ("Ctrl a", "select all")]),
+        ("Files", [("o / Enter", "open"), ("O", "open with …"),
+                   ("y", "yank (copy)"), ("x", "cut"), ("p", "paste"), ("P", "paste (overwrite)"),
+                   ("Y / X", "cancel yank"), ("d", "trash"), ("D", "delete permanently"),
+                   ("a", "create (dir: end with /)"), ("r", "rename"), (".", "toggle hidden")]),
+        ("Clipboard", [("c c", "copy full path"), ("c d", "copy dirname"),
+                       ("c f", "copy filename"), ("c n", "copy name w/o extension")]),
+        ("Find", [("/", "find"), ("n / N", "next / previous match"), ("f", "filter"),
+                  ("s", "search files (fd)"), ("S", "search content (rg)")]),
+        ("Tabs", [("t", "new tab"), ("1…9", "switch tab"), ("[ / ]", "previous / next tab")]),
+        ("Misc", [("w", "task manager"), (",", "sort menu"), ("~", "yazi help"), ("q", "quit")]),
+        ("conspectus", [("⌘D", "toggle split pane"), ("⌘E", "toggle preview pane"),
+                        ("⌘/", "toggle shortcut bar"), ("⌘K", "this cheat sheet"),
+                        ("⌘⌥← →", "focus left / right pane"), ("=", "sync cd to other pane")]),
+    ]
 
     func makeTerm() -> LocalProcessTerminalView {
         let t = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 700, height: 900))
@@ -183,17 +228,19 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     }
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        UserDefaults.standard.register(defaults: [showHintsKey: true])   // bar starts visible
         createFifo()
         term = makeTerm()
         observeAppearanceChanges()
         buildRightPane()
         buildSplitView()
+        buildHintBar()
         buildWindow()
-        addTitlebarSplitButton()
+        addTitlebarButtons()
 
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(term)     // keystrokes go to the TUI
-        buildMenu()                         // ⌘D split, ⌘⌥←/→ focus, ⌘Q/⌘H
+        buildMenu()                         // ⌘D split, ⌘E preview, ⌘/ bar, ⌘⌥←/→ focus, ⌘Q/⌘H
         NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
         NSApp.activate(ignoringOtherApps: true)
 
@@ -236,6 +283,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                 applyTheme(self.term)
                 if let t2 = self.term2 { applyTheme(t2) }
                 self.styleFolder()
+                self.styleHintBar()
+                self.styleCheatSheet()
                 if let p = self.lastPath { self.update(p) }
             }
         }
@@ -275,39 +324,186 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         split.setPosition(760, ofDividerAt: 0)
     }
 
-    /// Build the main window; remembers size/position across launches
-    /// (including the split layout width).
+    /// Build the shortcut bar: one line of key/label pairs in the theme
+    /// colors, centered, truncating on narrow windows.
+    func buildHintBar() {
+        hintBar = NSView(frame: NSRect(x: 0, y: 0, width: 1340, height: hintBarHeight))
+        hintBar.autoresizingMask = [.width]
+        hintText = NSTextField(labelWithString: "")
+        hintText.isBordered = false
+        hintText.drawsBackground = false
+        hintText.lineBreakMode = .byTruncatingTail
+        hintText.alignment = .center
+        hintBar.addSubview(hintText)
+        styleHintBar()
+    }
+
+    /// (Re-)render the shortcut bar in the active palette; called on build
+    /// and whenever the system appearance changes.
+    func styleHintBar() {
+        guard let hintBar = hintBar, let hintText = hintText else { return }
+        let pal = activePalette()
+        hintBar.wantsLayer = true
+        hintBar.layer?.backgroundColor = nsColor(pal.bg).cgColor
+        let font = terminalFont(size: 11)
+        let keyColor = nsColor(pal.ansi[3])                          // yellow accent
+        let labelColor = nsColor(pal.fg).withAlphaComponent(0.8)
+        let s = NSMutableAttributedString()
+        for (i, hint) in shortcutHints.enumerated() {
+            if i > 0 { s.append(NSAttributedString(string: "   ", attributes: [.font: font])) }
+            s.append(NSAttributedString(string: hint.key + " ",
+                                        attributes: [.font: font, .foregroundColor: keyColor]))
+            s.append(NSAttributedString(string: hint.label,
+                                        attributes: [.font: font, .foregroundColor: labelColor]))
+        }
+        hintText.attributedStringValue = s
+        hintText.sizeToFit()
+        hintText.frame = NSRect(x: 8, y: (hintBarHeight - hintText.frame.height) / 2,
+                                width: hintBar.bounds.width - 16, height: hintText.frame.height)
+        hintText.autoresizingMask = [.width]
+    }
+
+    /// Show/hide the shortcut bar per the persisted preference and lay the
+    /// split view out above it.
+    func applyHintBarVisibility() {
+        guard let content = window?.contentView else { return }
+        let visible = UserDefaults.standard.bool(forKey: showHintsKey)
+        hintBar.isHidden = !visible
+        let barH = visible ? hintBarHeight : 0
+        hintBar.frame = NSRect(x: 0, y: 0, width: content.bounds.width, height: hintBarHeight)
+        split.frame = NSRect(x: 0, y: barH, width: content.bounds.width,
+                             height: content.bounds.height - barH)
+    }
+
+    /// Toggle the floating cheat-sheet panel (full grouped key list — the
+    /// native, scrollable version of yazi's `~` help).
+    @objc func toggleCheatSheet() {
+        if let p = cheatPanel, p.isVisible { p.orderOut(nil); return }
+        if cheatPanel == nil { buildCheatSheet() }
+        styleCheatSheet()
+        cheatPanel?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Build the floating panel holding the cheat sheet; frame persists
+    /// across launches.
+    func buildCheatSheet() {
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 660),
+                            styleMask: [.titled, .closable, .resizable, .utilityWindow],
+                            backing: .buffered, defer: false)
+        panel.title = "Shortcuts"
+        panel.isFloatingPanel = true
+        let scroll = NSScrollView(frame: panel.contentView!.bounds)
+        scroll.hasVerticalScroller = true
+        scroll.autoresizingMask = [.width, .height]
+        let tv = NSTextView(frame: scroll.bounds)
+        tv.isEditable = false
+        tv.isVerticallyResizable = true
+        tv.isHorizontallyResizable = false
+        tv.autoresizingMask = [.width]
+        tv.textContainerInset = NSSize(width: 12, height: 12)
+        tv.textContainer?.widthTracksTextView = true
+        scroll.documentView = tv
+        panel.contentView = scroll
+        if !panel.setFrameUsingName("ConspectusCheatSheet") { panel.center() }
+        panel.setFrameAutosaveName("ConspectusCheatSheet")
+        cheatPanel = panel
+        cheatText = tv
+    }
+
+    /// (Re-)render the cheat sheet in the active palette; called on open and
+    /// whenever the system appearance changes.
+    func styleCheatSheet() {
+        guard let tv = cheatText else { return }
+        let pal = activePalette()
+        tv.drawsBackground = true
+        tv.backgroundColor = nsColor(pal.bg)
+        tv.enclosingScrollView?.drawsBackground = true
+        tv.enclosingScrollView?.backgroundColor = nsColor(pal.bg)
+        let font = terminalFont(size: 12)
+        let headColor = nsColor(pal.ansi[4])   // blue group headers
+        let keyColor = nsColor(pal.ansi[3])    // yellow keys
+        let fg = nsColor(pal.fg)
+        let s = NSMutableAttributedString()
+        for (gi, group) in cheatSheetGroups.enumerated() {
+            if gi > 0 { s.append(NSAttributedString(string: "\n", attributes: [.font: font])) }
+            s.append(NSAttributedString(string: group.title + "\n",
+                                        attributes: [.font: font, .foregroundColor: headColor]))
+            for (key, desc) in group.entries {
+                let padded = key.count < 12
+                    ? key + String(repeating: " ", count: 12 - key.count)
+                    : key + "  "
+                s.append(NSAttributedString(string: "  " + padded,
+                                            attributes: [.font: font, .foregroundColor: keyColor]))
+                s.append(NSAttributedString(string: desc + "\n",
+                                            attributes: [.font: font, .foregroundColor: fg]))
+            }
+        }
+        s.append(NSAttributedString(
+            string: "\nyazi defaults — custom keymap.toml bindings are not reflected",
+            attributes: [.font: terminalFont(size: 10), .foregroundColor: fg.withAlphaComponent(0.6)]))
+        tv.textStorage?.setAttributedString(s)
+    }
+
+    /// Toggle the shortcut bar. Side effects: persists the choice in
+    /// UserDefaults so it survives relaunches.
+    @objc func toggleHintBar() {
+        let d = UserDefaults.standard
+        d.set(!d.bool(forKey: showHintsKey), forKey: showHintsKey)
+        applyHintBarVisibility()
+    }
+
+    /// Build the main window: split view above the shortcut bar; remembers
+    /// size/position across launches (including the split layout width).
     func buildWindow() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 900),
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
                           backing: .buffered, defer: false)
         window.title = "conspectus"
-        window.contentView = split
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
+        split.autoresizingMask = [.width, .height]
+        content.addSubview(hintBar)
+        content.addSubview(split)
+        window.contentView = content
+        applyHintBarVisibility()
         if !window.setFrameUsingName("ConspectusMain") { window.center() }
         window.setFrameAutosaveName("ConspectusMain")
     }
 
-    /// Titlebar toggle: swap the right pane between Quick Look preview and a
-    /// second yazi (dual-pane copy). A click never fights yazi for the keyboard.
-    func addTitlebarSplitButton() {
-        let btn = NSButton(title: " Split ", target: self, action: #selector(toggleSecondPane))
+    /// Titlebar toggles for the two panes (second yazi, Quick Look preview) —
+    /// clicks never fight yazi for the keyboard. Their on/off state mirrors
+    /// the actual layout.
+    func addTitlebarButtons() {
+        splitButton = makeToggleButton(title: " Split ", symbol: "rectangle.split.2x1",
+                                       action: #selector(toggleSecondPane))
+        previewButton = makeToggleButton(title: " Preview ", symbol: "eye",
+                                         action: #selector(togglePreviewPane))
+        previewButton.state = previewAttached ? .on : .off
+        let stack = NSStackView(views: [previewButton, splitButton])
+        stack.orientation = .horizontal
+        stack.spacing = 6
+        let acc = NSTitlebarAccessoryViewController()
+        acc.layoutAttribute = .right
+        acc.view = stack
+        window.addTitlebarAccessoryViewController(acc)
+    }
+
+    func makeToggleButton(title: String, symbol: String, action: Selector) -> NSButton {
+        let btn = NSButton(title: title, target: self, action: action)
         btn.setButtonType(.pushOnPushOff)
         btn.bezelStyle = .rounded
-        if let img = NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: "Split") {
+        if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: title) {
             btn.image = img; btn.imagePosition = .imageLeading
         }
         btn.sizeToFit()
-        splitButton = btn
-        let acc = NSTitlebarAccessoryViewController()
-        acc.layoutAttribute = .right
-        acc.view = btn
-        window.addTitlebarAccessoryViewController(acc)
+        return btn
     }
 
     // Minimal main menu so the app is keyboard-centric: menu key equivalents are
     // handled before the terminal view sees the keys (SwiftTerm has no
     // performKeyEquivalent), so nothing is intercepted inside yazi itself.
     //   ⌘D  toggle split pane (kitty muscle memory)
+    //   ⌘E  toggle preview pane
+    //   ⌘/  toggle shortcut bar
     //   ⌘⌥← / ⌘⌥→  focus left / right pane (Alt+arrow habit + Cmd)
     func buildMenu() {
         let main = NSMenu()
@@ -327,6 +523,12 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let previewToggle = NSMenuItem(title: "Toggle Preview Pane", action: #selector(togglePreviewPane), keyEquivalent: "e")
         previewToggle.target = self
         viewMenu.addItem(previewToggle)
+        let hints = NSMenuItem(title: "Toggle Shortcut Bar", action: #selector(toggleHintBar), keyEquivalent: "/")
+        hints.target = self
+        viewMenu.addItem(hints)
+        let cheat = NSMenuItem(title: "Keyboard Cheat Sheet", action: #selector(toggleCheatSheet), keyEquivalent: "k")
+        cheat.target = self
+        viewMenu.addItem(cheat)
         let left = NSMenuItem(title: "Focus Left Pane", action: #selector(focusLeftPane),
                               keyEquivalent: String(UnicodeScalar(NSLeftArrowFunctionKey)!))
         left.keyEquivalentModifierMask = [.command, .option]; left.target = self
@@ -393,6 +595,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         guard previewAttached else { return }
         rightContainer.removeFromSuperview()
         evenOutPanes()
+        previewButton?.state = .off
         updateTitle()
     }
 
@@ -405,6 +608,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         lastWasDir = false
         evenOutPanes()
         if let p = lastPath { update(p) }
+        previewButton?.state = .on
         updateTitle()
     }
 
