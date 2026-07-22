@@ -245,7 +245,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     // parse problems appear in the panel footer instead of being swallowed.
     let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
         ("Navigate", [("h / ←", "parent directory"), ("l / →", "enter / open"),
-                      ("j / k", "down / up"), ("g g", "to top"), ("G", "to bottom"),
+                      ("j / k", "down / up"), ("Ctrl d / u", "half page down / up"),
+                      ("Ctrl f / b", "full page down / up"),
+                      ("g g", "to top"), ("G", "to bottom"),
                       ("H / L", "history back / forward"), ("z", "jump (zoxide)"), ("Z", "jump (fzf)")]),
         ("Select", [("Space", "toggle + move down"), ("v", "visual mode"),
                     ("Esc", "clear selection"), ("Ctrl a", "select all")]),
