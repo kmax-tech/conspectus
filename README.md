@@ -185,3 +185,7 @@ the active instance automatically — no focus tracking involved. Note that
   the live preview.
 - Prototype: no app-level shortcuts yet beyond the window chrome; file-manager
   keys are yazi's own.
+
+## License
+
+[MIT](LICENSE)
