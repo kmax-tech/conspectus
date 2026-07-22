@@ -18,10 +18,21 @@ import SwiftTerm
 let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/conspectus")
 let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
 
-// Start directory: an explicit [path] arg (tilde/relative resolved), else $HOME.
-// So Finder/launchd (which hand over "/") and a bare `conspectus` both open home.
+// Last cwd: yazi writes it here on exit (--cwd-file); a bare `conspectus`
+// resumes there, falling back to $HOME.
+let lastCwdPath = (cacheDir as NSString).appendingPathComponent("last-cwd")
+
+// Start directory: an explicit [path] arg (tilde/relative resolved), else the
+// remembered last cwd, else $HOME.
 func resolveStart(_ raw: String?) -> String {
-    guard let raw = raw, !raw.isEmpty else { return NSHomeDirectory() }
+    guard let raw = raw, !raw.isEmpty else {
+        if let saved = try? String(contentsOfFile: lastCwdPath, encoding: .utf8) {
+            let p = saved.trimmingCharacters(in: .whitespacesAndNewlines)
+            var d: ObjCBool = false
+            if FileManager.default.fileExists(atPath: p, isDirectory: &d), d.boolValue { return p }
+        }
+        return NSHomeDirectory()
+    }
     var p = (raw as NSString).expandingTildeInPath
     if !p.hasPrefix("/") {
         p = (FileManager.default.currentDirectoryPath as NSString).appendingPathComponent(p)
@@ -176,13 +187,15 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     // Login shell so PATH/config load, then exec the file manager. YAZI_ID/LEVEL
     // stripped so each pane is a fresh, separate yazi instance (they discover
     // each other via the DDS for cross-instance yank/paste).
-    func launch(_ t: LocalProcessTerminalView, extraEnv: [String: String]) {
+    func launch(_ t: LocalProcessTerminalView, extraEnv: [String: String], rememberCwd: Bool = false) {
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
         env["YAZI_ID"] = nil; env["YAZI_LEVEL"] = nil
         for (k, v) in extraEnv { env[k] = v }
+        // Left/yazi pane records its cwd on exit so the next bare launch resumes there.
+        let cwdFlag = (rememberCwd && command == "yazi") ? " --cwd-file \"\(lastCwdPath)\"" : ""
         t.startProcess(executable: "/bin/zsh",
-                       args: ["-l", "-c", "cd \"\(startPath)\" && exec \(command)"],
+                       args: ["-l", "-c", "cd \"\(startPath)\" && exec \(command)\(cwdFlag)"],
                        environment: env.map { "\($0.key)=\($0.value)" })
     }
 
@@ -239,7 +252,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                           backing: .buffered, defer: false)
         window.title = "conspectus"
         window.contentView = split
-        window.center()
+        // Remember size/position across launches (incl. the split layout width).
+        if !window.setFrameUsingName("ConspectusMain") { window.center() }
+        window.setFrameAutosaveName("ConspectusMain")
 
         // Titlebar toggle: swap the right pane between Quick Look preview and a
         // second yazi (dual-pane copy). A click never fights yazi for the keyboard.
@@ -265,7 +280,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // CONSPECTUS_PEER is a flag, not an id: it arms the `=` cd-sync (keymap
         // broadcasts via `ya pub-to 0`, the panesync plugin follows). yazi
         // auto-generates its own DDS ids, so no fixed ids are set here.
-        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"])
+        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"], rememberCwd: true)
         startFifoReader()
 
         if splitMode { addSecondPane() }   // launched with `split`: start dual-pane
