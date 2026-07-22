@@ -15,6 +15,25 @@ public struct DirEntry: Equatable {
     }
 }
 
+/// Cap a raw name list for the folder look-ahead: the first `limit` names in
+/// natural sort order, plus how many were omitted. Capping happens BEFORE any
+/// per-entry stat, so hovering a directory with tens of thousands of entries
+/// stays cheap. Trade-off (deliberate): in an over-limit directory, entries
+/// past the first `limit` names — including folders — are not shown at all;
+/// the omitted count makes that visible.
+///
+/// - Parameters:
+///   - names: Raw entry names of the directory.
+///   - limit: Maximum number of names to keep; must be positive.
+/// - Returns: `shown` (at most `limit` names, natural order) and `omitted`
+///   (how many names were cut, 0 if none).
+public func capNames(_ names: [String], limit: Int) -> (shown: [String], omitted: Int) {
+    precondition(limit > 0, "limit must be positive, got \(limit)")
+    let sorted = names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    if sorted.count <= limit { return (sorted, 0) }
+    return (Array(sorted.prefix(limit)), sorted.count - limit)
+}
+
 /// Order entries the way the folder listing shows them: directories first,
 /// then natural (Finder-like) name order, so "file2" sorts before "file10".
 public func sortEntries(_ entries: [DirEntry]) -> [DirEntry] {

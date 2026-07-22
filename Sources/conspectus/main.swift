@@ -118,6 +118,11 @@ func terminalFont(size overrideSize: Double? = nil) -> NSFont {
 // Directory look-ahead for the right pane: Quick Look only shows a folder's
 // icon + metadata, so for directories we render the contents ourselves —
 // folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type.
+// Huge directories are capped (folderListingCap) BEFORE the per-entry stat
+// calls, so hovering a 50k-file folder neither hitches the UI nor builds a
+// megabyte attributed string — the pane only shows a screenful anyway.
+let folderListingCap = 500
+
 func folderListing(_ dir: String) -> NSAttributedString {
     let pal = activePalette()
     let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
@@ -131,7 +136,8 @@ func folderListing(_ dir: String) -> NSAttributedString {
         return NSAttributedString(string: "  (unreadable: \(error.localizedDescription))",
                                   attributes: [.font: font, .foregroundColor: fg])
     }
-    let entries = sortEntries(names.map {
+    let capped = capNames(names, limit: folderListingCap)
+    let entries = sortEntries(capped.shown.map {
         DirEntry(name: $0, isDir: isDirectory((dir as NSString).appendingPathComponent($0)))
     })
     if entries.isEmpty {
@@ -143,6 +149,11 @@ func folderListing(_ dir: String) -> NSAttributedString {
                            : fileIcon(e.name, pal)
         out.append(NSAttributedString(string: icon.glyph + "  " + e.name + (e.isDir ? "/" : "") + "\n",
                                       attributes: [.font: font, .foregroundColor: icon.color]))
+    }
+    if capped.omitted > 0 {
+        out.append(NSAttributedString(string: "\n  … and \(capped.omitted) more entries\n",
+                                      attributes: [.font: font,
+                                                   .foregroundColor: fg.withAlphaComponent(0.6)]))
     }
     return out
 }
