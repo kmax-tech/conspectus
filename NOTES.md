@@ -16,6 +16,25 @@ scratch and swap it into the container; file→file keeps the fast in-place swap
 **Notes:** Don't "optimize" the rebuild away — the blank state is not
 reproducible on every machine/OS version, but it is real.
 
+## 2026-07-22 — SIGABRT in split mode: QLPreviewView auto-closes off-window
+
+**Problem:** With the second yazi pane open, hovering a *file* in the left
+pane crashed the app (`_QLRaiseAssert` → SIGABRT in
+`-[QLPreviewView setPreviewItem:]`). `addSecondPane` removes rightContainer
+from the window; a `QLPreviewView` that leaves the window hierarchy closes
+itself (its remote Quick Look extension is torn down), and setting
+`previewItem` on a closed view is a QuickLook assertion failure. The left
+yazi keeps writing hovered paths to the FIFO the whole time.
+
+**Solution:** `update()` skips all view work while `term2 != nil` (there is
+no preview pane in split mode; `lastPath` keeps tracking). `removeSecondPane()`
+rebuilds the `QLPreviewView` via `rebuildPreview()` (shared with the
+dir→file blank-fix path) and replays `lastPath` so the preview resumes.
+
+**Notes:** Never reuse a `QLPreviewView` after it was hidden for long or
+detached from the window — always rebuild. Folder hovers never crashed
+(they go to the self-rendered listing), which is why it only hit "sometimes".
+
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 
 **Problem:** Fixed `YAZI_ID`s per pane broke yazi's DDS discovery; panes

@@ -352,9 +352,28 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
             split.setPosition(split.frame.width * 0.56, ofDividerAt: 0)
         }
         t2.terminate()
+        // rightContainer just re-entered the window, but its QLPreviewView
+        // auto-closed when it left — reusing it would trip QuickLook's
+        // assertion (SIGABRT). Rebuild it and restore the last hovered item.
+        rebuildPreview()
+        lastWasDir = false
+        if let p = lastPath { update(p) }
         window.makeFirstResponder(term)
         splitButton?.state = .off
         window.title = "conspectus"
+    }
+
+    /// Replace the `QLPreviewView` with a fresh instance, keeping frame and
+    /// visibility. A `QLPreviewView` closes itself (its remote Quick Look
+    /// extension goes away) when it leaves the window hierarchy or spends time
+    /// hidden; setting `previewItem` on a closed view aborts the app with a
+    /// QuickLook assertion — rebuilding is the only safe way back.
+    func rebuildPreview() {
+        let fresh = QLPreviewView(frame: preview.frame, style: .normal) ?? QLPreviewView()
+        fresh.autoresizingMask = [.width, .height]
+        fresh.isHidden = preview.isHidden
+        rightContainer.replaceSubview(preview, with: fresh)
+        preview = fresh
     }
 
     func startFifoReader() {
@@ -405,6 +424,12 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let dir = d.boolValue
         lastPath = path
         DispatchQueue.main.async {
+            // Split mode: the right pane is a second terminal; rightContainer is
+            // out of the window and its QLPreviewView has auto-closed. Touching
+            // it would abort the app (QuickLook assertion), so skip the view
+            // work — lastPath keeps tracking, and removeSecondPane restores the
+            // preview from it when the split is toggled off.
+            if self.term2 != nil { return }
             if dir {
                 // Folder: render its contents ourselves (Quick Look would only
                 // show the folder icon + metadata).
@@ -419,10 +444,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                     // back permanently blank (its remote QL extension goes away).
                     // Rebuild the view from scratch — file -> file keeps the fast
                     // in-place swap.
-                    let fresh = QLPreviewView(frame: self.preview.frame, style: .normal) ?? QLPreviewView()
-                    fresh.autoresizingMask = [.width, .height]
-                    self.rightContainer.replaceSubview(self.preview, with: fresh)
-                    self.preview = fresh
+                    self.rebuildPreview()
                 }
                 self.preview.isHidden = false
                 self.preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
