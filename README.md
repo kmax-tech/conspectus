@@ -1,10 +1,17 @@
 # conspectus
 
-A split window: a **TUI file manager** (yazi by default) running in an embedded
-terminal on the left, a live **macOS Quick Look preview** on the right. Your own
-fast, native, dual-pane-ish file manager — the terminal keeps your yazi config
-and keybindings, the preview gets full Quick Look fidelity (.ai, .psd, PDF,
-video, …).
+**The best of both worlds, glued by a minimal Swift wrapper:** [yazi's](https://yazi-rs.github.io/)
+fast, fully customizable keyboard navigation — your config, your keybindings,
+your plugins — combined with **macOS-native previews** in full Quick Look
+fidelity (PDF, video, .ai, .psd, rendered Markdown and highlighted code via QL
+extensions, …).
+
+Terminal file managers navigate better than Finder ever will; Finder previews
+better than any terminal ever will. conspectus refuses to choose: a split
+window with yazi in an embedded terminal on the left and a live Quick Look
+pane on the right, driven by whatever you hover. The Swift wrapper stays
+deliberately minimal — it owns the window, the preview, and the glue, and
+leaves everything about *navigation* to yazi.
 
 This is the "integrated window" sibling of [`qlpeek`](../qlpeek), which docks a
 Quick Look panel next to your existing terminal instead of embedding one.
