@@ -25,23 +25,28 @@ final class ListingTests: XCTestCase {
         XCTAssertEqual(sortEntries([]), [])
     }
 
-    func testCapNamesUnderLimitKeepsAllSorted() {
-        let r = capNames(["b.txt", "a.txt"], limit: 500)
-        XCTAssertEqual(r.shown, ["a.txt", "b.txt"])
+    func testCapEntriesUnderLimitKeepsAll() {
+        let entries = [DirEntry(name: "a", isDir: true), DirEntry(name: "b", isDir: false)]
+        let r = capEntries(entries, limit: 500)
+        XCTAssertEqual(r.shown, entries)
         XCTAssertEqual(r.omitted, 0)
     }
 
-    func testCapNamesOverLimitCutsAndCounts() {
-        let names = (1...600).map { "file\($0).txt" }.shuffled()
-        let r = capNames(names, limit: 500)
+    func testCapEntriesOverLimitCutsAndCounts() {
+        // Sorted first (dirs-first), then capped — directories survive the cap
+        // even when the folder has more entries than the limit.
+        let files = (1...600).map { DirEntry(name: "file\($0).txt", isDir: false) }
+        let dirs = [DirEntry(name: "zzz-last-dir", isDir: true)]
+        let r = capEntries(sortEntries(files + dirs), limit: 500)
         XCTAssertEqual(r.shown.count, 500)
-        XCTAssertEqual(r.omitted, 100)
-        XCTAssertEqual(r.shown.first, "file1.txt")     // natural order survives the cap
-        XCTAssertEqual(r.shown.last, "file500.txt")
+        XCTAssertEqual(r.omitted, 101)
+        XCTAssertEqual(r.shown.first, DirEntry(name: "zzz-last-dir", isDir: true))
+        XCTAssertEqual(r.shown[1].name, "file1.txt")   // natural order after the dirs
     }
 
-    func testCapNamesExactlyAtLimitOmitsNothing() {
-        let r = capNames(["a", "b", "c"], limit: 3)
+    func testCapEntriesExactlyAtLimitOmitsNothing() {
+        let entries = (1...3).map { DirEntry(name: "f\($0)", isDir: false) }
+        let r = capEntries(entries, limit: 3)
         XCTAssertEqual(r.shown.count, 3)
         XCTAssertEqual(r.omitted, 0)
     }

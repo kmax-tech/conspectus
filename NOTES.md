@@ -96,6 +96,27 @@ a white panel in light mode). `layoutOuterPanes()` therefore sets the outer
 frames explicitly on open/close/resize; never rely on `setPosition` for
 runtime add/remove in the outer split.
 
+## 2026-07-22 — Folder look-ahead at scale: bulk keys + cap; further options
+
+**Problem:** Hovering a huge directory (tens of thousands of entries) statted
+every entry individually and built a megabyte `NSAttributedString` on the
+main thread — UI hitch and a transient memory spike.
+
+**Solution:** Enumerate with
+`contentsOfDirectory(at:includingPropertiesForKeys: [.isDirectoryKey])` — the
+isDir bit arrives in one `getattrlistbulk` kernel pass instead of a stat per
+entry. Sort *all* entries (cheap once isDir is free, keeps dirs-first correct
+in huge folders), then cap only the rendering at `folderListingCap` (500)
+with a visible "… and N more entries" line.
+
+**Notes:** Options if the cap ever hurts (kept for the future, in ascending
+effort): (1) virtualized `NSTableView` with a lazy data source — only visible
+rows materialize, scrollable through 100k entries at constant memory (how
+Finder does it; would replace the capped `NSTextView`); (2) enumerate/sort
+off the main thread with **cancellation** — a generation counter or Task so
+a newer hover cancels the stale load, else results race out of order;
+(3) per-directory cache keyed on path + mtime for instant re-hovers.
+
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 
 **Problem:** Fixed `YAZI_ID`s per pane broke yazi's DDS discovery; panes

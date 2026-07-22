@@ -118,28 +118,37 @@ func terminalFont(size overrideSize: Double? = nil) -> NSFont {
 // Directory look-ahead for the right pane: Quick Look only shows a folder's
 // icon + metadata, so for directories we render the contents ourselves —
 // folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type.
-// Huge directories are capped (folderListingCap) BEFORE the per-entry stat
-// calls, so hovering a 50k-file folder neither hitches the UI nor builds a
-// megabyte attributed string — the pane only shows a screenful anyway.
+// The isDirectory bit is prefetched during enumeration (one getattrlistbulk
+// pass instead of a stat per entry), so sorting all entries stays cheap even
+// for 50k-file folders; only the *rendering* is capped (folderListingCap) —
+// the pane shows a screenful anyway, and "… and N more" makes the cut visible.
 let folderListingCap = 500
 
 func folderListing(_ dir: String) -> NSAttributedString {
     let pal = activePalette()
     let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
     let font = terminalFont()
-    let names: [String]
+    let all: [DirEntry]
     do {
-        names = try FileManager.default.contentsOfDirectory(atPath: dir).filter { !$0.hasPrefix(".") }
+        let urls = try FileManager.default.contentsOfDirectory(
+            at: URL(fileURLWithPath: dir, isDirectory: true),
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles])
+        all = urls.map {
+            // Deliberate try?: the key was prefetched, a miss means the entry
+            // vanished mid-hover — rendering it as a file is icon-level
+            // cosmetics, not worth failing the whole listing.
+            DirEntry(name: $0.lastPathComponent,
+                     isDir: (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false)
+        }
     } catch {
         // The folder can vanish (or lose permission) between hover and render —
         // show the failure in the pane instead of a silently empty listing.
         return NSAttributedString(string: "  (unreadable: \(error.localizedDescription))",
                                   attributes: [.font: font, .foregroundColor: fg])
     }
-    let capped = capNames(names, limit: folderListingCap)
-    let entries = sortEntries(capped.shown.map {
-        DirEntry(name: $0, isDir: isDirectory((dir as NSString).appendingPathComponent($0)))
-    })
+    let capped = capEntries(sortEntries(all), limit: folderListingCap)
+    let entries = capped.shown
     if entries.isEmpty {
         return NSAttributedString(string: "  (empty)", attributes: [.font: font, .foregroundColor: fg])
     }
