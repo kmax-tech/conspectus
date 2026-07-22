@@ -120,6 +120,28 @@ visible rows materialize, scrollable through 100k entries at constant
 memory (how Finder does it; would replace the capped `NSTextView`);
 (2) per-directory cache keyed on path + mtime for instant re-hovers.
 
+## 2026-07-22 — Keyboard focus: by intent only, visible, restored
+
+**Problem:** After switching to an editor launched out of yazi (E c →
+VS Code) and back, hjkl/arrows went dead while mouse-wheel scrolling kept
+working — the QLPreviewView had silently become first responder (scroll
+events need no key focus, key events do). Yet a *deliberately* focused
+preview is useful: Quick Look natively takes arrows/PgUp/Space.
+
+**Solution:** Three pieces. (1) `IntentFocusPreviewView.allowFocus` — the
+preview refuses first-responder status except during the explicit ⌘⌥→
+command; KVO on `window.firstResponder` revokes the permission when focus
+moves away. (2) `applicationDidBecomeActive` restores the last-focused
+terminal if reactivation left focus on a non-terminal. (3) A subtle gray
+border (fg at 25% alpha) marks the focused pane, shown only when more than
+one focusable pane exists.
+
+**Notes:** The KVO observation is the single source of truth for border
+updates — mouse clicks change first responder without any of our code
+running, so per-call-site updates would miss them. `updateTitle()` also
+repaints borders because attach/detach changes the target set without a
+first-responder change.
+
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 
 **Problem:** Fixed `YAZI_ID`s per pane broke yazi's DDS discovery; panes

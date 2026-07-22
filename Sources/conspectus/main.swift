@@ -154,12 +154,15 @@ func renderListing(_ contents: FolderContents) -> NSAttributedString {
     return out
 }
 
-/// QLPreviewView that never takes keyboard focus — the keyboard belongs to
-/// the terminal panes (the app's keyboard-centric contract); the preview is
-/// mouse-only. Prevents "keys dead after app switch" states where the
-/// preview ends up first responder and silently swallows hjkl/arrows.
-final class NoFocusPreviewView: QLPreviewView {
-    override var acceptsFirstResponder: Bool { false }
+/// QLPreviewView with focus-by-intent: it refuses first-responder status
+/// unless `allowFocus` is set — so clicks and app switches can never steal
+/// the keyboard from the terminal panes (which silently swallowed
+/// hjkl/arrows), but ⌘⌥→ can hand it over deliberately. A focused Quick Look
+/// natively takes arrows, PgUp/PgDn, and Space (PDF paging, video play).
+/// The permission is revoked as soon as focus moves elsewhere.
+final class IntentFocusPreviewView: QLPreviewView {
+    var allowFocus = false
+    override var acceptsFirstResponder: Bool { allowFocus }
 }
 
 final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSSplitViewDelegate {
@@ -170,7 +173,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var previewButton: NSButton!
     var term: LocalProcessTerminalView!
     var term2: LocalProcessTerminalView?
-    var preview: QLPreviewView!
+    var preview: IntentFocusPreviewView!
+    var focusObservation: NSKeyValueObservation?
     var folderScroll: NSScrollView!
     var folderText: NSTextView!
     var outerSplit: NSSplitView!
@@ -241,7 +245,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         ("conspectus", [("⌘D", "toggle split pane"), ("⌘E", "toggle preview pane"),
                         ("⌘J", "terminal panel (opens in yazi's dir)"),
                         ("⌘/", "toggle shortcut bar"), ("⌘K", "this cheat sheet"),
-                        ("⌘⌥← →", "focus left / right pane"), ("=", "sync cd to other pane")]),
+                        ("⌘⌥← →", "cycle pane focus (→ into preview: arrows/Space scroll)"),
+                        ("=", "sync cd to other pane")]),
     ]
 
     func makeTerm() -> LocalProcessTerminalView {
@@ -362,6 +367,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                 self.styleFolder()
                 self.styleHintBar()
                 self.styleCheatSheet()
+                self.updateFocusBorders()
                 if let p = self.lastPath { self.update(p) }
             }
         }
@@ -371,7 +377,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// directory listing (folders); `update` toggles which one is visible.
     func buildRightPane() {
         rightContainer = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 900))
-        preview = NoFocusPreviewView(frame: rightContainer.bounds, style: .normal) ?? NoFocusPreviewView()
+        preview = IntentFocusPreviewView(frame: rightContainer.bounds, style: .normal) ?? IntentFocusPreviewView()
         preview.autoresizingMask = [.width, .height]
         folderScroll = NSScrollView(frame: rightContainer.bounds)
         folderScroll.hasVerticalScroller = true
@@ -652,6 +658,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         applyHintBarVisibility()
         if !window.setFrameUsingName("ConspectusMain") { window.center() }
         window.setFrameAutosaveName("ConspectusMain")
+        focusObservation = window.observe(\.firstResponder) { [weak self] _, _ in
+            self?.focusDidChange()
+        }
     }
 
     /// Titlebar toggles for the two panes (second yazi, Quick Look preview) —
@@ -731,8 +740,35 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         NSApp.mainMenu = main
     }
 
-    @objc func focusLeftPane()  { window.makeFirstResponder(term) }
-    @objc func focusRightPane() { if let t2 = term2 { window.makeFirstResponder(t2) } }
+    // ⌘⌥←/→ cycle horizontally: left terminal ⇄ second terminal ⇄ preview.
+    // The preview is a real focus target (focus-by-intent) — a focused Quick
+    // Look scrolls with arrows/PgUp/PgDn and pages PDFs with Space.
+    @objc func focusLeftPane() {
+        if window.firstResponder === preview {
+            window.makeFirstResponder(term2 ?? term)
+        } else {
+            window.makeFirstResponder(term)
+        }
+    }
+
+    @objc func focusRightPane() {
+        if window.firstResponder === term, let t2 = term2 {
+            window.makeFirstResponder(t2)
+            return
+        }
+        if previewAttached {
+            focusPreview()
+        } else if let t2 = term2 {
+            window.makeFirstResponder(t2)
+        }
+    }
+
+    /// Hand the keyboard to the preview deliberately (clicks cannot).
+    func focusPreview() {
+        guard previewAttached else { return }
+        preview.allowFocus = true
+        window.makeFirstResponder(preview)
+    }
 
     @objc func toggleSecondPane()  { term2 == nil ? addSecondPane() : removeSecondPane() }
     @objc func togglePreviewPane() { rightContainer.superview == nil ? attachPreview() : detachPreview() }
@@ -816,6 +852,36 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         case (true, false): window.title = "conspectus — split"
         default:            window.title = "conspectus"
         }
+        updateFocusBorders()   // pane set changed — the indicator set changes with it
+    }
+
+    /// React to any first-responder change (KVO): revoke the preview's
+    /// focus-by-intent permission once focus moves elsewhere, and repaint the
+    /// focus borders. KVO covers all paths — menu commands, mouse clicks into
+    /// a pane, and the app-switch restore.
+    func focusDidChange() {
+        if window.firstResponder !== preview {
+            preview?.allowFocus = false
+        }
+        updateFocusBorders()
+    }
+
+    /// Subtle gray border on the focused pane — shown only while more than
+    /// one focusable target exists (a lone pane stays clean).
+    func updateFocusBorders() {
+        guard let window = window else { return }
+        let fr = window.firstResponder
+        var targets: [(NSView, Bool)] = [(term, fr === term)]
+        if let t2 = term2 { targets.append((t2, fr === t2)) }
+        if previewAttached { targets.append((rightContainer, fr === preview)) }
+        if let bt = bottomTerm { targets.append((bt, fr === bt)) }
+        let show = targets.count > 1
+        let color = nsColor(activePalette().fg).withAlphaComponent(0.25).cgColor
+        for (view, focused) in targets {
+            view.wantsLayer = true
+            view.layer?.borderWidth = (show && focused) ? 2 : 0
+            view.layer?.borderColor = color
+        }
     }
 
     /// Replace the `QLPreviewView` with a fresh instance, keeping frame and
@@ -824,7 +890,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// hidden; setting `previewItem` on a closed view aborts the app with a
     /// QuickLook assertion — rebuilding is the only safe way back.
     func rebuildPreview() {
-        let fresh = NoFocusPreviewView(frame: preview.frame, style: .normal) ?? NoFocusPreviewView()
+        let fresh = IntentFocusPreviewView(frame: preview.frame, style: .normal) ?? IntentFocusPreviewView()
         fresh.autoresizingMask = [.width, .height]
         fresh.isHidden = preview.isHidden
         rightContainer.replaceSubview(preview, with: fresh)

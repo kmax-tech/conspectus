@@ -69,6 +69,16 @@ titlebar **`Split` button**) and the preview pane (**⌘E**, always rightmost):
 Toggling the second pane off with the preview hidden brings the preview back
 (a lone terminal defeats the app's purpose).
 
+### Focus
+
+**⌘⌥← / ⌘⌥→** cycle the keyboard horizontally: left terminal ⇄ second
+terminal ⇄ preview. A focused pane shows a subtle gray border (only when
+more than one focusable pane exists). The preview is **focus-by-intent**: a
+focused Quick Look scrolls with the arrow keys / PgUp / PgDn and pages PDFs
+(or plays videos) with Space — but clicks and app switches can never move
+the keyboard into it, so hjkl in yazi always keep working; coming back from
+an editor launched out of yazi restores focus to the last terminal.
+
 ## Bottom terminal (⌘J)
 
 **⌘J** toggles a terminal panel below the panes: a fresh interactive login
