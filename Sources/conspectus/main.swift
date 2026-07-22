@@ -152,7 +152,7 @@ func terminalFont() -> NSFont {
     return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
 }
 
-final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate {
+final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSSplitViewDelegate {
     var window: NSWindow!
     var split: NSSplitView!
     var rightContainer: NSView!
@@ -228,6 +228,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         split = NSSplitView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
         split.isVertical = true            // vertical divider -> panes side by side
         split.dividerStyle = .thin
+        split.delegate = self              // keep proportions on resize, min widths
         split.addSubview(term)
         split.addSubview(rightContainer)
         split.setPosition(760, ofDividerAt: 0)
@@ -380,6 +381,28 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                 self.preview.refreshPreviewItem()
             }
         }
+    }
+
+    // MARK: NSSplitViewDelegate — window resize must not collapse a pane.
+    // Keep the panes' ratio and enforce a 300pt minimum on both sides (also
+    // caps divider dragging via the constrain methods).
+    let minPane: CGFloat = 300
+
+    func splitView(_ sv: NSSplitView, resizeSubviewsWithOldSize oldSize: NSSize) {
+        guard sv.subviews.count == 2 else { sv.adjustSubviews(); return }
+        let total = sv.frame.width - sv.dividerThickness
+        let oldTotal = oldSize.width - sv.dividerThickness
+        let ratio = oldTotal > 0 ? sv.subviews[0].frame.width / oldTotal : 0.56
+        let leftW = max(minPane, min(total - minPane, total * ratio))
+        sv.subviews[0].frame = NSRect(x: 0, y: 0, width: leftW, height: sv.frame.height)
+        sv.subviews[1].frame = NSRect(x: leftW + sv.dividerThickness, y: 0,
+                                      width: total - leftW, height: sv.frame.height)
+    }
+    func splitView(_ sv: NSSplitView, constrainMinCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat {
+        max(p, minPane)
+    }
+    func splitView(_ sv: NSSplitView, constrainMaxCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat {
+        min(p, sv.frame.width - minPane)
     }
 
     // MARK: LocalProcessTerminalViewDelegate
