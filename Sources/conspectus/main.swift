@@ -195,6 +195,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var lastPath: String?
     var lastWasDir = false
     weak var lastFocusedTerm: LocalProcessTerminalView?
+    weak var lastTopTerm: LocalProcessTerminalView?   // ⌥↑ returns here from the terminal panel
 
     // Folder listings load off the main thread; this generation counter is
     // the cancellation: every hover (file or folder) bumps it, and an
@@ -255,7 +256,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                         ("⌘J", "terminal panel (opens in yazi's dir)"),
                         ("⌘W", "close terminal panel"),
                         ("⌘/", "toggle shortcut bar"), ("⌘K", "this cheat sheet"),
-                        ("⌘⌥← →", "cycle pane focus (→ into preview: arrows/Space scroll)"),
+                        ("⌥← →", "cycle pane focus (→ into preview: arrows/Space scroll)"),
+                        ("⌥↑ ↓", "pane area ⇄ terminal panel"),
                         ("=", "sync cd to other pane")]),
     ]
 
@@ -296,7 +298,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(term)     // keystrokes go to the TUI
-        buildMenu()                         // ⌘D split, ⌘E preview, ⌘J terminal, ⌘/ bar, ⌘⌥←/→ focus
+        buildMenu()                         // ⌘D split, ⌘E preview, ⌘J terminal, ⌘/ bar, ⌥-arrows focus
         NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
         NSApp.activate(ignoringOtherApps: true)
 
@@ -716,7 +718,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     //   ⌘E  toggle preview pane
     //   ⌘J  toggle bottom terminal (VS Code muscle memory)
     //   ⌘/  toggle shortcut bar
-    //   ⌘⌥← / ⌘⌥→  focus left / right pane (Alt+arrow habit + Cmd)
+    //   ⌥←/→/↑/↓  pane focus (kitty/WezTerm/smart-splits habit; ⌘⌥ = alias)
     func buildMenu() {
         let main = NSMenu()
 
@@ -750,14 +752,15 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let cheat = NSMenuItem(title: "Keyboard Cheat Sheet", action: #selector(toggleCheatSheet), keyEquivalent: "k")
         cheat.target = self
         viewMenu.addItem(cheat)
-        let left = NSMenuItem(title: "Focus Left Pane", action: #selector(focusLeftPane),
-                              keyEquivalent: String(UnicodeScalar(NSLeftArrowFunctionKey)!))
-        left.keyEquivalentModifierMask = [.command, .option]; left.target = self
-        viewMenu.addItem(left)
-        let right = NSMenuItem(title: "Focus Right Pane", action: #selector(focusRightPane),
-                               keyEquivalent: String(UnicodeScalar(NSRightArrowFunctionKey)!))
-        right.keyEquivalentModifierMask = [.command, .option]; right.target = self
-        viewMenu.addItem(right)
+        // Pane focus follows the kitty/WezTerm/smart-splits convention from
+        // the dotfiles (keybindings.md): plain ⌥-arrows move focus between
+        // panes; ⌘⌥ stays as a silent alias for the old chord. Trade-off,
+        // same as in kitty: ⌥←/→ no longer reach the shell as word jumps —
+        // M-b/M-f and C-a/C-e still do.
+        addFocusItem(viewMenu, "Focus Left Pane", NSLeftArrowFunctionKey, #selector(focusLeftPane))
+        addFocusItem(viewMenu, "Focus Right Pane", NSRightArrowFunctionKey, #selector(focusRightPane))
+        addFocusItem(viewMenu, "Focus Terminal Panel", NSDownArrowFunctionKey, #selector(focusDown))
+        addFocusItem(viewMenu, "Focus Pane Above", NSUpArrowFunctionKey, #selector(focusUp))
         viewItem.submenu = viewMenu
 
         NSApp.mainMenu = main
@@ -766,6 +769,28 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     // ⌘⌥←/→ cycle horizontally: left terminal ⇄ second terminal ⇄ preview.
     // The preview is a real focus target (focus-by-intent) — a focused Quick
     // Look scrolls with arrows/PgUp/PgDn and pages PDFs with Space.
+    /// Add a focus menu item bound to ⌥+arrow, plus a ⌘⌥ alternate (shown
+    /// only while ⌘ is held) so the old chord keeps working.
+    func addFocusItem(_ menu: NSMenu, _ title: String, _ arrow: Int, _ action: Selector) {
+        let key = String(UnicodeScalar(arrow)!)
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.keyEquivalentModifierMask = [.option]; item.target = self
+        menu.addItem(item)
+        let alias = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        alias.keyEquivalentModifierMask = [.command, .option]; alias.target = self
+        alias.isAlternate = true
+        menu.addItem(alias)
+    }
+
+    // ⌥↓ / ⌥↑ — vertical focus between the pane area and the terminal panel.
+    @objc func focusDown() {
+        if let bt = bottomTerm { window.makeFirstResponder(bt) }
+    }
+
+    @objc func focusUp() {
+        window.makeFirstResponder(lastTopTerm ?? term)
+    }
+
     @objc func focusLeftPane() {
         if previewHasFocus(window.firstResponder) {
             window.makeFirstResponder(term2 ?? term)
@@ -895,6 +920,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     func focusDidChange() {
         if !previewHasFocus(window?.firstResponder) {
             preview?.allowFocus = false
+        }
+        if let fr = window?.firstResponder as? LocalProcessTerminalView, fr !== bottomTerm {
+            lastTopTerm = fr
         }
         updateFocusBorders()
     }

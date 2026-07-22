@@ -71,9 +71,13 @@ Toggling the second pane off with the preview hidden brings the preview back
 
 ### Focus
 
-**⌘⌥← / ⌘⌥→** cycle the keyboard horizontally: left terminal ⇄ second
-terminal ⇄ preview. A focused pane shows a subtle gray border (only when
-more than one focusable pane exists). The preview is **focus-by-intent**: a
+**⌥← / ⌥→** cycle the keyboard horizontally (left terminal ⇄ second
+terminal ⇄ preview), **⌥↑ / ⌥↓** vertically between the pane area and the
+terminal panel — the same plain-Alt-arrow convention as kitty, WezTerm, and
+smart-splits in the dotfiles (`keybindings.md`); ⌘⌥-arrows remain as silent
+aliases. Trade-off (same as kitty): ⌥-arrows no longer reach the shell as
+word jumps — `M-b`/`M-f` and `C-a`/`C-e` still do. A focused pane shows a
+subtle gray border (only when more than one focusable pane exists). The preview is **focus-by-intent**: a
 focused Quick Look scrolls with the arrow keys / PgUp / PgDn and pages PDFs
 (or plays videos) with Space — but clicks and app switches can never move
 the keyboard into it, so hjkl in yazi always keep working; coming back from
