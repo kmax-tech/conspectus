@@ -198,7 +198,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var cheatPanel: NSPanel?
     var cheatText: NSTextView?
     var lastPath: String?
-    var lastWasDir = false
+    // True while a folder listing is (or was) showing: the hidden QLPreviewView
+    // may have auto-closed, so the next file preview must rebuild it first.
+    var previewDirty = false
     weak var lastFocusedTerm: LocalProcessTerminalView?
     weak var lastTopTerm: LocalProcessTerminalView?   // ⌥↑ returns here from the terminal panel
 
@@ -896,7 +898,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         guard !previewAttached else { return }
         split.addSubview(rightContainer)
         rebuildPreview()
-        lastWasDir = false
+        previewDirty = false
         evenOutPanes()
         if let p = lastPath { update(p) }
         previewButton?.state = .on
@@ -1036,21 +1038,34 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
             // tracking, and attachPreview restores the preview from it.
             if !self.previewAttached { return }
             if dir {
+                self.previewDirty = true   // preview pane goes hidden; QL view may auto-close
                 self.showFolder(path, generation: gen)
             } else {
-                self.folderScroll.isHidden = true
-                if self.lastWasDir {
-                    // dir -> file: a QLPreviewView that spent time hidden can come
-                    // back permanently blank (its remote QL extension goes away).
-                    // Rebuild the view from scratch — file -> file keeps the fast
-                    // in-place swap.
-                    self.rebuildPreview()
+                // Switch panes immediately, but DEBOUNCE the actual Quick Look
+                // request: racing through hundreds of files must not hammer the
+                // QL service with every intermediate item — that can wedge the
+                // remote extension into a permanent spinner. Only the hover the
+                // user settles on (~120ms) is requested.
+                if !self.previewDirty {
+                    self.folderScroll.isHidden = true
+                    self.preview.isHidden = false
                 }
-                self.preview.isHidden = false
-                self.preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
-                self.preview.refreshPreviewItem()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    guard self.isCurrentListing(gen), self.previewAttached else { return }
+                    if self.previewDirty {
+                        // dir -> file: a QLPreviewView that spent time hidden can
+                        // come back permanently blank (its remote QL extension
+                        // goes away). Rebuild from scratch; file -> file keeps
+                        // the fast in-place swap.
+                        self.rebuildPreview()
+                        self.previewDirty = false
+                    }
+                    self.folderScroll.isHidden = true
+                    self.preview.isHidden = false
+                    self.preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
+                    self.preview.refreshPreviewItem()
+                }
             }
-            self.lastWasDir = dir
         }
     }
 

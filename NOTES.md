@@ -160,6 +160,23 @@ EOF between writers, so the wedged-open state cannot occur at all.
 ~/.cache/conspectus/` and the reader thread first — this failure mode is
 silent by nature. Multiple conspectus windows are now safe to run at once.
 
+## 2026-07-22 — Quick Look wedges under churn; debounce the requests
+
+**Problem:** Racing through hundreds of PDFs (held-down key) set
+`previewItem` for every intermediate file. The Quick Look service
+eventually wedged: the view stuck on a permanent loading spinner and never
+recovered on its own.
+
+**Solution:** Debounce the QL request — the pane switches immediately, but
+`previewItem` is only set once the hover has settled for ~120ms (reusing
+the listing generation counter as the cancellation token). Scrolling
+through a directory now issues zero QL requests until the user stops.
+`lastWasDir` became `previewDirty`: the dir→file rebuild happens at
+request time inside the debounce, not per hover event.
+
+**Notes:** Manual recovery for a wedged preview (should it still happen):
+⌘E twice — detach + attach rebuilds the QLPreviewView from scratch.
+
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 
 **Problem:** Fixed `YAZI_ID`s per pane broke yazi's DDS discovery; panes
