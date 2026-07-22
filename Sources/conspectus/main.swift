@@ -57,7 +57,12 @@ if let i = CommandLine.arguments.firstIndex(of: "--icon"), i + 1 < CommandLine.a
 }
 
 let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/conspectus")
-let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
+
+// One FIFO per instance: a shared path let any new launch (second window,
+// test run) unlink the running instance's FIFO and permanently wedge its
+// reader in a blocking open() on the orphaned inode — previews then never
+// updated again. Stale FIFOs of dead instances are removed at startup.
+let fifoPath = (cacheDir as NSString).appendingPathComponent("target-\(getpid())")
 
 // Last cwd: yazi writes it here on exit (--cwd-file); a bare `conspectus`
 // resumes there, falling back to $HOME.
@@ -360,9 +365,22 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         } catch {
             die("conspectus: cannot create cache directory \(cacheDir): \(error.localizedDescription)")
         }
+        cleanupStaleFifos()
         unlink(fifoPath)
         guard mkfifo(fifoPath, 0o600) == 0 else {
             die("conspectus: mkfifo(\(fifoPath)) failed: \(String(cString: strerror(errno)))")
+        }
+    }
+
+    /// Remove FIFOs left behind by dead instances: `target-<pid>` whose
+    /// process is gone, plus the legacy shared `target`. Deliberate try? on
+    /// the listing — the directory was created a moment ago, and a failed
+    /// cleanup only leaves harmless stale pipes behind.
+    func cleanupStaleFifos() {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: cacheDir)) ?? []
+        for f in files where f.hasPrefix("target") {
+            let alive = Int32(f.dropFirst("target-".count)).map { kill($0, 0) == 0 } ?? false
+            if !alive { unlink((cacheDir as NSString).appendingPathComponent(f)) }
         }
     }
 
@@ -963,11 +981,15 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         DispatchQueue.global(qos: .utility).async { [weak self] in
             var warnedOpenFailure = false
             while true {
-                guard let f = fopen(fifoPath, "r") else {
-                    // fopen on a FIFO blocks until a writer appears, so failure
-                    // means the FIFO itself is gone/broken. Deliberate policy:
-                    // warn once (not every 100ms) and keep retrying — the
-                    // preview degrades, the app stays usable.
+                // O_RDWR: opening a FIFO read-write never blocks waiting for a
+                // writer and never sees EOF between writers — the reader can't
+                // wedge in open() if the FIFO is unlinked underneath it.
+                let fd = open(fifoPath, O_RDWR)
+                guard fd >= 0, let f = fdopen(fd, "r") else {
+                    if fd >= 0 { close(fd) }
+                    // FIFO gone/broken. Deliberate policy: warn once (not every
+                    // 100ms) and keep retrying — the preview degrades, the app
+                    // stays usable.
                     if !warnedOpenFailure {
                         warnedOpenFailure = true
                         warn("conspectus: cannot open FIFO \(fifoPath) "

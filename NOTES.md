@@ -142,6 +142,24 @@ running, so per-call-site updates would miss them. `updateTitle()` also
 repaints borders because attach/detach changes the target set without a
 first-responder change.
 
+## 2026-07-22 — FIFO per instance; reader opens O_RDWR (wedged-open bug)
+
+**Problem:** All instances shared `~/.cache/conspectus/target`. Any new
+launch (second window, headless test run) unlinked and recreated it — and a
+running instance whose reader was blocked in `fopen("r")` (which waits for a
+writer) stayed blocked on the orphaned inode *forever*: previews silently
+stopped updating for keyboard and mouse alike, with no error anywhere.
+
+**Solution:** The FIFO is `target-<pid>` — one per instance, handed to that
+instance's yazi children via QLPEEK_FIFO; startup removes FIFOs of dead
+pids (and the legacy shared `target`). The reader now opens with `O_RDWR`:
+opening a FIFO read-write never blocks waiting for a writer and never sees
+EOF between writers, so the wedged-open state cannot occur at all.
+
+**Notes:** If previews ever stop updating again, check `ls
+~/.cache/conspectus/` and the reader thread first — this failure mode is
+silent by nature. Multiple conspectus windows are now safe to run at once.
+
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 
 **Problem:** Fixed `YAZI_ID`s per pane broke yazi's DDS discovery; panes

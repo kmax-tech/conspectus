@@ -26,7 +26,8 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
 - Because the right pane previews files *and* folders, yazi runs at 2 columns
   (its own 3rd preview column is hidden via the overlay `yazi.toml`). You
   navigate in the middle column and enter directories to descend.
-- Coupling: the app creates a FIFO and hands its path to the shell via
+- Coupling: the app creates a FIFO (one per instance,
+  `~/.cache/conspectus/target-<pid>`) and hands its path to the shell via
   `QLPEEK_FIFO`. The file manager writes the hovered path there on selection;
   the app swaps the preview in place. For yazi this is the `qlpeek send` plugin
   (honours `QLPEEK_FIFO`) and follow mode auto-enables inside conspectus.
