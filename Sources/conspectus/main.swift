@@ -165,6 +165,14 @@ final class IntentFocusPreviewView: QLPreviewView {
     override var acceptsFirstResponder: Bool { allowFocus }
 }
 
+/// Transparent overlay that only draws the focus border and never intercepts
+/// clicks. Needed for the preview pane: Quick Look's content is composited
+/// from a remote process, so a border on the container layer can end up
+/// underneath it — this view sits above everything in the pane.
+final class PassthroughBorderView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
 final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSSplitViewDelegate {
     var window: NSWindow!
     var split: NSSplitView!
@@ -174,6 +182,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var term: LocalProcessTerminalView!
     var term2: LocalProcessTerminalView?
     var preview: IntentFocusPreviewView!
+    var previewFocusRing: PassthroughBorderView!
     var focusObservation: NSKeyValueObservation?
     var folderScroll: NSScrollView!
     var folderText: NSTextView!
@@ -394,6 +403,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         styleFolder()
         rightContainer.addSubview(preview)
         rightContainer.addSubview(folderScroll)
+        previewFocusRing = PassthroughBorderView(frame: rightContainer.bounds)
+        previewFocusRing.autoresizingMask = [.width, .height]
+        rightContainer.addSubview(previewFocusRing)   // last -> stays on top
     }
 
     /// Build the split view holding terminal (left) and preview (right).
@@ -744,7 +756,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     // The preview is a real focus target (focus-by-intent) — a focused Quick
     // Look scrolls with arrows/PgUp/PgDn and pages PDFs with Space.
     @objc func focusLeftPane() {
-        if window.firstResponder === preview {
+        if previewHasFocus(window.firstResponder) {
             window.makeFirstResponder(term2 ?? term)
         } else {
             window.makeFirstResponder(term)
@@ -855,25 +867,36 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         updateFocusBorders()   // pane set changed — the indicator set changes with it
     }
 
+    /// True if the keyboard currently sits in the preview pane. Quick Look
+    /// hands first-responder duty to a private internal subview, so an
+    /// identity check against `preview` alone misses — test for descendants
+    /// of the pane instead.
+    func previewHasFocus(_ fr: NSResponder?) -> Bool {
+        if fr === preview { return true }
+        if let v = fr as? NSView { return v.isDescendant(of: rightContainer) }
+        return false
+    }
+
     /// React to any first-responder change (KVO): revoke the preview's
     /// focus-by-intent permission once focus moves elsewhere, and repaint the
     /// focus borders. KVO covers all paths — menu commands, mouse clicks into
     /// a pane, and the app-switch restore.
     func focusDidChange() {
-        if window.firstResponder !== preview {
+        if !previewHasFocus(window?.firstResponder) {
             preview?.allowFocus = false
         }
         updateFocusBorders()
     }
 
     /// Subtle gray border on the focused pane — shown only while more than
-    /// one focusable target exists (a lone pane stays clean).
+    /// one focusable target exists (a lone pane stays clean). The preview's
+    /// border is drawn by its dedicated overlay (see PassthroughBorderView).
     func updateFocusBorders() {
         guard let window = window else { return }
         let fr = window.firstResponder
         var targets: [(NSView, Bool)] = [(term, fr === term)]
         if let t2 = term2 { targets.append((t2, fr === t2)) }
-        if previewAttached { targets.append((rightContainer, fr === preview)) }
+        if previewAttached { targets.append((previewFocusRing, previewHasFocus(fr))) }
         if let bt = bottomTerm { targets.append((bt, fr === bt)) }
         let show = targets.count > 1
         let color = nsColor(activePalette().fg).withAlphaComponent(0.25).cgColor
