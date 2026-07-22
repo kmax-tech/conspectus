@@ -11,14 +11,32 @@ import SwiftTerm
 // TUI can drive it too by writing a path to $QLPEEK_FIFO on selection.
 //
 // Usage:
-//   conspectus [command]        # TUI (default yazi) + Quick Look preview
-//   conspectus split [command]  # two TUI panes side by side (dual-pane copy)
+//   conspectus [path]          # yazi + Quick Look preview; start dir = path or $HOME
+//   conspectus split [path]    # two yazi panes side by side (dual-pane copy)
+// The TUI is yazi by default; override with the CONSPECTUS_CMD env var.
 
 let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/conspectus")
 let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
+
+// Start directory: an explicit [path] arg (tilde/relative resolved), else $HOME.
+// So Finder/launchd (which hand over "/") and a bare `conspectus` both open home.
+func resolveStart(_ raw: String?) -> String {
+    guard let raw = raw, !raw.isEmpty else { return NSHomeDirectory() }
+    var p = (raw as NSString).expandingTildeInPath
+    if !p.hasPrefix("/") {
+        p = (FileManager.default.currentDirectoryPath as NSString).appendingPathComponent(p)
+    }
+    p = (p as NSString).standardizingPath
+    var isDir: ObjCBool = false
+    if FileManager.default.fileExists(atPath: p, isDirectory: &isDir), isDir.boolValue { return p }
+    return NSHomeDirectory()
+}
+
 let cliArgs   = Array(CommandLine.arguments.dropFirst())
 let splitMode = cliArgs.first == "split" || cliArgs.first == "-s"
-let command   = splitMode ? (cliArgs.dropFirst().first ?? "yazi") : (cliArgs.first ?? "yazi")
+let rest      = splitMode ? Array(cliArgs.dropFirst()) : cliArgs
+let startPath = resolveStart(rest.first(where: { !$0.hasPrefix("-") }))
+let command   = ProcessInfo.processInfo.environment["CONSPECTUS_CMD"] ?? "yazi"
 
 // Follow the macOS system appearance: Catppuccin Latte in light mode, Mocha in
 // dark. yazi picks its matching flavor by querying our background via OSC 11
@@ -162,7 +180,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
         env["YAZI_ID"] = nil; env["YAZI_LEVEL"] = nil
         for (k, v) in extraEnv { env[k] = v }
-        t.startProcess(executable: "/bin/zsh", args: ["-l", "-c", "exec \(command)"],
+        t.startProcess(executable: "/bin/zsh",
+                       args: ["-l", "-c", "cd \"\(startPath)\" && exec \(command)"],
                        environment: env.map { "\($0.key)=\($0.value)" })
     }
 

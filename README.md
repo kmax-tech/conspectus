@@ -33,10 +33,15 @@ Any other TUI can drive the preview by writing an absolute path to
 
 ```sh
 ./build.sh             # swift build -c release (first run fetches SwiftTerm)
-conspectus             # default: yazi + Quick Look preview
-conspectus lf          # or any TUI file manager (preview needs its own hook)
+conspectus             # yazi + Quick Look preview, starting at $HOME
+conspectus ~/work      # start at a given directory (tilde/relative resolved)
 conspectus split       # two yazi panes side by side (dual-pane copy)
+conspectus split ~/work
+./install-app.sh       # assemble /Applications/Conspectus.app (Finder/Dock icon)
 ```
+
+Start dir is `$HOME` unless a `[path]` is given. The TUI is yazi; override with
+the `CONSPECTUS_CMD` env var (e.g. `CONSPECTUS_CMD=lf conspectus`).
 
 ## Dual-pane split
 
