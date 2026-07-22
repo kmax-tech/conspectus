@@ -154,6 +154,14 @@ func renderListing(_ contents: FolderContents) -> NSAttributedString {
     return out
 }
 
+/// QLPreviewView that never takes keyboard focus — the keyboard belongs to
+/// the terminal panes (the app's keyboard-centric contract); the preview is
+/// mouse-only. Prevents "keys dead after app switch" states where the
+/// preview ends up first responder and silently swallows hjkl/arrows.
+final class NoFocusPreviewView: QLPreviewView {
+    override var acceptsFirstResponder: Bool { false }
+}
+
 final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSSplitViewDelegate {
     var window: NSWindow!
     var split: NSSplitView!
@@ -173,6 +181,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var cheatText: NSTextView?
     var lastPath: String?
     var lastWasDir = false
+    weak var lastFocusedTerm: LocalProcessTerminalView?
 
     // Folder listings load off the main thread; this generation counter is
     // the cancellation: every hover (file or folder) bumps it, and an
@@ -362,7 +371,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// directory listing (folders); `update` toggles which one is visible.
     func buildRightPane() {
         rightContainer = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 900))
-        preview = QLPreviewView(frame: rightContainer.bounds, style: .normal) ?? QLPreviewView()
+        preview = NoFocusPreviewView(frame: rightContainer.bounds, style: .normal) ?? NoFocusPreviewView()
         preview.autoresizingMask = [.width, .height]
         folderScroll = NSScrollView(frame: rightContainer.bounds)
         folderScroll.hasVerticalScroller = true
@@ -815,7 +824,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// hidden; setting `previewItem` on a closed view aborts the app with a
     /// QuickLook assertion — rebuilding is the only safe way back.
     func rebuildPreview() {
-        let fresh = QLPreviewView(frame: preview.frame, style: .normal) ?? QLPreviewView()
+        let fresh = NoFocusPreviewView(frame: preview.frame, style: .normal) ?? NoFocusPreviewView()
         fresh.autoresizingMask = [.width, .height]
         fresh.isHidden = preview.isHidden
         rightContainer.replaceSubview(preview, with: fresh)
@@ -953,6 +962,22 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // Right of divider i sit panes i+1…n-1, each needing minPane + divider.
         let n = CGFloat(sv.subviews.count)
         return min(p, sv.frame.width - (n - 1 - CGFloat(i)) * (minPane + sv.dividerThickness))
+    }
+
+    // MARK: NSApplicationDelegate — focus resilience across app switches.
+    // Launching an editor out of yazi (E c → VS Code, …) and coming back must
+    // never leave the keyboard pointing nowhere: remember which terminal had
+    // focus when we deactivate, and restore it if reactivation hands the
+    // first-responder role to anything that is not a terminal.
+    func applicationDidResignActive(_ n: Notification) {
+        if let t = window?.firstResponder as? LocalProcessTerminalView { lastFocusedTerm = t }
+    }
+
+    func applicationDidBecomeActive(_ n: Notification) {
+        guard let window = window else { return }
+        if !(window.firstResponder is LocalProcessTerminalView) {
+            window.makeFirstResponder(lastFocusedTerm ?? term)
+        }
     }
 
     // MARK: LocalProcessTerminalViewDelegate
