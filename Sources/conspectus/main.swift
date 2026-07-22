@@ -256,6 +256,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(term)     // keystrokes go to the TUI
+        buildMenu()                         // ⌘D split, ⌘⌥←/→ focus, ⌘Q/⌘H
         NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
         NSApp.activate(ignoringOtherApps: true)
 
@@ -267,6 +268,42 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
         if splitMode { addSecondPane() }   // launched with `split`: start dual-pane
     }
+
+    // Minimal main menu so the app is keyboard-centric: menu key equivalents are
+    // handled before the terminal view sees the keys (SwiftTerm has no
+    // performKeyEquivalent), so nothing is intercepted inside yazi itself.
+    //   ⌘D  toggle split pane (kitty muscle memory)
+    //   ⌘⌥← / ⌘⌥→  focus left / right pane (Alt+arrow habit + Cmd)
+    func buildMenu() {
+        let main = NSMenu()
+
+        let appItem = NSMenuItem(); main.addItem(appItem)
+        let appMenu = NSMenu()
+        appMenu.addItem(NSMenuItem(title: "Hide Conspectus", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(NSMenuItem(title: "Quit Conspectus", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        appItem.submenu = appMenu
+
+        let viewItem = NSMenuItem(); main.addItem(viewItem)
+        let viewMenu = NSMenu(title: "View")
+        let toggle = NSMenuItem(title: "Toggle Split Pane", action: #selector(toggleSecondPane), keyEquivalent: "d")
+        toggle.target = self
+        viewMenu.addItem(toggle)
+        let left = NSMenuItem(title: "Focus Left Pane", action: #selector(focusLeftPane),
+                              keyEquivalent: String(UnicodeScalar(NSLeftArrowFunctionKey)!))
+        left.keyEquivalentModifierMask = [.command, .option]; left.target = self
+        viewMenu.addItem(left)
+        let right = NSMenuItem(title: "Focus Right Pane", action: #selector(focusRightPane),
+                               keyEquivalent: String(UnicodeScalar(NSRightArrowFunctionKey)!))
+        right.keyEquivalentModifierMask = [.command, .option]; right.target = self
+        viewMenu.addItem(right)
+        viewItem.submenu = viewMenu
+
+        NSApp.mainMenu = main
+    }
+
+    @objc func focusLeftPane()  { window.makeFirstResponder(term) }
+    @objc func focusRightPane() { if let t2 = term2 { window.makeFirstResponder(t2) } }
 
     @objc func toggleSecondPane() { term2 == nil ? addSecondPane() : removeSecondPane() }
 
