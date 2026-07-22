@@ -136,9 +136,13 @@ the active instance automatically — no focus tracking involved. Note that
   does not replace. Quick Look is additive: full fidelity for files on the
   right, yazi's column for look-ahead + text/simple previews.
 - The launcher builds an overlay config under `~/.cache/conspectus/yazi-config`
-  (everything symlinked from the live config; only `theme.toml` is generated, to
-  follow the system appearance) and points `YAZI_CONFIG_HOME` at it. Your normal
-  yazi is untouched.
+  and points `YAZI_CONFIG_HOME` at it: your live config is symlinked in, the
+  **bundled `plugins/conspectus.yazi`** (hover → FIFO, panesync-cd follower) is
+  injected, and `init.lua` is generated to load your own init first. Your
+  normal yazi is untouched — and a machine with **no yazi config at all**
+  works too (yazi defaults + the bundled plugin). `theme.toml` switches to the
+  catppuccin flavors only if they are installed; otherwise your own theme (or
+  yazi's default) is kept.
 - Font: JetBrainsMono Nerd Font Mono by default; override with `CONSPECTUS_FONT` /
   `CONSPECTUS_FONT_SIZE`.
 - Theme: follows the macOS system appearance — Catppuccin Latte in light mode,
@@ -147,8 +151,9 @@ the active instance automatically — no focus tracking involved. Note that
   via the overlay `theme.toml` (`dark = catppuccin-mocha`, `light =
   catppuccin-latte`). Needs both flavors installed
   (`ya pkg add yazi-rs/flavors:catppuccin-mocha`).
-- Only yazi ships a preview hook so far (`qlpeek.yazi` plugin in the dotfiles
-  repo). lf/nnn/xplr work as terminals; wire their selection hook to
-  `$QLPEEK_FIFO` to get the live preview.
+- The preview hook for yazi ships **inside this repo**
+  (`plugins/conspectus.yazi`) — no external plugin or binary needed. lf/nnn/
+  xplr work as terminals; wire their selection hook to `$QLPEEK_FIFO` to get
+  the live preview.
 - Prototype: no app-level shortcuts yet beyond the window chrome; file-manager
   keys are yazi's own.

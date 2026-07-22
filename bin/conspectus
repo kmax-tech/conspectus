@@ -2,50 +2,79 @@
 # conspectus launcher — yazi + live Quick Look preview.
 #   conspectus [path]         # start dir = path or $HOME
 #   conspectus split [path]   # two yazi panes (dual-pane copy via cross-yank)
-#   conspectus triple [path]  # two yazi panes + preview (gets the overlay below)
+#   conspectus triple [path]  # two yazi panes + preview following the active one
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$REPO/.build/release/conspectus"
 [[ -x $BIN ]] || { echo "conspectus: not built — run $REPO/build.sh" >&2; exit 1; }
 
-# Dual-pane split: each pane keeps its full yazi config (3-column preview), so
-# no Quick Look overlay — hand the args straight to the binary.
-if [[ "${1:-}" == "split" || "${1:-}" == "-s" ]]; then
-  exec "$BIN" "$@"
-fi
-
-# Preview mode (yazi): build an overlay config where only theme.toml and
-# yazi.toml are generated (rest symlinked from the live config):
-#   - theme.toml   -> follow the system light/dark appearance
-#   - yazi.toml    -> [mgr] ratio = [1, 4, 0] hides yazi's 3rd column, so the
-#                     Quick Look pane is the sole preview (files and folders).
+# Overlay config under YAZI_CONFIG_HOME: the user's live config is symlinked
+# in, the bundled conspectus.yazi plugin (hover -> FIFO, panesync-cd) is
+# injected, and init.lua is generated to load the user's init first. The
+# user's own yazi config is never touched; a machine with NO yazi config at
+# all works too (yazi defaults + the bundled plugin).
 src="${YAZI_CONFIG_HOME:-$HOME/.config/yazi}"
 ov="$HOME/.cache/conspectus/yazi-config"
-rm -rf "$ov"; mkdir -p "$ov"
+rm -rf "$ov"; mkdir -p "$ov/plugins"
+
+split_mode=0
+[[ "${1:-}" == "split" || "${1:-}" == "-s" ]] && split_mode=1
+
 if [[ -d $src ]]; then
   for entry in "$src"/*; do
+    [[ -e $entry ]] || continue   # empty dir: the glob stays literal
     name="$(basename "$entry")"
-    [[ "$name" == "theme.toml" || "$name" == "yazi.toml" ]] && continue
+    case "$name" in theme.toml|yazi.toml|init.lua|plugins) continue ;; esac
     ln -sfn "$entry" "$ov/$name"
   done
+  if [[ -d "$src/plugins" ]]; then
+    for p in "$src/plugins"/*; do
+      [[ -e $p ]] || continue
+      ln -sfn "$p" "$ov/plugins/$(basename "$p")"
+    done
+  fi
 fi
 
-cat > "$ov/theme.toml" <<'TOML'
+# The bundled glue plugin, straight from the repo.
+ln -sfn "$REPO/plugins/conspectus.yazi" "$ov/plugins/conspectus.yazi"
+
+# init.lua: the user's init first (its require()s resolve against the overlay,
+# where the user's plugins are symlinked), then the bundled plugin.
+{
+  [[ -f "$src/init.lua" ]] && echo "dofile(\"$src/init.lua\")"
+  echo 'require("conspectus"):setup()'
+} > "$ov/init.lua"
+
+# theme.toml: follow the system light/dark appearance via the catppuccin
+# flavors — but only if they are actually installed; otherwise keep the
+# user's own theme (or yazi's default) instead of erroring on a missing flavor.
+if [[ -d "$src/flavors/catppuccin-mocha.yazi" && -d "$src/flavors/catppuccin-latte.yazi" ]]; then
+  cat > "$ov/theme.toml" <<'TOML'
 [flavor]
 dark  = "catppuccin-mocha"
 light = "catppuccin-latte"
 TOML
+elif [[ -f "$src/theme.toml" ]]; then
+  ln -sfn "$src/theme.toml" "$ov/theme.toml"
+fi
 
-if [[ -f "$src/yazi.toml" ]]; then
-  awk '
-    /^\[/            { in_mgr = ($0 ~ /^\[mgr\]/) }
-    /^\[mgr\]/       { print; print "ratio = [1, 4, 0]"; next }
-    in_mgr && /^[[:space:]]*ratio[[:space:]]*=/ { next }
-    { print }
-  ' "$src/yazi.toml" > "$ov/yazi.toml"
-  grep -q '^\[mgr\]' "$ov/yazi.toml" || printf '\n[mgr]\nratio = [1, 4, 0]\n' >> "$ov/yazi.toml"
+# yazi.toml: split keeps the user's full 3-column config; preview modes hide
+# yazi's own preview column ([mgr] ratio = [1, 4, 0]) — the Quick Look pane
+# is the sole preview there (files and folders).
+if [[ $split_mode -eq 1 ]]; then
+  [[ -f "$src/yazi.toml" ]] && ln -sfn "$src/yazi.toml" "$ov/yazi.toml"
 else
-  printf '[mgr]\nratio = [1, 4, 0]\n' > "$ov/yazi.toml"
+  if [[ -f "$src/yazi.toml" ]]; then
+    awk '
+      /^\[/            { in_mgr = ($0 ~ /^\[mgr\]/) }
+      /^\[mgr\]/       { print; print "ratio = [1, 4, 0]"; next }
+      in_mgr && /^[[:space:]]*ratio[[:space:]]*=/ { next }
+      { print }
+    ' "$src/yazi.toml" > "$ov/yazi.toml"
+    grep -q '^\[mgr\]' "$ov/yazi.toml" || printf '\n[mgr]\nratio = [1, 4, 0]\n' >> "$ov/yazi.toml"
+  else
+    printf '[mgr]\nratio = [1, 4, 0]\n' > "$ov/yazi.toml"
+  fi
 fi
 
 export YAZI_CONFIG_HOME="$ov"

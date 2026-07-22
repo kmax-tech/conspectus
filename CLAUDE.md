@@ -14,7 +14,10 @@ The thread through every rule: **nothing important should be implicit.**
 - `Sources/conspectus/` — the AppKit shell (`main.swift`) and app icon
   (`Icon.swift`). UI, processes, FIFO — the side-effect edge of the system.
 - `Tests/ConspectusCoreTests/` — XCTest suite for the core, mirroring its files.
-- `bin/conspectus` — launcher script (builds the yazi overlay config).
+- `bin/conspectus` — launcher script (builds the yazi overlay config and
+  injects the bundled plugin).
+- `plugins/conspectus.yazi/` — bundled yazi glue (hover → FIFO, panesync-cd
+  follower); makes the repo self-contained, no external plugin or binary.
 
 New pure logic goes into `ConspectusCore`; AppKit/process glue stays in the
 executable. That boundary is what keeps the important parts testable.

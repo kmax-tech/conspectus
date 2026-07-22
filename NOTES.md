@@ -177,6 +177,25 @@ request time inside the debounce, not per hover event.
 **Notes:** Manual recovery for a wedged preview (should it still happen):
 ⌘E twice — detach + attach rebuilds the QLPreviewView from scratch.
 
+## 2026-07-22 — Self-contained: bundled conspectus.yazi, no qlpeek CLI
+
+**Problem:** The preview coupling depended on the user's dotfiles (qlpeek +
+panesync plugins) and the external `qlpeek` binary — a stranger cloning the
+repo got an app with a dead preview.
+
+**Solution:** `plugins/conspectus.yazi` in the repo does both jobs (hover →
+FIFO, panesync-cd follower) and writes the FIFO **directly from Lua** — no
+external binary. This is safe because the app opens its FIFO O_RDWR and
+holds it for its lifetime, so the plugin's open-for-append never blocks.
+The launcher injects the plugin into the overlay config (now built in ALL
+modes, split included), generates init.lua (user's init first), and only
+sets the catppuccin theme if the flavors are installed.
+
+**Notes:** Users with the dotfiles qlpeek plugin get double FIFO writes per
+hover (their plugin + bundled one) — harmless, the app's debounce coalesces
+them. The `[[ -e $entry ]]` guards matter: with an empty config dir, bash
+leaves the glob literal and a symlink named `*` lands in the overlay.
+
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 
 **Problem:** Fixed `YAZI_ID`s per pane broke yazi's DDS discovery; panes
