@@ -43,6 +43,7 @@ conspectus             # yazi + Quick Look preview, starting at $HOME
 conspectus ~/work      # start at a given directory (tilde/relative resolved)
 conspectus split       # two yazi panes side by side (dual-pane copy)
 conspectus split ~/work
+conspectus triple      # two yazi panes + Quick Look preview (3 panes)
 ./install-app.sh       # assemble /Applications/Conspectus.app (Finder/Dock icon)
 ```
 
@@ -56,12 +57,25 @@ Commander) layout. Each pane is a separate yazi instance; they share yanked file
 via yazi's DDS, so **`y` in one pane, `p` in the other copies between them**.
 Focus a pane by clicking it.
 
-Toggle it two ways:
-- **`Split` button** in the titlebar — swaps the right pane between the Quick Look
-  preview and a second yazi, live. A click, so it never fights yazi for the
-  keyboard.
-- **`conspectus split`** — start already in dual-pane (each pane keeps its full
-  3-column config, no preview overlay).
+The layout is two independent toggles — the second yazi pane (**⌘D** or the
+titlebar **`Split` button**) and the preview pane (**⌘E**, always rightmost):
+
+| second pane | preview | layout |
+|---|---|---|
+| off | on | yazi + preview (default) |
+| on | off | two yazi panes (`conspectus split`) |
+| on | on | two yazi panes + preview (`conspectus triple`) |
+
+Toggling the second pane off with the preview hidden brings the preview back
+(a lone terminal defeats the app's purpose).
+
+### Triple mode: preview follows the active pane
+
+In triple mode both yazi instances write hovered paths to the **same FIFO**.
+Only the pane you are navigating emits hover events, so the preview follows
+the active instance automatically — no focus tracking involved. Note that
+`conspectus split` starts each pane with its full 3-column config, while
+`conspectus triple` applies the 2-column preview overlay to both panes.
 
 ## Status / limits
 

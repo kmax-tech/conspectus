@@ -1,7 +1,8 @@
 #!/bin/bash
 # conspectus launcher — yazi + live Quick Look preview.
-#   conspectus [path]        # start dir = path or $HOME
-#   conspectus split [path]  # two yazi panes (dual-pane copy via cross-yank)
+#   conspectus [path]         # start dir = path or $HOME
+#   conspectus split [path]   # two yazi panes (dual-pane copy via cross-yank)
+#   conspectus triple [path]  # two yazi panes + preview (gets the overlay below)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$REPO/.build/release/conspectus"

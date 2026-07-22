@@ -14,7 +14,12 @@ import SwiftTerm
 // Usage:
 //   conspectus [path]          # yazi + Quick Look preview; start dir = path or $HOME
 //   conspectus split [path]    # two yazi panes side by side (dual-pane copy)
+//   conspectus triple [path]   # two yazi panes + preview following the active one
 // The TUI is yazi by default; override with the CONSPECTUS_CMD env var.
+//
+// In triple mode both yazi instances write to the same FIFO; only the pane
+// being navigated emits hover events, so the preview follows the active
+// instance without any focus tracking.
 //
 // Pure helpers (start-dir resolution, palettes, icon mapping, sort order) live
 // in the ConspectusCore library target so they are unit-testable; this file is
@@ -58,9 +63,10 @@ let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
 // resumes there, falling back to $HOME.
 let lastCwdPath = (cacheDir as NSString).appendingPathComponent("last-cwd")
 
-let cliArgs   = Array(CommandLine.arguments.dropFirst())
-let splitMode = cliArgs.first == "split" || cliArgs.first == "-s"
-let rest      = splitMode ? Array(cliArgs.dropFirst()) : cliArgs
+let cliArgs    = Array(CommandLine.arguments.dropFirst())
+let splitMode  = cliArgs.first == "split" || cliArgs.first == "-s"
+let tripleMode = cliArgs.first == "triple" || cliArgs.first == "-3"
+let rest       = (splitMode || tripleMode) ? Array(cliArgs.dropFirst()) : cliArgs
 let start     = resolveStart(rest.first(where: { !$0.hasPrefix("-") }), lastCwdFile: lastCwdPath)
 let startPath = start.path
 let command   = ProcessInfo.processInfo.environment["CONSPECTUS_CMD"] ?? "yazi"
@@ -197,7 +203,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"], rememberCwd: true)
         startFifoReader()
 
-        if splitMode { addSecondPane() }   // launched with `split`: start dual-pane
+        // Pane layout is two independent toggles: the second yazi pane (⌘D)
+        // and the preview pane (⌘E, always rightmost). `split` starts 2-pane
+        // without preview, `triple` starts with both.
+        if splitMode { detachPreview() }
+        if splitMode || tripleMode { addSecondPane() }
     }
 
     /// Create the FIFO the left TUI writes hovered paths to (Quick Look
@@ -314,6 +324,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let toggle = NSMenuItem(title: "Toggle Split Pane", action: #selector(toggleSecondPane), keyEquivalent: "d")
         toggle.target = self
         viewMenu.addItem(toggle)
+        let previewToggle = NSMenuItem(title: "Toggle Preview Pane", action: #selector(togglePreviewPane), keyEquivalent: "e")
+        previewToggle.target = self
+        viewMenu.addItem(previewToggle)
         let left = NSMenuItem(title: "Focus Left Pane", action: #selector(focusLeftPane),
                               keyEquivalent: String(UnicodeScalar(NSLeftArrowFunctionKey)!))
         left.keyEquivalentModifierMask = [.command, .option]; left.target = self
@@ -330,37 +343,86 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     @objc func focusLeftPane()  { window.makeFirstResponder(term) }
     @objc func focusRightPane() { if let t2 = term2 { window.makeFirstResponder(t2) } }
 
-    @objc func toggleSecondPane() { term2 == nil ? addSecondPane() : removeSecondPane() }
+    @objc func toggleSecondPane()  { term2 == nil ? addSecondPane() : removeSecondPane() }
+    @objc func togglePreviewPane() { rightContainer.superview == nil ? attachPreview() : detachPreview() }
+
+    /// True while the preview pane is part of the window. Source of truth is
+    /// the view hierarchy itself, so the flag can never drift from reality.
+    var previewAttached: Bool { rightContainer.superview != nil }
 
     func addSecondPane() {
         guard term2 == nil else { return }
         let t2 = makeTerm()
         term2 = t2
-        split.replaceSubview(rightContainer, with: t2)
-        split.setPosition(split.frame.width * 0.5, ofDividerAt: 0)
-        launch(t2, extraEnv: ["CONSPECTUS_PEER": "R"])
+        // Keep the preview rightmost: the second terminal goes between the
+        // left terminal and the preview container.
+        if previewAttached {
+            split.addSubview(t2, positioned: .above, relativeTo: term)
+        } else {
+            split.addSubview(t2)
+        }
+        evenOutPanes()
+        // Same FIFO as the left pane: only the pane being navigated emits
+        // hover events, so the preview follows the active instance for free.
+        launch(t2, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "R"])
         window.makeFirstResponder(t2)
         splitButton?.state = .on
-        window.title = "conspectus — split"
+        updateTitle()
     }
 
     func removeSecondPane() {
         guard let t2 = term2 else { return }
         term2 = nil
-        if t2.superview != nil {
-            split.replaceSubview(t2, with: rightContainer)
-            split.setPosition(split.frame.width * 0.56, ofDividerAt: 0)
-        }
+        if t2.superview != nil { t2.removeFromSuperview() }
         t2.terminate()
-        // rightContainer just re-entered the window, but its QLPreviewView
-        // auto-closed when it left — reusing it would trip QuickLook's
-        // assertion (SIGABRT). Rebuild it and restore the last hovered item.
-        rebuildPreview()
-        lastWasDir = false
-        if let p = lastPath { update(p) }
+        if previewAttached {
+            evenOutPanes()      // preview never left the window — no rebuild needed
+        } else {
+            attachPreview()     // a lone terminal defeats the app's purpose
+        }
         window.makeFirstResponder(term)
         splitButton?.state = .off
-        window.title = "conspectus"
+        updateTitle()
+    }
+
+    /// Remove the preview pane. The QLPreviewView auto-closes as soon as it
+    /// leaves the window (its remote Quick Look extension is torn down), which
+    /// is why `update` must never touch it while detached and `attachPreview`
+    /// must rebuild it.
+    func detachPreview() {
+        guard previewAttached else { return }
+        rightContainer.removeFromSuperview()
+        evenOutPanes()
+        updateTitle()
+    }
+
+    /// Re-attach the preview as the rightmost pane, rebuild the auto-closed
+    /// QLPreviewView, and restore the last hovered item.
+    func attachPreview() {
+        guard !previewAttached else { return }
+        split.addSubview(rightContainer)
+        rebuildPreview()
+        lastWasDir = false
+        evenOutPanes()
+        if let p = lastPath { update(p) }
+        updateTitle()
+    }
+
+    /// Distribute the pane widths evenly after a pane was added or removed.
+    func evenOutPanes() {
+        let n = split.subviews.count
+        guard n > 1 else { return }
+        for i in 0..<(n - 1) {
+            split.setPosition(split.frame.width * CGFloat(i + 1) / CGFloat(n), ofDividerAt: i)
+        }
+    }
+
+    func updateTitle() {
+        switch (term2 != nil, previewAttached) {
+        case (true, true):  window.title = "conspectus — triple"
+        case (true, false): window.title = "conspectus — split"
+        default:            window.title = "conspectus"
+        }
     }
 
     /// Replace the `QLPreviewView` with a fresh instance, keeping frame and
@@ -424,12 +486,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let dir = d.boolValue
         lastPath = path
         DispatchQueue.main.async {
-            // Split mode: the right pane is a second terminal; rightContainer is
-            // out of the window and its QLPreviewView has auto-closed. Touching
-            // it would abort the app (QuickLook assertion), so skip the view
-            // work — lastPath keeps tracking, and removeSecondPane restores the
-            // preview from it when the split is toggled off.
-            if self.term2 != nil { return }
+            // Preview detached: rightContainer is out of the window and its
+            // QLPreviewView has auto-closed. Touching it would abort the app
+            // (QuickLook assertion), so skip the view work — lastPath keeps
+            // tracking, and attachPreview restores the preview from it.
+            if !self.previewAttached { return }
             if dir {
                 // Folder: render its contents ourselves (Quick Look would only
                 // show the folder icon + metadata).
@@ -455,25 +516,38 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     }
 
     // MARK: NSSplitViewDelegate — window resize must not collapse a pane.
-    // Keep the panes' ratio and enforce a 300pt minimum on both sides (also
-    // caps divider dragging via the constrain methods).
+    // Keep the panes' ratios and enforce a 300pt minimum per pane (also caps
+    // divider dragging via the constrain methods). Works for 1–3 panes.
     let minPane: CGFloat = 300
 
     func splitView(_ sv: NSSplitView, resizeSubviewsWithOldSize oldSize: NSSize) {
-        guard sv.subviews.count == 2 else { sv.adjustSubviews(); return }
-        let total = sv.frame.width - sv.dividerThickness
-        let oldTotal = oldSize.width - sv.dividerThickness
-        let ratio = oldTotal > 0 ? sv.subviews[0].frame.width / oldTotal : 0.56
-        let leftW = max(minPane, min(total - minPane, total * ratio))
-        sv.subviews[0].frame = NSRect(x: 0, y: 0, width: leftW, height: sv.frame.height)
-        sv.subviews[1].frame = NSRect(x: leftW + sv.dividerThickness, y: 0,
-                                      width: total - leftW, height: sv.frame.height)
+        let n = sv.subviews.count
+        guard n > 1 else { sv.adjustSubviews(); return }
+        let total = sv.frame.width - CGFloat(n - 1) * sv.dividerThickness
+        let oldTotal = oldSize.width - CGFloat(n - 1) * sv.dividerThickness
+        // Scale each pane by the old ratio, clamp to the minimum, and put any
+        // rounding/clamping slack into the last pane.
+        var widths: [CGFloat]
+        if oldTotal > 0 {
+            widths = sv.subviews.map { max(minPane, total * ($0.frame.width / oldTotal)) }
+        } else {
+            widths = Array(repeating: total / CGFloat(n), count: n)
+        }
+        widths[n - 1] += total - widths.reduce(0, +)
+        var x: CGFloat = 0
+        for (i, v) in sv.subviews.enumerated() {
+            v.frame = NSRect(x: x, y: 0, width: widths[i], height: sv.frame.height)
+            x += widths[i] + sv.dividerThickness
+        }
     }
     func splitView(_ sv: NSSplitView, constrainMinCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat {
-        max(p, minPane)
+        // Left of divider i sit panes 0…i and i dividers.
+        max(p, CGFloat(i + 1) * minPane + CGFloat(i) * sv.dividerThickness)
     }
     func splitView(_ sv: NSSplitView, constrainMaxCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat {
-        min(p, sv.frame.width - minPane)
+        // Right of divider i sit panes i+1…n-1, each needing minPane + divider.
+        let n = CGFloat(sv.subviews.count)
+        return min(p, sv.frame.width - (n - 1 - CGFloat(i)) * (minPane + sv.dividerThickness))
     }
 
     // MARK: LocalProcessTerminalViewDelegate

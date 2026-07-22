@@ -35,6 +35,22 @@ dir→file blank-fix path) and replays `lastPath` so the preview resumes.
 detached from the window — always rebuild. Folder hovers never crashed
 (they go to the self-rendered listing), which is why it only hit "sometimes".
 
+## 2026-07-22 — Triple mode: preview follows the active pane via one FIFO
+
+**Problem:** Three panes (two yazi + preview) need the preview to follow
+whichever yazi is being used — but tracking keyboard focus and switching
+preview sources is fiddly and racy.
+
+**Solution:** No focus tracking at all. Both yazi instances get the same
+`QLPEEK_FIFO`; only the pane actually being navigated emits hover events, so
+the last writer *is* the active pane. Layout became two independent toggles
+(second pane ⌘D, preview ⌘E, preview always rightmost) instead of hardwired
+modes; `split`/`triple` are just start presets.
+
+**Notes:** Turning the second pane off while the preview is hidden re-attaches
+the preview — a lone terminal pane is never left standing. The split-view
+delegate (ratio-keeping resize, 300pt min) is generalized to n panes.
+
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 
 **Problem:** Fixed `YAZI_ID`s per pane broke yazi's DDS discovery; panes
