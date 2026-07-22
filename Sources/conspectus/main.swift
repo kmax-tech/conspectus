@@ -365,8 +365,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let t = makeTerm()
         bottomTerm = t
         outerSplit.addSubview(t)
-        outerSplit.setPosition(outerSplit.frame.height - termPanelHeight - outerSplit.dividerThickness,
-                               ofDividerAt: 0)
+        layoutOuterPanes(terminalHeight: termPanelHeight)   // frames BEFORE startProcess so cols/rows fit
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
         t.startProcess(executable: "/bin/zsh",
@@ -382,7 +381,28 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         bottomTerm = nil
         if t.superview != nil { t.removeFromSuperview() }
         t.terminate()
+        layoutOuterPanes()
         window.makeFirstResponder(term)
+    }
+
+    /// Lay the outer stack out explicitly: the pane area fills the space, the
+    /// bottom terminal (if open) gets `terminalHeight` (or keeps its current
+    /// height), clamped to the minimums. NSSplitView's setPosition/delegate
+    /// layout proved unreliable for programmatic add/remove (the added view
+    /// ended up 0pt high), so the frames are set directly.
+    func layoutOuterPanes(terminalHeight: CGFloat? = nil) {
+        let w = outerSplit.frame.width
+        let h = outerSplit.frame.height
+        guard let t = bottomTerm, t.superview === outerSplit else {
+            split.frame = NSRect(x: 0, y: 0, width: w, height: h)
+            return
+        }
+        let want = terminalHeight ?? t.frame.height
+        let termH = min(max(minTermHeight, want),
+                        max(minTermHeight, h - minPane - outerSplit.dividerThickness))
+        let mainH = h - termH - outerSplit.dividerThickness
+        split.frame = NSRect(x: 0, y: 0, width: w, height: mainH)
+        t.frame = NSRect(x: 0, y: mainH + outerSplit.dividerThickness, width: w, height: termH)
     }
 
     /// Build the shortcut bar: one line of key/label pairs in the theme
@@ -434,6 +454,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         hintBar.frame = NSRect(x: 0, y: 0, width: content.bounds.width, height: hintBarHeight)
         outerSplit.frame = NSRect(x: 0, y: barH, width: content.bounds.width,
                                   height: content.bounds.height - barH)
+        layoutOuterPanes()
     }
 
     /// Toggle the floating cheat-sheet panel (full grouped key list — the
@@ -820,24 +841,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     // divider dragging via the constrain methods). Works for 1–3 panes.
     let minPane: CGFloat = 300
 
-    /// Outer (vertical) resize: the bottom terminal keeps its height, the
-    /// pane area above takes the rest.
-    func resizeOuterSplit(_ sv: NSSplitView) {
-        guard sv.subviews.count == 2 else {
-            sv.subviews.first?.frame = sv.bounds
-            return
-        }
-        let total = sv.frame.height - sv.dividerThickness
-        let termH = min(max(minTermHeight, sv.subviews[1].frame.height),
-                        max(minTermHeight, total - minPane))
-        let mainH = total - termH
-        sv.subviews[0].frame = NSRect(x: 0, y: 0, width: sv.frame.width, height: mainH)
-        sv.subviews[1].frame = NSRect(x: 0, y: mainH + sv.dividerThickness,
-                                      width: sv.frame.width, height: termH)
-    }
-
     func splitView(_ sv: NSSplitView, resizeSubviewsWithOldSize oldSize: NSSize) {
-        if sv === outerSplit { resizeOuterSplit(sv); return }
+        if sv === outerSplit { layoutOuterPanes(); return }
         let n = sv.subviews.count
         guard n > 1 else { sv.adjustSubviews(); return }
         let total = sv.frame.width - CGFloat(n - 1) * sv.dividerThickness

@@ -90,6 +90,12 @@ and the shell still starts — visible, not swallowed. If persistent sessions
 are ever wanted, hide instead of terminate, but then the reopen-relocates
 semantics is lost.
 
+Gotcha: NSSplitView's `setPosition`/delegate layout silently gave a
+programmatically added subview **0pt height** (shell ran, prompt invisible —
+a white panel in light mode). `layoutOuterPanes()` therefore sets the outer
+frames explicitly on open/close/resize; never rely on `setPosition` for
+runtime add/remove in the outer split.
+
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 
 **Problem:** Fixed `YAZI_ID`s per pane broke yazi's DDS discovery; panes
