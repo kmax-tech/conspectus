@@ -37,6 +37,27 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
 Any other TUI can drive the preview by writing an absolute path to
 `$QLPEEK_FIFO` when its cursor moves.
 
+## Requirements & works best with
+
+**Required:** macOS 13+, [yazi](https://yazi-rs.github.io/) (the bundled
+plugin is injected automatically — a machine with no yazi config works),
+Swift toolchain to build.
+
+**Optional, but the preview shines with them:**
+
+- **Quick Look extensions** — conspectus shows whatever Quick Look can
+  render, so extensions upgrade it directly:
+  [QLMarkdown](https://github.com/sbarex/QLMarkdown) (rendered Markdown) and
+  [Syntax Highlight](https://github.com/sbarex/SourceCodeSyntaxHighlight)
+  (highlighted source code): `brew install --cask qlmarkdown syntax-highlight`.
+  Without them, code and Markdown fall back to plain text.
+- **A Nerd Font** (e.g. `brew install --cask font-jetbrains-mono-nerd-font`)
+  for yazi's file icons and the folder listing glyphs — otherwise you get
+  tofu boxes.
+- **Catppuccin yazi flavors** (`ya pkg add yazi-rs/flavors:catppuccin-mocha`
+  and `…:catppuccin-latte`) so yazi follows the light/dark theme with the
+  panel; without them your own yazi theme is kept.
+
 ## Build & run
 
 ```sh
