@@ -259,10 +259,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
         NSApp.activate(ignoringOtherApps: true)
 
-        // Fixed instance IDs + peer name so the `=` key can tell the other pane
-        // to `cd` here (dual-pane sync via yazi's DDS: ya emit-to $CONSPECTUS_PEER).
-        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath,
-                                "YAZI_ID": "conspectusL", "CONSPECTUS_PEER": "conspectusR"])
+        // CONSPECTUS_PEER is a flag, not an id: it arms the `=` cd-sync (keymap
+        // broadcasts via `ya pub-to 0`, the panesync plugin follows). yazi
+        // auto-generates its own DDS ids, so no fixed ids are set here.
+        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"])
         startFifoReader()
 
         if splitMode { addSecondPane() }   // launched with `split`: start dual-pane
@@ -276,7 +276,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         term2 = t2
         split.replaceSubview(rightContainer, with: t2)
         split.setPosition(split.frame.width * 0.5, ofDividerAt: 0)
-        launch(t2, extraEnv: ["YAZI_ID": "conspectusR", "CONSPECTUS_PEER": "conspectusL"])
+        launch(t2, extraEnv: ["CONSPECTUS_PEER": "R"])
         window.makeFirstResponder(t2)
         splitButton?.state = .on
         window.title = "conspectus — split"
