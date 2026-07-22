@@ -118,49 +118,36 @@ func terminalFont(size overrideSize: Double? = nil) -> NSFont {
 // Directory look-ahead for the right pane: Quick Look only shows a folder's
 // icon + metadata, so for directories we render the contents ourselves —
 // folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type.
-// The isDirectory bit is prefetched during enumeration (one getattrlistbulk
-// pass instead of a stat per entry), so sorting all entries stays cheap even
-// for 50k-file folders; only the *rendering* is capped (folderListingCap) —
-// the pane shows a screenful anyway, and "… and N more" makes the cut visible.
+// Loading (ConspectusCore.loadFolder: bulk isDirectory keys, sort, cap)
+// happens off the main thread; only a screenful is rendered anyway, and
+// "… and N more" makes the cut visible.
 let folderListingCap = 500
 
-func folderListing(_ dir: String) -> NSAttributedString {
+/// Render loaded folder contents in the current theme. Does no I/O — safe to
+/// build off the main thread; TextKit layout happens when the result is
+/// applied to the text view on main.
+func renderListing(_ contents: FolderContents) -> NSAttributedString {
     let pal = activePalette()
     let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
     let font = terminalFont()
-    let all: [DirEntry]
-    do {
-        let urls = try FileManager.default.contentsOfDirectory(
-            at: URL(fileURLWithPath: dir, isDirectory: true),
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles])
-        all = urls.map {
-            // Deliberate try?: the key was prefetched, a miss means the entry
-            // vanished mid-hover — rendering it as a file is icon-level
-            // cosmetics, not worth failing the whole listing.
-            DirEntry(name: $0.lastPathComponent,
-                     isDir: (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false)
-        }
-    } catch {
-        // The folder can vanish (or lose permission) between hover and render —
-        // show the failure in the pane instead of a silently empty listing.
-        return NSAttributedString(string: "  (unreadable: \(error.localizedDescription))",
+    if let err = contents.error {
+        // Folder vanished or lost permission mid-hover — show it in the pane
+        // instead of a silently empty listing.
+        return NSAttributedString(string: "  (unreadable: \(err))",
                                   attributes: [.font: font, .foregroundColor: fg])
     }
-    let capped = capEntries(sortEntries(all), limit: folderListingCap)
-    let entries = capped.shown
-    if entries.isEmpty {
+    if contents.entries.isEmpty {
         return NSAttributedString(string: "  (empty)", attributes: [.font: font, .foregroundColor: fg])
     }
     let out = NSMutableAttributedString()
-    for e in entries {
+    for e in contents.entries {
         let icon = e.isDir ? FileIcon(glyph: "\u{f07b}", color: blue)   // nf-fa-folder for dirs
                            : fileIcon(e.name, pal)
         out.append(NSAttributedString(string: icon.glyph + "  " + e.name + (e.isDir ? "/" : "") + "\n",
                                       attributes: [.font: font, .foregroundColor: icon.color]))
     }
-    if capped.omitted > 0 {
-        out.append(NSAttributedString(string: "\n  … and \(capped.omitted) more entries\n",
+    if contents.omitted > 0 {
+        out.append(NSAttributedString(string: "\n  … and \(contents.omitted) more entries\n",
                                       attributes: [.font: font,
                                                    .foregroundColor: fg.withAlphaComponent(0.6)]))
     }
@@ -186,6 +173,27 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var cheatText: NSTextView?
     var lastPath: String?
     var lastWasDir = false
+
+    // Folder listings load off the main thread; this generation counter is
+    // the cancellation: every hover (file or folder) bumps it, and an
+    // in-flight load checks it after the disk I/O (skipping the string build
+    // for stale results) and again before applying — navigating on drops
+    // outdated work instead of rendering it out of order.
+    private var listingGen = 0
+    private let listingGenLock = NSLock()
+
+    /// Invalidate all in-flight folder loads and return the new generation.
+    func bumpListingGeneration() -> Int {
+        listingGenLock.lock(); defer { listingGenLock.unlock() }
+        listingGen += 1
+        return listingGen
+    }
+
+    /// True while `gen` is still the newest hover.
+    func isCurrentListing(_ gen: Int) -> Bool {
+        listingGenLock.lock(); defer { listingGenLock.unlock() }
+        return gen == listingGen
+    }
 
     // Bottom shortcut bar: training wheels until the muscle memory sits.
     // Toggled with ⌘/ ; visibility persists across launches (UserDefaults).
@@ -826,6 +834,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         guard FileManager.default.fileExists(atPath: path, isDirectory: &d) else { return }
         let dir = d.boolValue
         lastPath = path
+        let gen = bumpListingGeneration()   // any hover cancels in-flight folder loads
         DispatchQueue.main.async {
             // Preview detached: rightContainer is out of the window and its
             // QLPreviewView has auto-closed. Touching it would abort the app
@@ -833,12 +842,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
             // tracking, and attachPreview restores the preview from it.
             if !self.previewAttached { return }
             if dir {
-                // Folder: render its contents ourselves (Quick Look would only
-                // show the folder icon + metadata).
-                self.folderText.textStorage?.setAttributedString(folderListing(path))
-                self.folderText.scroll(NSPoint.zero)
-                self.preview.isHidden = true
-                self.folderScroll.isHidden = false
+                self.showFolder(path, generation: gen)
             } else {
                 self.folderScroll.isHidden = true
                 if self.lastWasDir {
@@ -853,6 +857,28 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                 self.preview.refreshPreviewItem()
             }
             self.lastWasDir = dir
+        }
+    }
+
+    /// Swap the right pane to the folder listing and load it off the main
+    /// thread (mirrors Quick Look, which is asynchronous by design). The
+    /// previous listing stays visible until the new one lands — Finder-style,
+    /// no white flash, no main-thread hitch.
+    func showFolder(_ path: String, generation gen: Int) {
+        preview.isHidden = true
+        folderScroll.isHidden = false
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let contents = loadFolder(path, cap: folderListingCap)
+            // Navigated on already? Skip the attributed-string build entirely.
+            guard self.isCurrentListing(gen) else { return }
+            let listing = renderListing(contents)
+            DispatchQueue.main.async {
+                // Re-check: a newer hover may have won while we rendered.
+                guard self.isCurrentListing(gen) else { return }
+                self.folderText.textStorage?.setAttributedString(listing)
+                self.folderText.scroll(NSPoint.zero)
+            }
         }
     }
 

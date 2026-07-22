@@ -109,13 +109,16 @@ entry. Sort *all* entries (cheap once isDir is free, keeps dirs-first correct
 in huge folders), then cap only the rendering at `folderListingCap` (500)
 with a visible "… and N more entries" line.
 
-**Notes:** Options if the cap ever hurts (kept for the future, in ascending
-effort): (1) virtualized `NSTableView` with a lazy data source — only visible
-rows materialize, scrollable through 100k entries at constant memory (how
-Finder does it; would replace the capped `NSTextView`); (2) enumerate/sort
-off the main thread with **cancellation** — a generation counter or Task so
-a newer hover cancels the stale load, else results race out of order;
-(3) per-directory cache keyed on path + mtime for instant re-hovers.
+**Notes:** Loading now also runs **off the main thread with cancellation**:
+every hover bumps a lock-guarded generation counter, and an in-flight load
+checks it after the disk I/O (skips the string build) and again before
+applying — navigating on drops stale work instead of racing it out of
+order. The previous listing stays visible until the new one lands
+(Finder-style, no white flash). Options if the cap ever hurts (kept for the
+future): (1) virtualized `NSTableView` with a lazy data source — only
+visible rows materialize, scrollable through 100k entries at constant
+memory (how Finder does it; would replace the capped `NSTextView`);
+(2) per-directory cache keyed on path + mtime for instant re-hovers.
 
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 

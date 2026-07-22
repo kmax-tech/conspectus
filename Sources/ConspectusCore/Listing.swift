@@ -40,6 +40,53 @@ public func sortEntries(_ entries: [DirEntry]) -> [DirEntry] {
     }
 }
 
+/// Contents of a folder prepared for the look-ahead listing.
+public struct FolderContents: Equatable {
+    /// Entries in display order (directories first, natural sort), capped.
+    public let entries: [DirEntry]
+    /// How many entries the cap cut off (0 if none).
+    public let omitted: Int
+    /// Non-nil if the folder could not be read; `entries` is empty then.
+    public let error: String?
+
+    public init(entries: [DirEntry], omitted: Int, error: String? = nil) {
+        self.entries = entries
+        self.omitted = omitted
+        self.error = error
+    }
+}
+
+/// Read a folder for the look-ahead listing: isDirectory bits bulk-fetched
+/// during enumeration (one getattrlistbulk kernel pass, no stat per entry),
+/// directories-first natural sort over all entries, then capped to `cap` for
+/// display. Safe to call off the main thread.
+///
+/// A read failure is returned as `error` rather than thrown — the folder
+/// vanishing mid-hover is an expected race, and the caller renders the error
+/// into the pane (visible, not swallowed).
+///
+/// Side effects: reads the directory from disk.
+public func loadFolder(_ dir: String, cap: Int) -> FolderContents {
+    let urls: [URL]
+    do {
+        urls = try FileManager.default.contentsOfDirectory(
+            at: URL(fileURLWithPath: dir, isDirectory: true),
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles])
+    } catch {
+        return FolderContents(entries: [], omitted: 0, error: error.localizedDescription)
+    }
+    let all = urls.map {
+        // Deliberate try?: the key was prefetched, a miss means the entry
+        // vanished mid-enumeration — rendering it as a file is icon-level
+        // cosmetics, not worth failing the whole listing.
+        DirEntry(name: $0.lastPathComponent,
+                 isDir: (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false)
+    }
+    let capped = capEntries(sortEntries(all), limit: cap)
+    return FolderContents(entries: capped.shown, omitted: capped.omitted)
+}
+
 /// Glyph + color a file gets in the folder listing.
 public struct FileIcon: Equatable {
     public let glyph: String

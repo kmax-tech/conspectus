@@ -67,3 +67,53 @@ final class ListingTests: XCTestCase {
         XCTAssertEqual(fileIcon("no-extension", mocha).glyph, "\u{f15b}")
     }
 }
+
+/// Tests for the off-main-thread folder loader (Listing.swift, loadFolder).
+final class LoadFolderTests: XCTestCase {
+    private var tmp: String = ""
+
+    override func setUpWithError() throws {
+        tmp = NSTemporaryDirectory() + "conspectus-listing-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: tmp, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try FileManager.default.removeItem(atPath: tmp)
+    }
+
+    func testLoadsSortedDirsFirstWithBulkIsDirBits() throws {
+        try "x".write(toFile: tmp + "/b.txt", atomically: true, encoding: .utf8)
+        try "x".write(toFile: tmp + "/a.txt", atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(atPath: tmp + "/zdir", withIntermediateDirectories: true)
+        let c = loadFolder(tmp, cap: 500)
+        XCTAssertNil(c.error)
+        XCTAssertEqual(c.omitted, 0)
+        XCTAssertEqual(c.entries, [DirEntry(name: "zdir", isDir: true),
+                                   DirEntry(name: "a.txt", isDir: false),
+                                   DirEntry(name: "b.txt", isDir: false)])
+    }
+
+    func testCapAppliesAfterSortSoDirsSurvive() throws {
+        for i in 1...5 {
+            try "x".write(toFile: tmp + "/file\(i).txt", atomically: true, encoding: .utf8)
+        }
+        try FileManager.default.createDirectory(atPath: tmp + "/zz-dir", withIntermediateDirectories: true)
+        let c = loadFolder(tmp, cap: 3)
+        XCTAssertEqual(c.entries.first, DirEntry(name: "zz-dir", isDir: true))
+        XCTAssertEqual(c.entries.count, 3)
+        XCTAssertEqual(c.omitted, 3)
+    }
+
+    func testUnreadableFolderReturnsErrorNotEmpty() {
+        let c = loadFolder(tmp + "/does-not-exist", cap: 500)
+        XCTAssertNotNil(c.error, "a vanished folder must be reported, not shown as empty")
+        XCTAssertEqual(c.entries, [])
+    }
+
+    func testEmptyFolderIsEmptyWithoutError() {
+        let c = loadFolder(tmp, cap: 500)
+        XCTAssertNil(c.error)
+        XCTAssertEqual(c.entries, [])
+        XCTAssertEqual(c.omitted, 0)
+    }
+}
