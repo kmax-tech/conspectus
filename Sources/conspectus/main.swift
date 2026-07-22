@@ -130,8 +130,9 @@ let folderListingCap = 500
 
 /// Render loaded folder contents in the current theme. Does no I/O — safe to
 /// build off the main thread; TextKit layout happens when the result is
-/// applied to the text view on main.
-func renderListing(_ contents: FolderContents) -> NSAttributedString {
+/// applied to the text view on main. Directory rows carry a .link with their
+/// URL so a click can navigate yazi there (mimicking yazi's own 3rd column).
+func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedString {
     let pal = activePalette()
     let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
     let font = terminalFont()
@@ -148,8 +149,13 @@ func renderListing(_ contents: FolderContents) -> NSAttributedString {
     for e in contents.entries {
         let icon = e.isDir ? FileIcon(glyph: "\u{f07b}", color: blue)   // nf-fa-folder for dirs
                            : fileIcon(e.name, pal)
+        var attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: icon.color]
+        if e.isDir {
+            attrs[.link] = URL(fileURLWithPath: (dir as NSString).appendingPathComponent(e.name),
+                               isDirectory: true)
+        }
         out.append(NSAttributedString(string: icon.glyph + "  " + e.name + (e.isDir ? "/" : "") + "\n",
-                                      attributes: [.font: font, .foregroundColor: icon.color]))
+                                      attributes: attrs))
     }
     if contents.omitted > 0 {
         out.append(NSAttributedString(string: "\n  … and \(contents.omitted) more entries\n",
@@ -178,7 +184,8 @@ final class PassthroughBorderView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSSplitViewDelegate {
+final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSSplitViewDelegate,
+                   NSTextViewDelegate {
     var window: NSWindow!
     var split: NSSplitView!
     var rightContainer: NSView!
@@ -423,6 +430,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         folderText.autoresizingMask = [.width]
         folderText.textContainerInset = NSSize(width: 10, height: 10)
         folderText.textContainer?.widthTracksTextView = true
+        // Folder rows are clickable links (navigate yazi there); keep their
+        // own colors — only the cursor signals clickability.
+        folderText.linkTextAttributes = [.cursor: NSCursor.pointingHand]
+        folderText.delegate = self
         folderScroll.documentView = folderText
         folderScroll.isHidden = true
         styleFolder()
@@ -1015,6 +1026,39 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         }
     }
 
+    // MARK: NSTextViewDelegate — click a folder row in the listing.
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        guard let url = link as? URL else { return false }
+        navigateYazi(to: url.path)
+        return true
+    }
+
+    /// Ask the yazi pane(s) to cd — the same `panesync-cd` DDS broadcast the
+    /// `=` key uses; the panesync plugin (guarded by CONSPECTUS_PEER) follows.
+    /// Works from outside yazi without a YAZI_ID (verified). In triple mode
+    /// both panes follow — the `=` semantics. yazi then publishes new hover
+    /// events, so the preview updates to the entered directory by itself.
+    /// Side effects: spawns `ya` via a login shell.
+    func navigateYazi(to dir: String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        p.arguments = ["-lc", "ya pub-to 0 panesync-cd --str \"$CONSPECTUS_CLICK_DIR\""]
+        var env = ProcessInfo.processInfo.environment
+        env["CONSPECTUS_CLICK_DIR"] = dir
+        p.environment = env
+        p.terminationHandler = { proc in
+            if proc.terminationStatus != 0 {
+                warn("conspectus: ya pub-to failed (exit \(proc.terminationStatus)) — "
+                     + "click-to-cd needs yazi's panesync plugin")
+            }
+        }
+        do {
+            try p.run()
+        } catch {
+            warn("conspectus: cannot spawn ya for click-to-cd: \(error.localizedDescription)")
+        }
+    }
+
     func styleFolder() {
         guard let folderScroll = folderScroll, let folderText = folderText else { return }
         let pal = activePalette()
@@ -1083,7 +1127,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
             let contents = loadFolder(path, cap: folderListingCap)
             // Navigated on already? Skip the attributed-string build entirely.
             guard self.isCurrentListing(gen) else { return }
-            let listing = renderListing(contents)
+            let listing = renderListing(contents, in: path)
             DispatchQueue.main.async {
                 // Re-check: a newer hover may have won while we rendered.
                 guard self.isCurrentListing(gen) else { return }

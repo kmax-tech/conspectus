@@ -187,7 +187,9 @@ a fresh instance with an auto-generated id. `CONSPECTUS_PEER` is only a flag
 (arms the `=` cd-sync keymap, broadcast via `ya pub-to 0`), not an id.
 
 **Notes:** Cross-pane copy (`y`/`p`) relies on DDS auto-discovery; anything
-that fixes ids will silently break it.
+that fixes ids will silently break it. Bonus finding: `ya pub-to 0
+panesync-cd --str <dir>` also works from OUTSIDE yazi, without any YAZI_ID —
+conspectus uses this for click-to-cd on folder rows in the preview listing.
 
 ## 2026-07-22 — Theme following without configuring yazi directly
 

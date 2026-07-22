@@ -22,7 +22,9 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
   - **File** → `QLPreviewView` (embeddable Quick Look, same generators as Finder).
   - **Folder** → a rendered contents listing (folders first, natural sort, Nerd
     Font glyphs, Catppuccin colors). Quick Look on a folder only shows its icon +
-    metadata, so we render the look-ahead ourselves.
+    metadata, so we render the look-ahead ourselves. **Clicking a folder row
+    navigates yazi there** (same `panesync-cd` broadcast as the `=` key) —
+    mimicking yazi's own third column.
 - Because the right pane previews files *and* folders, yazi runs at 2 columns
   (its own 3rd preview column is hidden via the overlay `yazi.toml`). You
   navigate in the middle column and enter directories to descend.
