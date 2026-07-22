@@ -163,6 +163,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var folderScroll: NSScrollView!
     var folderText: NSTextView!
     var lastPath: String?
+    var lastWasDir = false
 
     func makeTerm() -> LocalProcessTerminalView {
         let t = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 700, height: 900))
@@ -373,13 +374,22 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                 self.preview.isHidden = true
                 self.folderScroll.isHidden = false
             } else {
-                // File: unhide the preview BEFORE setting its item — QLPreviewView
-                // does not render an item assigned while it is hidden.
                 self.folderScroll.isHidden = true
+                if self.lastWasDir {
+                    // dir -> file: a QLPreviewView that spent time hidden can come
+                    // back permanently blank (its remote QL extension goes away).
+                    // Rebuild the view from scratch — file -> file keeps the fast
+                    // in-place swap.
+                    let fresh = QLPreviewView(frame: self.preview.frame, style: .normal) ?? QLPreviewView()
+                    fresh.autoresizingMask = [.width, .height]
+                    self.rightContainer.replaceSubview(self.preview, with: fresh)
+                    self.preview = fresh
+                }
                 self.preview.isHidden = false
                 self.preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
                 self.preview.refreshPreviewItem()
             }
+            self.lastWasDir = dir
         }
     }
 
