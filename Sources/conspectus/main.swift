@@ -259,7 +259,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
         NSApp.activate(ignoringOtherApps: true)
 
-        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath])
+        // Fixed instance IDs + peer name so the `=` key can tell the other pane
+        // to `cd` here (dual-pane sync via yazi's DDS: ya emit-to $CONSPECTUS_PEER).
+        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath,
+                                "YAZI_ID": "conspectusL", "CONSPECTUS_PEER": "conspectusR"])
         startFifoReader()
 
         if splitMode { addSecondPane() }   // launched with `split`: start dual-pane
@@ -273,7 +276,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         term2 = t2
         split.replaceSubview(rightContainer, with: t2)
         split.setPosition(split.frame.width * 0.5, ofDividerAt: 0)
-        launch(t2, extraEnv: [:])
+        launch(t2, extraEnv: ["YAZI_ID": "conspectusR", "CONSPECTUS_PEER": "conspectusL"])
         window.makeFirstResponder(t2)
         splitButton?.state = .on
         window.title = "conspectus — split"
