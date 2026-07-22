@@ -338,6 +338,18 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 }
 
+// Headless icon dump: `conspectus --icon <path>` renders the app icon to a PNG
+// and exits (install-app.sh turns it into an .icns). Single source of truth for
+// the icon is Icon.swift.
+if let i = CommandLine.arguments.firstIndex(of: "--icon"), i + 1 < CommandLine.arguments.count {
+    let img = conspectusIcon()
+    if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+       let png = rep.representation(using: .png, properties: [:]) {
+        try? png.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
+    }
+    exit(0)
+}
+
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)
 let delegate = Panel()
