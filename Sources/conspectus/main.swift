@@ -253,6 +253,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         ("Misc", [("w", "task manager"), (",", "sort menu"), ("~", "yazi help"), ("q", "quit")]),
         ("conspectus", [("⌘D", "toggle split pane"), ("⌘E", "toggle preview pane"),
                         ("⌘J", "terminal panel (opens in yazi's dir)"),
+                        ("⌘W", "close terminal panel"),
                         ("⌘/", "toggle shortcut bar"), ("⌘K", "this cheat sheet"),
                         ("⌘⌥← →", "cycle pane focus (→ into preview: arrows/Space scroll)"),
                         ("=", "sync cd to other pane")]),
@@ -437,6 +438,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     let minTermHeight: CGFloat = 120
 
     @objc func toggleBottomTerminal() { bottomTerm == nil ? openBottomTerminal() : closeBottomTerminal() }
+
+    /// ⌘W: close the terminal panel if open; a no-op otherwise (never closes
+    /// the window — the "close tab" habit must stay safe).
+    @objc func closeTerminalPanel() { closeBottomTerminal() }
 
     /// The directory currently visited in the active yazi pane, derived from
     /// the last hovered path — hover events always come from the listing of
@@ -733,6 +738,12 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let termToggle = NSMenuItem(title: "Toggle Terminal Panel", action: #selector(toggleBottomTerminal), keyEquivalent: "j")
         termToggle.target = self
         viewMenu.addItem(termToggle)
+        // ⌘W = "close tab" muscle memory: closes the terminal panel when it is
+        // open and deliberately does nothing otherwise — it must never take
+        // the whole window down.
+        let closeTerm = NSMenuItem(title: "Close Terminal Panel", action: #selector(closeTerminalPanel), keyEquivalent: "w")
+        closeTerm.target = self
+        viewMenu.addItem(closeTerm)
         let hints = NSMenuItem(title: "Toggle Shortcut Bar", action: #selector(toggleHintBar), keyEquivalent: "/")
         hints.target = self
         viewMenu.addItem(hints)
