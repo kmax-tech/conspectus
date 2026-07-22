@@ -51,6 +51,27 @@ modes; `split`/`triple` are just start presets.
 the preview — a lone terminal pane is never left standing. The split-view
 delegate (ratio-keeping resize, 300pt min) is generalized to n panes.
 
+## 2026-07-22 — Cheat sheet parses keymap.toml with a TOML-subset scanner
+
+**Problem:** The ⌘K cheat sheet should show the user's *real* yazi bindings,
+but a full TOML dependency is overkill (and needs sign-off per the
+conventions), while naive line/regex parsing breaks on the config's
+triple-quoted multiline `run` strings, which contain brackets, braces, and
+quotes.
+
+**Solution:** `ConspectusCore/Keymap.swift` — a small character-level scanner
+for exactly the keymap subset: `[mgr]` inline-table arrays and
+`[[mgr.prepend_keymap]]` blocks, all four TOML string forms, comments,
+`on`/`desc`/`run` extraction (`desc` falls back to a compacted `run`).
+Everything outside the subset throws a typed `KeymapParseError`; the app
+shows parse failures in the panel footer instead of swallowing them.
+
+**Notes:** It is deliberately NOT a general TOML parser — if yazi's config
+format grows beyond this subset, extend the scanner (tests in
+`KeymapTests.swift` include a fixture mirroring the real config). Legacy
+configs use `[manager]` instead of `[mgr]`; `loadUserKeymap` retries with
+that name on `missingSection`.
+
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 
 **Problem:** Fixed `YAZI_ID`s per pane broke yazi's DDS discovery; panes

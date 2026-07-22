@@ -85,8 +85,11 @@ persists across launches.
 **⌘K** opens the full cheat sheet: a native, scrollable panel with yazi's
 complete default keymap, grouped (navigate / select / files / clipboard /
 find / tabs) plus the conspectus keys — the readable version of yazi's `~`
-help. It shows yazi's *defaults*; custom `keymap.toml` bindings are not
-parsed (noted in the panel footer).
+help. Your own `keymap.toml` (`$YAZI_CONFIG_HOME`, else `~/.config/yazi`) is
+parsed on every open and shown as its own group on top, so config edits
+appear on the next ⌘K; parse problems are reported in the panel footer. The
+parser covers the keymap subset of TOML (inline-table arrays and
+`[[mgr.prepend_keymap]]` blocks) — no TOML dependency.
 
 ### Triple mode: preview follows the active pane
 

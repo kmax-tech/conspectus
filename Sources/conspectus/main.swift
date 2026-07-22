@@ -180,9 +180,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     ]
 
     // Full cheat sheet (⌘K): yazi's default mgr keymap, grouped, plus the
-    // conspectus keys. Deliberately the *defaults* — the user's own
-    // keymap.toml is not parsed (stated in the panel footer); parsing TOML
-    // would need a dependency and is a separate decision.
+    // conspectus keys. The user's own keymap.toml is parsed on every open
+    // (ConspectusCore.parseYaziKeymap) and shown as its own group on top;
+    // parse problems appear in the panel footer instead of being swallowed.
     let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
         ("Navigate", [("h / ←", "parent directory"), ("l / →", "enter / open"),
                       ("j / k", "down / up"), ("g g", "to top"), ("G", "to bottom"),
@@ -410,8 +410,33 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         cheatText = tv
     }
 
+    /// Read the user's yazi keymap for the cheat sheet. Returns the bindings
+    /// plus a status line for the panel footer — a missing file is normal
+    /// (defaults only), a parse failure is reported there, never swallowed.
+    func loadUserKeymap() -> (bindings: [KeymapBinding], status: String) {
+        let configHome = ProcessInfo.processInfo.environment["YAZI_CONFIG_HOME"]
+            ?? (NSHomeDirectory() as NSString).appendingPathComponent(".config/yazi")
+        let path = (configHome as NSString).appendingPathComponent("keymap.toml")
+        guard FileManager.default.fileExists(atPath: path) else {
+            return ([], "no keymap.toml found — yazi defaults only")
+        }
+        do {
+            let toml = try String(contentsOfFile: path, encoding: .utf8)
+            let bindings: [KeymapBinding]
+            do {
+                bindings = try parseYaziKeymap(toml)
+            } catch KeymapParseError.missingSection {
+                bindings = try parseYaziKeymap(toml, section: "manager")   // pre-25.x name
+            }
+            return (bindings, "yazi defaults + \(bindings.count) bindings from your keymap.toml")
+        } catch {
+            return ([], "keymap.toml not parsed (\(error)) — yazi defaults only")
+        }
+    }
+
     /// (Re-)render the cheat sheet in the active palette; called on open and
-    /// whenever the system appearance changes.
+    /// whenever the system appearance changes. Re-reads keymap.toml each time
+    /// so config edits show up on the next ⌘K.
     func styleCheatSheet() {
         guard let tv = cheatText else { return }
         let pal = activePalette()
@@ -423,8 +448,14 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let headColor = nsColor(pal.ansi[4])   // blue group headers
         let keyColor = nsColor(pal.ansi[3])    // yellow keys
         let fg = nsColor(pal.fg)
+        let user = loadUserKeymap()
+        var groups = cheatSheetGroups
+        if !user.bindings.isEmpty {
+            groups.insert(("Your keymap.toml",
+                           user.bindings.map { ($0.keys.joined(separator: " "), $0.desc) }), at: 0)
+        }
         let s = NSMutableAttributedString()
-        for (gi, group) in cheatSheetGroups.enumerated() {
+        for (gi, group) in groups.enumerated() {
             if gi > 0 { s.append(NSAttributedString(string: "\n", attributes: [.font: font])) }
             s.append(NSAttributedString(string: group.title + "\n",
                                         attributes: [.font: font, .foregroundColor: headColor]))
@@ -439,7 +470,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
             }
         }
         s.append(NSAttributedString(
-            string: "\nyazi defaults — custom keymap.toml bindings are not reflected",
+            string: "\n" + user.status,
             attributes: [.font: terminalFont(size: 10), .foregroundColor: fg.withAlphaComponent(0.6)]))
         tv.textStorage?.setAttributedString(s)
     }
