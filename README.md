@@ -11,6 +11,11 @@ Quick Look panel next to your existing terminal instead of embedding one.
 
 ## How it works
 
+Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
+(start-dir resolution, palettes, icon mapping, listing order);
+`Sources/conspectus` is the AppKit shell around them. Conventions live in
+`CLAUDE.md`, solved gotchas in `NOTES.md`.
+
 - Left pane: [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) hosting a
   login shell that `exec`s the file manager.
 - Right pane: a universal preview that swaps by hovered item type —
@@ -33,6 +38,7 @@ Any other TUI can drive the preview by writing an absolute path to
 
 ```sh
 ./build.sh             # swift build -c release (first run fetches SwiftTerm)
+swift test             # unit tests for the pure helpers (ConspectusCore)
 conspectus             # yazi + Quick Look preview, starting at $HOME
 conspectus ~/work      # start at a given directory (tilde/relative resolved)
 conspectus split       # two yazi panes side by side (dual-pane copy)

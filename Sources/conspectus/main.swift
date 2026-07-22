@@ -1,4 +1,5 @@
 import Cocoa
+import ConspectusCore
 import Quartz
 import SwiftTerm
 
@@ -14,6 +15,41 @@ import SwiftTerm
 //   conspectus [path]          # yazi + Quick Look preview; start dir = path or $HOME
 //   conspectus split [path]    # two yazi panes side by side (dual-pane copy)
 // The TUI is yazi by default; override with the CONSPECTUS_CMD env var.
+//
+// Pure helpers (start-dir resolution, palettes, icon mapping, sort order) live
+// in the ConspectusCore library target so they are unit-testable; this file is
+// the AppKit shell around them.
+
+/// Write a warning line to stderr. Side effects: writes to stderr.
+func warn(_ msg: String) {
+    FileHandle.standardError.write(Data((msg + "\n").utf8))
+}
+
+/// Report a fatal startup error and exit. Side effects: writes to stderr,
+/// terminates the process with exit code 1.
+func die(_ msg: String) -> Never {
+    warn(msg)
+    exit(1)
+}
+
+// Headless icon dump: `conspectus --icon <path>` renders the app icon to a PNG
+// and exits (install-app.sh turns it into an .icns). Handled before anything
+// else so the <path> argument is never mistaken for a start directory. Single
+// source of truth for the icon is Icon.swift.
+if let i = CommandLine.arguments.firstIndex(of: "--icon"), i + 1 < CommandLine.arguments.count {
+    let out = CommandLine.arguments[i + 1]
+    let img = conspectusIcon()
+    guard let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+          let png = rep.representation(using: .png, properties: [:]) else {
+        die("conspectus: could not render the icon to PNG")
+    }
+    do {
+        try png.write(to: URL(fileURLWithPath: out))
+    } catch {
+        die("conspectus: cannot write icon to \(out): \(error.localizedDescription)")
+    }
+    exit(0)
+}
 
 let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/conspectus")
 let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
@@ -22,131 +58,40 @@ let fifoPath = (cacheDir as NSString).appendingPathComponent("target")
 // resumes there, falling back to $HOME.
 let lastCwdPath = (cacheDir as NSString).appendingPathComponent("last-cwd")
 
-// Start directory: an explicit [path] arg (tilde/relative resolved), else the
-// remembered last cwd, else $HOME.
-func resolveStart(_ raw: String?) -> String {
-    guard let raw = raw, !raw.isEmpty else {
-        if let saved = try? String(contentsOfFile: lastCwdPath, encoding: .utf8) {
-            let p = saved.trimmingCharacters(in: .whitespacesAndNewlines)
-            var d: ObjCBool = false
-            if FileManager.default.fileExists(atPath: p, isDirectory: &d), d.boolValue { return p }
-        }
-        return NSHomeDirectory()
-    }
-    var p = (raw as NSString).expandingTildeInPath
-    if !p.hasPrefix("/") {
-        p = (FileManager.default.currentDirectoryPath as NSString).appendingPathComponent(p)
-    }
-    p = (p as NSString).standardizingPath
-    var isDir: ObjCBool = false
-    if FileManager.default.fileExists(atPath: p, isDirectory: &isDir), isDir.boolValue { return p }
-    return NSHomeDirectory()
-}
-
 let cliArgs   = Array(CommandLine.arguments.dropFirst())
 let splitMode = cliArgs.first == "split" || cliArgs.first == "-s"
 let rest      = splitMode ? Array(cliArgs.dropFirst()) : cliArgs
-let startPath = resolveStart(rest.first(where: { !$0.hasPrefix("-") }))
+let start     = resolveStart(rest.first(where: { !$0.hasPrefix("-") }), lastCwdFile: lastCwdPath)
+let startPath = start.path
 let command   = ProcessInfo.processInfo.environment["CONSPECTUS_CMD"] ?? "yazi"
+
+// An explicit [path] that isn't a directory falls back to $HOME — say so
+// instead of silently starting somewhere the user didn't ask for.
+if let w = start.warning { warn(w) }
 
 // Follow the macOS system appearance: Catppuccin Latte in light mode, Mocha in
 // dark. yazi picks its matching flavor by querying our background via OSC 11
 // (SwiftTerm answers), so the whole panel stays one coherent theme.
-func hexByte(_ v: UInt32, _ shift: UInt32) -> UInt16 { UInt16((v >> shift) & 0xff) * 257 }
-func stColor(_ hex: String) -> SwiftTerm.Color {
-    let v = UInt32(hex, radix: 16) ?? 0
-    return SwiftTerm.Color(red: hexByte(v, 16), green: hexByte(v, 8), blue: hexByte(v, 0))
-}
-func nsColor(_ hex: String) -> NSColor {
-    let v = UInt32(hex, radix: 16) ?? 0
-    return NSColor(srgbRed: CGFloat((v >> 16) & 0xff) / 255,
-                   green: CGFloat((v >> 8) & 0xff) / 255,
-                   blue: CGFloat(v & 0xff) / 255, alpha: 1)
-}
-
-struct Palette { let ansi: [String]; let bg: String; let fg: String; let cursor: String }
-
-// 0-7 normal, 8-15 bright.
-let mocha = Palette(
-    ansi: ["45475A", "F38BA8", "A6E3A1", "F9E2AF", "89B4FA", "F5C2E7", "94E2D5", "BAC2DE",
-           "585B70", "F38BA8", "A6E3A1", "F9E2AF", "89B4FA", "F5C2E7", "94E2D5", "A6ADC8"],
-    bg: "1E1E2E", fg: "CDD6F4", cursor: "F5E0DC")
-let latte = Palette(
-    ansi: ["5C5F77", "D20F39", "40A02B", "DF8E1D", "1E66F5", "EA76CB", "179299", "ACB0BE",
-           "6C6F85", "D20F39", "40A02B", "DF8E1D", "1E66F5", "EA76CB", "179299", "BCC0CC"],
-    bg: "EFF1F5", fg: "4C4F69", cursor: "DC8A78")
-
 func systemIsDark() -> Bool {
     UserDefaults.standard.string(forKey: "AppleInterfaceStyle")?.lowercased() == "dark"
 }
+
+func activePalette() -> Palette { systemIsDark() ? mocha : latte }
+
+/// SwiftTerm color from a palette hex string (validated by Palette's init;
+/// see nsColor in ConspectusCore for why try! is the honest choice here).
+func stColor(_ hex: String) -> SwiftTerm.Color {
+    let v = try! parseHexColor(hex)
+    func chan(_ shift: UInt32) -> UInt16 { UInt16((v >> shift) & 0xff) * 257 }
+    return SwiftTerm.Color(red: chan(16), green: chan(8), blue: chan(0))
+}
+
 func applyTheme(_ t: LocalProcessTerminalView) {
-    let p = systemIsDark() ? mocha : latte
+    let p = activePalette()
     t.installColors(p.ansi.map(stColor))
     t.nativeBackgroundColor = nsColor(p.bg)
     t.nativeForegroundColor = nsColor(p.fg)
     t.caretColor            = nsColor(p.cursor)
-}
-func activePalette() -> Palette { systemIsDark() ? mocha : latte }
-
-func isDir(_ path: String) -> Bool {
-    var d: ObjCBool = false
-    return FileManager.default.fileExists(atPath: path, isDirectory: &d) && d.boolValue
-}
-
-// Curated extension -> (Nerd Font glyph, Catppuccin color). Uses the reliable
-// Font Awesome file-type glyphs (f1c1-f1c9), so no tofu; colors approximate
-// yazi's per-type scheme rather than mirroring its exact icon set.
-func fileIcon(_ name: String, _ pal: Palette) -> (String, NSColor) {
-    func c(_ i: Int) -> NSColor { nsColor(pal.ansi[i]) }   // 1 red 2 green 3 yellow 4 blue 5 pink 6 cyan
-    let fg = nsColor(pal.fg)
-    switch (name as NSString).pathExtension.lowercased() {
-    case "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "tiff", "tif", "heic", "ico", "avif":
-        return ("\u{f1c5}", c(5))   // image
-    case "pdf":
-        return ("\u{f1c1}", c(1))   // pdf
-    case "zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "zst":
-        return ("\u{f1c6}", c(3))   // archive
-    case "mp3", "wav", "flac", "m4a", "aac", "ogg":
-        return ("\u{f1c7}", c(2))   // audio
-    case "mp4", "mov", "mkv", "avi", "webm", "m4v":
-        return ("\u{f1c8}", c(5))   // video
-    case "md", "markdown", "rst", "txt", "text", "log", "org":
-        return ("\u{f15c}", fg)     // text
-    case "py", "js", "ts", "tsx", "jsx", "lua", "c", "cpp", "h", "hpp", "go", "rs",
-         "swift", "sh", "bash", "zsh", "fish", "rb", "java", "json", "jsonl", "json5",
-         "yaml", "yml", "toml", "html", "css", "scss", "tex", "vim", "el":
-        return ("\u{f1c9}", c(2))   // code
-    default:
-        return ("\u{f15b}", fg)     // generic file
-    }
-}
-
-// Directory look-ahead for the right pane: Quick Look only shows a folder's
-// icon + metadata, so for directories we render the contents ourselves —
-// folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type.
-func folderListing(_ dir: String) -> NSAttributedString {
-    let pal = activePalette()
-    let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
-    let font = terminalFont()
-    let names = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? [])
-        .filter { !$0.hasPrefix(".") }
-    let sorted = names.sorted { a, b in
-        let ad = isDir((dir as NSString).appendingPathComponent(a))
-        let bd = isDir((dir as NSString).appendingPathComponent(b))
-        if ad != bd { return ad }
-        return a.localizedStandardCompare(b) == .orderedAscending
-    }
-    if sorted.isEmpty {
-        return NSAttributedString(string: "  (empty)", attributes: [.font: font, .foregroundColor: fg])
-    }
-    let out = NSMutableAttributedString()
-    for name in sorted {
-        let d = isDir((dir as NSString).appendingPathComponent(name))
-        let (glyph, color) = d ? ("\u{f07b}", blue) : fileIcon(name, pal)   // nf-fa-folder for dirs
-        out.append(NSAttributedString(string: glyph + "  " + name + (d ? "/" : "") + "\n",
-                                      attributes: [.font: font, .foregroundColor: color]))
-    }
-    return out
 }
 
 // A Nerd Font so yazi's icon glyphs render. Override with CONSPECTUS_FONT /
@@ -161,6 +106,38 @@ func terminalFont() -> NSFont {
         if let f = NSFont(name: n, size: size) { return f }
     }
     return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+}
+
+// Directory look-ahead for the right pane: Quick Look only shows a folder's
+// icon + metadata, so for directories we render the contents ourselves —
+// folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type.
+func folderListing(_ dir: String) -> NSAttributedString {
+    let pal = activePalette()
+    let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
+    let font = terminalFont()
+    let names: [String]
+    do {
+        names = try FileManager.default.contentsOfDirectory(atPath: dir).filter { !$0.hasPrefix(".") }
+    } catch {
+        // The folder can vanish (or lose permission) between hover and render —
+        // show the failure in the pane instead of a silently empty listing.
+        return NSAttributedString(string: "  (unreadable: \(error.localizedDescription))",
+                                  attributes: [.font: font, .foregroundColor: fg])
+    }
+    let entries = sortEntries(names.map {
+        DirEntry(name: $0, isDir: isDirectory((dir as NSString).appendingPathComponent($0)))
+    })
+    if entries.isEmpty {
+        return NSAttributedString(string: "  (empty)", attributes: [.font: font, .foregroundColor: fg])
+    }
+    let out = NSMutableAttributedString()
+    for e in entries {
+        let icon = e.isDir ? FileIcon(glyph: "\u{f07b}", color: blue)   // nf-fa-folder for dirs
+                           : fileIcon(e.name, pal)
+        out.append(NSAttributedString(string: icon.glyph + "  " + e.name + (e.isDir ? "/" : "") + "\n",
+                                      attributes: [.font: font, .foregroundColor: icon.color]))
+    }
+    return out
 }
 
 final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSSplitViewDelegate {
@@ -200,13 +177,47 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     }
 
     func applicationDidFinishLaunching(_ n: Notification) {
-        // FIFO the left TUI writes hovered paths to (Quick Look coupling).
-        try? FileManager.default.createDirectory(atPath: cacheDir, withIntermediateDirectories: true)
-        unlink(fifoPath); mkfifo(fifoPath, 0o600)
-
+        createFifo()
         term = makeTerm()
+        observeAppearanceChanges()
+        buildRightPane()
+        buildSplitView()
+        buildWindow()
+        addTitlebarSplitButton()
 
-        // Re-theme live when the user toggles macOS appearance.
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(term)     // keystrokes go to the TUI
+        buildMenu()                         // ⌘D split, ⌘⌥←/→ focus, ⌘Q/⌘H
+        NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
+        NSApp.activate(ignoringOtherApps: true)
+
+        // CONSPECTUS_PEER is a flag, not an id: it arms the `=` cd-sync (keymap
+        // broadcasts via `ya pub-to 0`, the panesync plugin follows). yazi
+        // auto-generates its own DDS ids, so no fixed ids are set here.
+        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"], rememberCwd: true)
+        startFifoReader()
+
+        if splitMode { addSecondPane() }   // launched with `split`: start dual-pane
+    }
+
+    /// Create the FIFO the left TUI writes hovered paths to (Quick Look
+    /// coupling). Without it the preview can never update, so failure is
+    /// fatal and reported, not swallowed.
+    /// Side effects: creates the cache directory, replaces the FIFO on disk.
+    func createFifo() {
+        do {
+            try FileManager.default.createDirectory(atPath: cacheDir, withIntermediateDirectories: true)
+        } catch {
+            die("conspectus: cannot create cache directory \(cacheDir): \(error.localizedDescription)")
+        }
+        unlink(fifoPath)
+        guard mkfifo(fifoPath, 0o600) == 0 else {
+            die("conspectus: mkfifo(\(fifoPath)) failed: \(String(cString: strerror(errno)))")
+        }
+    }
+
+    /// Re-theme live when the user toggles the macOS appearance.
+    func observeAppearanceChanges() {
         DistributedNotificationCenter.default.addObserver(
             forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil, queue: .main) { [weak self] _ in
@@ -218,8 +229,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                 if let p = self.lastPath { self.update(p) }
             }
         }
+    }
 
-        // Right pane: Quick Look preview (files) or a directory listing (folders).
+    /// Build the right pane: Quick Look preview (files) stacked with a
+    /// directory listing (folders); `update` toggles which one is visible.
+    func buildRightPane() {
         rightContainer = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 900))
         preview = QLPreviewView(frame: rightContainer.bounds, style: .normal) ?? QLPreviewView()
         preview.autoresizingMask = [.width, .height]
@@ -238,7 +252,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         styleFolder()
         rightContainer.addSubview(preview)
         rightContainer.addSubview(folderScroll)
+    }
 
+    /// Build the split view holding terminal (left) and preview (right).
+    func buildSplitView() {
         split = NSSplitView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
         split.isVertical = true            // vertical divider -> panes side by side
         split.dividerStyle = .thin
@@ -246,18 +263,23 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         split.addSubview(term)
         split.addSubview(rightContainer)
         split.setPosition(760, ofDividerAt: 0)
+    }
 
+    /// Build the main window; remembers size/position across launches
+    /// (including the split layout width).
+    func buildWindow() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1340, height: 900),
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
                           backing: .buffered, defer: false)
         window.title = "conspectus"
         window.contentView = split
-        // Remember size/position across launches (incl. the split layout width).
         if !window.setFrameUsingName("ConspectusMain") { window.center() }
         window.setFrameAutosaveName("ConspectusMain")
+    }
 
-        // Titlebar toggle: swap the right pane between Quick Look preview and a
-        // second yazi (dual-pane copy). A click never fights yazi for the keyboard.
+    /// Titlebar toggle: swap the right pane between Quick Look preview and a
+    /// second yazi (dual-pane copy). A click never fights yazi for the keyboard.
+    func addTitlebarSplitButton() {
         let btn = NSButton(title: " Split ", target: self, action: #selector(toggleSecondPane))
         btn.setButtonType(.pushOnPushOff)
         btn.bezelStyle = .rounded
@@ -270,20 +292,6 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         acc.layoutAttribute = .right
         acc.view = btn
         window.addTitlebarAccessoryViewController(acc)
-
-        window.makeKeyAndOrderFront(nil)
-        window.makeFirstResponder(term)     // keystrokes go to the TUI
-        buildMenu()                         // ⌘D split, ⌘⌥←/→ focus, ⌘Q/⌘H
-        NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
-        NSApp.activate(ignoringOtherApps: true)
-
-        // CONSPECTUS_PEER is a flag, not an id: it arms the `=` cd-sync (keymap
-        // broadcasts via `ya pub-to 0`, the panesync plugin follows). yazi
-        // auto-generates its own DDS ids, so no fixed ids are set here.
-        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"], rememberCwd: true)
-        startFifoReader()
-
-        if splitMode { addSecondPane() }   // launched with `split`: start dual-pane
     }
 
     // Minimal main menu so the app is keyboard-centric: menu key equivalents are
@@ -351,8 +359,21 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
     func startFifoReader() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
+            var warnedOpenFailure = false
             while true {
-                guard let f = fopen(fifoPath, "r") else { usleep(100_000); continue }
+                guard let f = fopen(fifoPath, "r") else {
+                    // fopen on a FIFO blocks until a writer appears, so failure
+                    // means the FIFO itself is gone/broken. Deliberate policy:
+                    // warn once (not every 100ms) and keep retrying — the
+                    // preview degrades, the app stays usable.
+                    if !warnedOpenFailure {
+                        warnedOpenFailure = true
+                        warn("conspectus: cannot open FIFO \(fifoPath) "
+                             + "(\(String(cString: strerror(errno)))) — preview updates suspended, retrying")
+                    }
+                    usleep(100_000); continue
+                }
+                warnedOpenFailure = false
                 var buf: UnsafeMutablePointer<CChar>? = nil
                 var cap = 0
                 while getline(&buf, &cap, f) > 0 {
@@ -377,6 +398,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
     func update(_ path: String) {
         var d: ObjCBool = false
+        // The hovered path can already be gone (fast navigation, deletion in
+        // another pane). Deliberate policy: keep showing the previous preview
+        // rather than flashing an error for a transient race.
         guard FileManager.default.fileExists(atPath: path, isDirectory: &d) else { return }
         let dir = d.boolValue
         lastPath = path
@@ -443,18 +467,6 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-}
-
-// Headless icon dump: `conspectus --icon <path>` renders the app icon to a PNG
-// and exits (install-app.sh turns it into an .icns). Single source of truth for
-// the icon is Icon.swift.
-if let i = CommandLine.arguments.firstIndex(of: "--icon"), i + 1 < CommandLine.arguments.count {
-    let img = conspectusIcon()
-    if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
-       let png = rep.representation(using: .png, properties: [:]) {
-        try? png.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
-    }
-    exit(0)
 }
 
 let app = NSApplication.shared
