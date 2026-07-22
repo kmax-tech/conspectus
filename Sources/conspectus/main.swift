@@ -287,6 +287,41 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // without preview, `triple` starts with both.
         if splitMode { detachPreview() }
         if splitMode || tripleMode { addSecondPane() }
+
+        startMainThreadWatchdog()
+    }
+
+    /// Main-thread watchdog: a utility thread pings the main thread every 2s;
+    /// if a ping goes unanswered for 2s the UI is frozen. The stall is then
+    /// logged to stderr and `/usr/bin/sample` captures our own call stacks to
+    /// ~/.cache/conspectus/freeze-<timestamp>.txt, so the cause of a beachball
+    /// is diagnosable after the fact. Throttled to one sample per 30s.
+    /// Side effects: writes sample reports into the cache directory.
+    func startMainThreadWatchdog() {
+        DispatchQueue.global(qos: .utility).async {
+            var lastSample = Date.distantPast
+            while true {
+                let sem = DispatchSemaphore(value: 0)
+                DispatchQueue.main.async { sem.signal() }
+                if sem.wait(timeout: .now() + 2.0) == .timedOut {
+                    if Date().timeIntervalSince(lastSample) > 30 {
+                        lastSample = Date()
+                        let out = (cacheDir as NSString)
+                            .appendingPathComponent("freeze-\(Int(Date().timeIntervalSince1970)).txt")
+                        warn("conspectus: main thread stalled >2s — sampling to \(out)")
+                        let p = Process()
+                        p.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
+                        p.arguments = ["\(getpid())", "3", "-file", out]
+                        // Deliberate try?: diagnostics must never crash the app;
+                        // a failed sample still leaves the stall warning above.
+                        try? p.run()
+                        p.waitUntilExit()
+                    }
+                    sem.wait()   // consume the late signal once main recovers
+                }
+                usleep(2_000_000)
+            }
+        }
     }
 
     /// Create the FIFO the left TUI writes hovered paths to (Quick Look
