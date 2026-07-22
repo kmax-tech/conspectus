@@ -72,6 +72,24 @@ format grows beyond this subset, extend the scanner (tests in
 configs use `[manager]` instead of `[mgr]`; `loadUserKeymap` retries with
 that name on `missingSection`.
 
+## 2026-07-22 — Bottom terminal: fresh shell per open instead of cd-follow
+
+**Problem:** A ⌘J terminal panel should open in the dir yazi is visiting.
+Following yazi's cwd *live* would mean typing `cd` into a running
+interactive shell — which can clobber whatever the user has half-typed, and
+there is no reliable way to detect an empty prompt from outside.
+
+**Solution:** No live follow. Each ⌘J open spawns a fresh login zsh in the
+current yazi dir; close (⌘J or `exit`) kills the shell. The cwd comes from
+the existing hover FIFO: every hovered path's parent *is* the directory
+being listed, so `dirname(lastPath)` tracks the active pane for free (same
+trick as the preview in triple mode).
+
+**Notes:** A failed `cd` (dir vanished) prints its error into the terminal
+and the shell still starts — visible, not swallowed. If persistent sessions
+are ever wanted, hide instead of terminate, but then the reopen-relocates
+semantics is lost.
+
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync
 
 **Problem:** Fixed `YAZI_ID`s per pane broke yazi's DDS discovery; panes

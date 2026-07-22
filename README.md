@@ -69,13 +69,23 @@ titlebar **`Split` button**) and the preview pane (**⌘E**, always rightmost):
 Toggling the second pane off with the preview hidden brings the preview back
 (a lone terminal defeats the app's purpose).
 
+## Bottom terminal (⌘J)
+
+**⌘J** toggles a terminal panel below the panes: a fresh interactive login
+zsh started **in the directory yazi is currently visiting** (derived from
+the hover events; in split mode that's the active pane) — for quick
+`git`/`cvs`/one-off commands next to the file manager. Deliberately no live
+cd-follow: closing (⌘J or `exit`) kills the shell, reopening starts a new
+one at yazi's current location. The divider is draggable (min 120pt panel,
+min 300pt pane area).
+
 ## Shortcut bar
 
 A slim status bar at the bottom shows the most-used shortcuts until the muscle
 memory sits — yazi's defaults plus conspectus's own keys:
 
     y→p copy   x→p move   d trash   r rename   a new   cc path   cf name
-    ␣ select   / find   = sync cd   ⌘D split   ⌘E preview   ⌘/ bar
+    ␣ select   / find   ⌘D split   ⌘E preview   ⌘J terminal   ⌘K all keys   ⌘/ bar
 
 `y→p` = yank then paste (copies across panes in split mode); `cc`/`cf`/`cn`
 copy the full path / filename / name without extension to the clipboard.

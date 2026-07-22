@@ -158,6 +158,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var preview: QLPreviewView!
     var folderScroll: NSScrollView!
     var folderText: NSTextView!
+    var outerSplit: NSSplitView!
+    var bottomTerm: LocalProcessTerminalView?
     var hintBar: NSView!
     var hintText: NSTextField!
     var cheatPanel: NSPanel?
@@ -176,7 +178,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         ("y→p", "copy"), ("x→p", "move"), ("d", "trash"), ("r", "rename"),
         ("a", "new"), ("cc", "path"), ("cf", "name"), ("␣", "select"),
         ("/", "find"),
-        ("⌘D", "split"), ("⌘E", "preview"), ("⌘K", "all keys"), ("⌘/", "bar"),
+        ("⌘D", "split"), ("⌘E", "preview"), ("⌘J", "terminal"), ("⌘K", "all keys"), ("⌘/", "bar"),
     ]
 
     // Full cheat sheet (⌘K): yazi's default mgr keymap, grouped, plus the
@@ -200,6 +202,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         ("Tabs", [("t", "new tab"), ("1…9", "switch tab"), ("[ / ]", "previous / next tab")]),
         ("Misc", [("w", "task manager"), (",", "sort menu"), ("~", "yazi help"), ("q", "quit")]),
         ("conspectus", [("⌘D", "toggle split pane"), ("⌘E", "toggle preview pane"),
+                        ("⌘J", "terminal panel (opens in yazi's dir)"),
                         ("⌘/", "toggle shortcut bar"), ("⌘K", "this cheat sheet"),
                         ("⌘⌥← →", "focus left / right pane"), ("=", "sync cd to other pane")]),
     ]
@@ -234,13 +237,14 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         observeAppearanceChanges()
         buildRightPane()
         buildSplitView()
+        buildOuterSplit()
         buildHintBar()
         buildWindow()
         addTitlebarButtons()
 
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(term)     // keystrokes go to the TUI
-        buildMenu()                         // ⌘D split, ⌘E preview, ⌘/ bar, ⌘⌥←/→ focus, ⌘Q/⌘H
+        buildMenu()                         // ⌘D split, ⌘E preview, ⌘J terminal, ⌘/ bar, ⌘⌥←/→ focus
         NSApp.applicationIconImage = conspectusIcon()   // Dock / Cmd-Tab icon
         NSApp.activate(ignoringOtherApps: true)
 
@@ -282,6 +286,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 applyTheme(self.term)
                 if let t2 = self.term2 { applyTheme(t2) }
+                if let bt = self.bottomTerm { applyTheme(bt) }
                 self.styleFolder()
                 self.styleHintBar()
                 self.styleCheatSheet()
@@ -322,6 +327,62 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         split.addSubview(term)
         split.addSubview(rightContainer)
         split.setPosition(760, ofDividerAt: 0)
+    }
+
+    /// Build the outer vertical stack: the pane split on top, optionally the
+    /// bottom terminal (⌘J) below it.
+    func buildOuterSplit() {
+        outerSplit = NSSplitView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
+        outerSplit.isVertical = false      // horizontal divider -> stacked panes
+        outerSplit.dividerStyle = .thin
+        outerSplit.delegate = self
+        outerSplit.addSubview(split)
+    }
+
+    // MARK: bottom terminal (⌘J) — a plain zsh in the dir yazi is visiting.
+    // Deliberately no live cd-follow (typing `cd` into a running interactive
+    // shell could clobber the user's input): closing (⌘J or `exit`) kills the
+    // shell, reopening starts a fresh one in the current yazi dir.
+    let termPanelHeight: CGFloat = 240
+    let minTermHeight: CGFloat = 120
+
+    @objc func toggleBottomTerminal() { bottomTerm == nil ? openBottomTerminal() : closeBottomTerminal() }
+
+    /// The directory currently visited in the active yazi pane, derived from
+    /// the last hovered path — hover events always come from the listing of
+    /// the directory containing them. Falls back to the start dir before the
+    /// first hover.
+    func currentYaziDir() -> String {
+        guard let p = lastPath else { return startPath }
+        return (p as NSString).deletingLastPathComponent
+    }
+
+    /// Open the bottom terminal: a fresh interactive login zsh in the current
+    /// yazi dir. A failed cd prints its error into the terminal itself and
+    /// the shell still starts (visible, not swallowed).
+    func openBottomTerminal() {
+        guard bottomTerm == nil else { return }
+        let t = makeTerm()
+        bottomTerm = t
+        outerSplit.addSubview(t)
+        outerSplit.setPosition(outerSplit.frame.height - termPanelHeight - outerSplit.dividerThickness,
+                               ofDividerAt: 0)
+        var env = ProcessInfo.processInfo.environment
+        env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
+        t.startProcess(executable: "/bin/zsh",
+                       args: ["-l", "-c", "cd \"\(currentYaziDir())\"; exec zsh -i"],
+                       environment: env.map { "\($0.key)=\($0.value)" })
+        window.makeFirstResponder(t)
+    }
+
+    /// Close the bottom terminal and kill its shell (a fresh one is started
+    /// per open — that is how the panel "follows" yazi's dir).
+    func closeBottomTerminal() {
+        guard let t = bottomTerm else { return }
+        bottomTerm = nil
+        if t.superview != nil { t.removeFromSuperview() }
+        t.terminate()
+        window.makeFirstResponder(term)
     }
 
     /// Build the shortcut bar: one line of key/label pairs in the theme
@@ -371,8 +432,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         hintBar.isHidden = !visible
         let barH = visible ? hintBarHeight : 0
         hintBar.frame = NSRect(x: 0, y: 0, width: content.bounds.width, height: hintBarHeight)
-        split.frame = NSRect(x: 0, y: barH, width: content.bounds.width,
-                             height: content.bounds.height - barH)
+        outerSplit.frame = NSRect(x: 0, y: barH, width: content.bounds.width,
+                                  height: content.bounds.height - barH)
     }
 
     /// Toggle the floating cheat-sheet panel (full grouped key list — the
@@ -491,9 +552,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                           backing: .buffered, defer: false)
         window.title = "conspectus"
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
-        split.autoresizingMask = [.width, .height]
+        outerSplit.autoresizingMask = [.width, .height]
         content.addSubview(hintBar)
-        content.addSubview(split)
+        content.addSubview(outerSplit)
         window.contentView = content
         applyHintBarVisibility()
         if !window.setFrameUsingName("ConspectusMain") { window.center() }
@@ -534,6 +595,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     // performKeyEquivalent), so nothing is intercepted inside yazi itself.
     //   ⌘D  toggle split pane (kitty muscle memory)
     //   ⌘E  toggle preview pane
+    //   ⌘J  toggle bottom terminal (VS Code muscle memory)
     //   ⌘/  toggle shortcut bar
     //   ⌘⌥← / ⌘⌥→  focus left / right pane (Alt+arrow habit + Cmd)
     func buildMenu() {
@@ -554,6 +616,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let previewToggle = NSMenuItem(title: "Toggle Preview Pane", action: #selector(togglePreviewPane), keyEquivalent: "e")
         previewToggle.target = self
         viewMenu.addItem(previewToggle)
+        let termToggle = NSMenuItem(title: "Toggle Terminal Panel", action: #selector(toggleBottomTerminal), keyEquivalent: "j")
+        termToggle.target = self
+        viewMenu.addItem(termToggle)
         let hints = NSMenuItem(title: "Toggle Shortcut Bar", action: #selector(toggleHintBar), keyEquivalent: "/")
         hints.target = self
         viewMenu.addItem(hints)
@@ -755,7 +820,24 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     // divider dragging via the constrain methods). Works for 1–3 panes.
     let minPane: CGFloat = 300
 
+    /// Outer (vertical) resize: the bottom terminal keeps its height, the
+    /// pane area above takes the rest.
+    func resizeOuterSplit(_ sv: NSSplitView) {
+        guard sv.subviews.count == 2 else {
+            sv.subviews.first?.frame = sv.bounds
+            return
+        }
+        let total = sv.frame.height - sv.dividerThickness
+        let termH = min(max(minTermHeight, sv.subviews[1].frame.height),
+                        max(minTermHeight, total - minPane))
+        let mainH = total - termH
+        sv.subviews[0].frame = NSRect(x: 0, y: 0, width: sv.frame.width, height: mainH)
+        sv.subviews[1].frame = NSRect(x: 0, y: mainH + sv.dividerThickness,
+                                      width: sv.frame.width, height: termH)
+    }
+
     func splitView(_ sv: NSSplitView, resizeSubviewsWithOldSize oldSize: NSSize) {
+        if sv === outerSplit { resizeOuterSplit(sv); return }
         let n = sv.subviews.count
         guard n > 1 else { sv.adjustSubviews(); return }
         let total = sv.frame.width - CGFloat(n - 1) * sv.dividerThickness
@@ -776,10 +858,12 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         }
     }
     func splitView(_ sv: NSSplitView, constrainMinCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat {
+        if sv === outerSplit { return max(p, minPane) }   // pane area keeps ≥ minPane height
         // Left of divider i sit panes 0…i and i dividers.
-        max(p, CGFloat(i + 1) * minPane + CGFloat(i) * sv.dividerThickness)
+        return max(p, CGFloat(i + 1) * minPane + CGFloat(i) * sv.dividerThickness)
     }
     func splitView(_ sv: NSSplitView, constrainMaxCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat {
+        if sv === outerSplit { return min(p, sv.frame.height - minTermHeight - sv.dividerThickness) }
         // Right of divider i sit panes i+1…n-1, each needing minPane + divider.
         let n = CGFloat(sv.subviews.count)
         return min(p, sv.frame.width - (n - 1 - CGFloat(i)) * (minPane + sv.dividerThickness))
@@ -790,8 +874,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         DispatchQueue.main.async {
             if source === self.term {
                 unlink(fifoPath); NSApp.terminate(nil)   // left pane quit -> close app
-            } else {
+            } else if source === self.term2 {
                 self.removeSecondPane()                  // second pane's yazi quit -> collapse
+            } else if source === self.bottomTerm {
+                self.closeBottomTerminal()               // `exit` in the shell -> collapse panel
             }
         }
     }
