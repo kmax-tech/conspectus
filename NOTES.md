@@ -180,6 +180,25 @@ manual recovery for a wedged preview.
 auto-closes, must rebuild; (2) request churn → debounce; (3) hide/unhide →
 never do it, cover instead.
 
+## 2026-07-23 — Click-to-navigate felt sluggish: a login shell per click
+
+**Problem:** Every folder/file click in the preview listing spawned
+`zsh -lc "ya pub-to …"` — the login shell exists only because the app
+inherits no useful PATH (Spotlight/Hammerspoon launch) and must find `ya`.
+Measured: the shell costs ~130ms+ warm (worse cold / with a heavy
+zprofile), the actual `ya pub-to` broadcast ~10ms. Nothing was broken, so
+the ~10x overhead was silent — clicks just felt laggy.
+
+**Solution:** Resolve `ya` once at startup (`resolveYaPath`, background
+login shell), cache the path, spawn `ya` directly per click with real
+argv (which also removed the env-var quoting detour). Shell fallback
+stays only for "not resolved yet / ya missing", with a warning.
+
+**Notes:** General rule: the no-PATH problem makes `zsh -lc` tempting for
+any CLI call — fine for one-off/startup work (`launch()` legitimately
+uses a login shell for the terminal panes), never per user action.
+Resolve the binary once instead.
+
 ## 2026-07-22 — Quick Look wedges under churn; debounce the requests
 
 **Problem:** Racing through hundreds of PDFs (held-down key) set
