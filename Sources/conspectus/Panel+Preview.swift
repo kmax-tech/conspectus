@@ -111,32 +111,18 @@ extension Panel {
             // tracking, and attachPreview restores the preview from it.
             if !self.previewAttached { return }
             if dir {
-                self.previewDirty = true   // preview pane goes hidden; QL view may auto-close
                 self.showFolder(path, generation: gen)
             } else {
-                // Switch panes immediately, but DEBOUNCE the actual Quick Look
-                // request: racing through hundreds of files must not hammer the
-                // QL service with every intermediate item — that can wedge the
-                // remote extension into a permanent spinner. Only the hover the
-                // user settles on (~120ms) is requested.
-                if !self.previewDirty {
-                    self.folderScroll.isHidden = true
-                    self.preview.isHidden = false
-                }
+                // DEBOUNCE the Quick Look request: racing through hundreds of
+                // files must not hammer the QL service with every intermediate
+                // item — that can wedge the remote extension into a permanent
+                // spinner. Only the hover the user settles on (~120ms) is
+                // requested; until then the current pane content stays.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                     guard self.isCurrentListing(gen), self.previewAttached else { return }
-                    if self.previewDirty {
-                        // dir -> file: a QLPreviewView that spent time hidden can
-                        // come back permanently blank (its remote QL extension
-                        // goes away). Rebuild from scratch; file -> file keeps
-                        // the fast in-place swap.
-                        self.rebuildPreview()
-                        self.previewDirty = false
-                    }
-                    self.folderScroll.isHidden = true
-                    self.preview.isHidden = false
                     self.preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
                     self.preview.refreshPreviewItem()
+                    self.folderScroll.isHidden = true   // uncover the preview
                 }
             }
         }
@@ -146,9 +132,14 @@ extension Panel {
     /// thread (mirrors Quick Look, which is asynchronous by design). The
     /// previous listing stays visible until the new one lands — Finder-style,
     /// no white flash, no main-thread hitch.
+    ///
+    /// The QLPreviewView is COVERED by the opaque listing, never hidden:
+    /// hiding it triggers QL's _teardownScrollers, which can crash in KVO
+    /// removeObserver when its internal bindings are torn (seen in the wild),
+    /// and a hidden view also auto-closes its remote extension (the blank-
+    /// preview class of bugs). Covering sidesteps all of it.
     func showFolder(_ path: String, generation gen: Int) {
-        preview.isHidden = true
-        folderScroll.isHidden = false
+        folderScroll.isHidden = false   // opaque — covers the always-alive preview
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let contents = loadFolder(path, cap: folderListingCap)

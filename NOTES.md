@@ -160,6 +160,26 @@ EOF between writers, so the wedged-open state cannot occur at all.
 ~/.cache/conspectus/` and the reader thread first — this failure mode is
 silent by nature. Multiple conspectus windows are now safe to run at once.
 
+## 2026-07-23 — Third QLPreviewView trap: hiding it can crash in KVO teardown
+
+**Problem:** `preview.isHidden = true` (on folder hover) crashed with SIGABRT:
+hiding the view runs QL's `_updateControls → _teardownScrollers → unbind →
+removeObserver:forKeyPath:`, and when its internal bindings are already torn
+(after heavy PDF churn) that KVO removal throws an uncaught exception. Swift
+cannot catch ObjC exceptions, so the app dies.
+
+**Solution:** Never hide (or un-hide) the QLPreviewView again. The opaque
+folder listing is a sibling ABOVE it and simply **covers** it; file hovers
+uncover it. Bonus: the whole hidden-state bug family disappears — no
+auto-close while hidden, no blank-view rebuild on dir→file (previewDirty
+removed), less QL churn overall. The rebuild survives only where the view
+actually leaves the window: attachPreview (⌘E) — which doubles as the
+manual recovery for a wedged preview.
+
+**Notes:** QLPreviewView state rules learned so far: (1) leaves window →
+auto-closes, must rebuild; (2) request churn → debounce; (3) hide/unhide →
+never do it, cover instead.
+
 ## 2026-07-22 — Quick Look wedges under churn; debounce the requests
 
 **Problem:** Racing through hundreds of PDFs (held-down key) set

@@ -337,7 +337,6 @@ extension Panel {
         guard !previewAttached else { return }
         split.addSubview(rightContainer)
         rebuildPreview()
-        previewDirty = false
         evenOutPanes()
         if let p = lastPath { update(p) }
         previewButton?.state = .on

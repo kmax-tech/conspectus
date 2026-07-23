@@ -39,9 +39,6 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var cheatPanel: NSPanel?
     var cheatText: NSTextView?
     var lastPath: String?
-    // True while a folder listing is (or was) showing: the hidden QLPreviewView
-    // may have auto-closed, so the next file preview must rebuild it first.
-    var previewDirty = false
     weak var lastFocusedTerm: LocalProcessTerminalView?
     weak var lastTopTerm: LocalProcessTerminalView?   // ⌥↑ returns here from the terminal panel
 
