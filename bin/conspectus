@@ -58,10 +58,17 @@ elif [[ -f "$src/theme.toml" ]]; then
   ln -sfn "$src/theme.toml" "$ov/theme.toml"
 fi
 
-# yazi.toml: split keeps the user's full 3-column config; preview modes hide
-# yazi's own preview column ([mgr] ratio = [1, 4, 0]) — the Quick Look pane
-# is the sole preview there (files and folders).
-if [[ $split_mode -eq 1 ]]; then
+# yazi.toml: split keeps the user's full 3-column config. Preview modes
+# default to 2 columns ([mgr] ratio = [1, 4, 0] — yazi's own preview column
+# hidden, the Quick Look pane is the sole preview); CONSPECTUS_COLUMNS=3
+# keeps the user's full config instead, so yazi's look-ahead column shows
+# IN ADDITION to the Quick Look pane.
+cols="${CONSPECTUS_COLUMNS:-2}"
+case "$cols" in
+  2|3) ;;
+  *) echo "conspectus: CONSPECTUS_COLUMNS must be 2 or 3 (got '$cols') — using 2" >&2; cols=2 ;;
+esac
+if [[ $split_mode -eq 1 || $cols -eq 3 ]]; then
   [[ -f "$src/yazi.toml" ]] && ln -sfn "$src/yazi.toml" "$ov/yazi.toml"
 else
   if [[ -f "$src/yazi.toml" ]]; then

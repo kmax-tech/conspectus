@@ -81,6 +81,12 @@ conspectus triple      # two yazi panes + Quick Look preview (3 panes)
 Start dir is `$HOME` unless a `[path]` is given. The TUI is yazi; override with
 the `CONSPECTUS_CMD` env var (e.g. `CONSPECTUS_CMD=lf conspectus`).
 
+**yazi columns:** preview modes run yazi at 2 columns by default (its own
+preview column hidden — the Quick Look pane is the preview).
+`CONSPECTUS_COLUMNS=3 conspectus` keeps your full 3-column config instead:
+yazi's look-ahead column *plus* the Quick Look pane. Split mode always uses
+your full config.
+
 ## Dual-pane split
 
 Two **yazi panes** instead of terminal + preview — an orthodox (Norton/Total
