@@ -160,28 +160,23 @@ extension Panel {
                 // files must not hammer the QL service with every intermediate
                 // item — that can wedge the remote extension into a permanent
                 // spinner. Only the hover the user settles on (~120ms) is
-                // requested — BUT with a max-latency escape: a sustained event
-                // stream (fzf focus events while rg is still streaming millions
-                // of lines) would otherwise cancel the debounce forever and the
-                // preview would never render. If the last request is older than
-                // 0.5s, render immediately (leading edge) — at most ~2 QL
-                // requests/s under any churn, far below the wedge threshold.
-                if Date().timeIntervalSince(self.lastQLRequest) > 0.5 {
+                // requested; until then the current pane content stays. This
+                // deliberately starves during machine-speed event streams (fzf
+                // focus flips while rg is still streaming): nothing meaningful
+                // is on screen long enough to preview, and a mid-churn
+                // "max-latency" render was tried and REVERTED — even ~2
+                // requests/s of fresh PDFs wedged QL and stalled the main
+                // thread (see NOTES).
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    guard self.isCurrentListing(gen), self.previewAttached else { return }
                     self.requestQLPreview(path)
-                } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                        guard self.isCurrentListing(gen), self.previewAttached else { return }
-                        self.requestQLPreview(path)
-                    }
                 }
             }
         }
     }
 
-    /// Point Quick Look at `path` and uncover the preview. Main thread only;
-    /// stamps `lastQLRequest` for the debounce's max-latency check.
+    /// Point Quick Look at `path` and uncover the preview. Main thread only.
     func requestQLPreview(_ path: String) {
-        lastQLRequest = Date()
         preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
         preview.refreshPreviewItem()
         folderScroll.isHidden = true   // uncover the preview

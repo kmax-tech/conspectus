@@ -39,10 +39,6 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var cheatPanel: NSPanel?
     var cheatText: NSTextView?
     var lastPath: String?
-    /// Time of the last Quick Look request — the debounce's max-latency check:
-    /// sustained FIFO churn (fzf streaming focus events) must still render
-    /// about twice a second instead of debouncing forever. Main thread only.
-    var lastQLRequest = Date.distantPast
     /// Absolute path of the `ya` CLI, resolved once at startup by
     /// `resolveYaPath()` — click-to-navigate spawns it directly instead of
     /// paying a login-shell startup (~150ms+) on every click. Main thread only.

@@ -216,13 +216,18 @@ request time inside the debounce, not per hover event.
 **Notes:** Manual recovery for a wedged preview (should it still happen):
 ⌘E twice — detach + attach rebuilds the QLPreviewView from scratch.
 
-2026-07-23 amendment: a pure debounce starves under a *sustained* stream —
-the fzf `focus`→FIFO coupling (yazi `s`/`S`) fires on every top-item change
-while rg streams millions of lines, so the 120ms of silence never comes and
-the preview froze for whole searches. The debounce now has a max-latency
-escape: if the last QL request is >0.5s old, render immediately (leading
-edge). Worst case ~2 requests/s — far below the per-keystroke storm that
-wedged QL. Bonus: the first hover after idle renders instantly.
+2026-07-23 amendment — max-latency escape tried and REVERTED: the fzf
+`focus`→FIFO coupling (yazi `s`/`S`) fires on every top-item change while
+rg streams, so the debounce never settles and the preview looked frozen.
+First fix attempt: render anyway when the last QL request is >0.5s old.
+Result: main-thread stalls (watchdog reports) and a wedged PDF preview —
+even ~2 fresh-document requests/s is enough to back up the QL service,
+and `previewItem`/`refreshPreviewItem` XPC then blocks the main thread.
+The *actual* bug behind the frozen preview was yazi's `%s` substitution
+corrupting the FIFO writes (see dotfiles keymap GOTCHA); with that fixed,
+pure debounce is correct by design: machine-speed streams show nothing
+worth previewing, human dwell ≥120ms renders. Do not resurrect the
+escape.
 
 ## 2026-07-22 — Self-contained: bundled conspectus.yazi, no qlpeek CLI
 
