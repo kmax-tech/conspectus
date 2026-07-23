@@ -177,6 +177,7 @@ extension Panel {
 
     /// Point Quick Look at `path` and uncover the preview. Main thread only.
     func requestQLPreview(_ path: String) {
+        logEvent("requestQLPreview \(path)")
         preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
         preview.refreshPreviewItem()
         folderScroll.isHidden = true   // uncover the preview
@@ -193,6 +194,7 @@ extension Panel {
     /// and a hidden view also auto-closes its remote extension (the blank-
     /// preview class of bugs). Covering sidesteps all of it.
     func showFolder(_ path: String, generation gen: Int) {
+        logEvent("showFolder \(path)")
         folderScroll.isHidden = false   // opaque — covers the always-alive preview
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }

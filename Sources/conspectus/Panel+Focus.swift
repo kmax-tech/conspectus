@@ -15,6 +15,15 @@ import ConspectusCore
 final class IntentFocusPreviewView: QLPreviewView {
     var allowFocus = false
     override var acceptsFirstResponder: Bool { allowFocus }
+
+    // Diagnosis hook (CONSPECTUS_EVENT_LOG): proves whether wheel events still
+    // reach this view when "scrolling stopped working" — arriving events with
+    // no visible effect indict the remote QL extension, absent events indict
+    // the responder/hit-test routing.
+    override func scrollWheel(with event: NSEvent) {
+        logEvent("scrollWheel@QLPreviewView phase=\(event.phase.rawValue) momentum=\(event.momentumPhase.rawValue) dy=\(event.scrollingDeltaY)")
+        super.scrollWheel(with: event)
+    }
 }
 
 /// Transparent overlay that only draws the focus border and never intercepts

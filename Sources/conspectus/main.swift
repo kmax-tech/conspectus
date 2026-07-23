@@ -35,6 +35,24 @@ func die(_ msg: String) -> Never {
     exit(1)
 }
 
+/// Event diagnosis, off by default: CONSPECTUS_EVENT_LOG=<path> appends one
+/// timestamped line per instrumented event (scrolls reaching the Quick Look
+/// view, preview requests). Used to tell "events never arrive" (routing bug)
+/// from "events arrive but the remote QL extension is dead" (rebuild needed).
+/// Side effects: appends to the log file when the env var is set.
+let eventLogPath = ProcessInfo.processInfo.environment["CONSPECTUS_EVENT_LOG"]
+func logEvent(_ msg: String) {
+    guard let path = eventLogPath else { return }
+    let line = "\(Date()) \(msg)\n"
+    if let fh = FileHandle(forWritingAtPath: path) {
+        defer { try? fh.close() }
+        fh.seekToEndOfFile()
+        fh.write(Data(line.utf8))
+    } else if !FileManager.default.createFile(atPath: path, contents: Data(line.utf8)) {
+        warn("conspectus: cannot write CONSPECTUS_EVENT_LOG at \(path)")
+    }
+}
+
 // Headless icon dump: `conspectus --icon <path>` renders the app icon to a PNG
 // and exits (install-app.sh turns it into an .icns). Handled before anything
 // else so the <path> argument is never mistaken for a start directory. Single

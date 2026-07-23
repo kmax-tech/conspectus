@@ -180,6 +180,9 @@ the active instance automatically — no focus tracking involved. Note that
   yazi's default) is kept.
 - Font: JetBrainsMono Nerd Font Mono by default; override with `CONSPECTUS_FONT` /
   `CONSPECTUS_FONT_SIZE`.
+- Event diagnosis (off by default): `CONSPECTUS_EVENT_LOG=<path>` appends a line
+  per preview request and per scroll event reaching the Quick Look view — for
+  debugging a preview that stops reacting.
 - Theme: follows the macOS system appearance — Catppuccin Latte in light mode,
   Mocha in dark, re-themed live on toggle. The terminal palette is set by
   conspectus; yazi picks the matching flavor by querying our background (OSC 11)
