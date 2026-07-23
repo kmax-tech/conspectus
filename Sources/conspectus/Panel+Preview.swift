@@ -53,11 +53,28 @@ extension Panel {
         }
     }
 
-    // MARK: NSTextViewDelegate — click a folder row in the listing.
+    // MARK: NSTextViewDelegate — click a row in the folder listing.
+    // Folder → navigate yazi there; file → preview it in the Quick Look pane
+    // (a peek: yazi's cursor stays put; the listing returns on the next hover).
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
         guard let url = link as? URL else { return false }
-        navigateYazi(to: url.path)
+        if url.hasDirectoryPath {
+            navigateYazi(to: url.path)
+        } else {
+            previewFile(url.path)
+        }
         return true
+    }
+
+    /// Show a file in the Quick Look pane on demand (folder-row click), without
+    /// touching yazi. Bumps the listing generation so an in-flight folder load
+    /// can't cover the preview back up, then uncovers and sets the item.
+    func previewFile(_ path: String) {
+        guard previewAttached else { return }
+        _ = bumpListingGeneration()
+        preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
+        preview.refreshPreviewItem()
+        folderScroll.isHidden = true   // uncover the preview
     }
 
     /// Ask the yazi pane(s) to cd — the same `panesync-cd` DDS broadcast the

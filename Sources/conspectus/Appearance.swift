@@ -54,8 +54,9 @@ let folderListingCap = 500
 
 /// Render loaded folder contents in the current theme. Does no I/O — safe to
 /// build off the main thread; TextKit layout happens when the result is
-/// applied to the text view on main. Directory rows carry a .link with their
-/// URL so a click can navigate yazi there (mimicking yazi's own 3rd column).
+/// applied to the text view on main. Every row carries a .link with its URL
+/// (directory-flag set accordingly): clicking a folder navigates yazi there,
+/// clicking a file previews it in the Quick Look pane.
 func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedString {
     let pal = activePalette()
     let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
@@ -73,11 +74,10 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
     for e in contents.entries {
         let icon = e.isDir ? FileIcon(glyph: "\u{f07b}", color: blue)   // nf-fa-folder for dirs
                            : fileIcon(e.name, pal)
-        var attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: icon.color]
-        if e.isDir {
-            attrs[.link] = URL(fileURLWithPath: (dir as NSString).appendingPathComponent(e.name),
-                               isDirectory: true)
-        }
+        let url = URL(fileURLWithPath: (dir as NSString).appendingPathComponent(e.name),
+                      isDirectory: e.isDir)
+        let attrs: [NSAttributedString.Key: Any] =
+            [.font: font, .foregroundColor: icon.color, .link: url]
         out.append(NSAttributedString(string: icon.glyph + "  " + e.name + (e.isDir ? "/" : "") + "\n",
                                       attributes: attrs))
     }
