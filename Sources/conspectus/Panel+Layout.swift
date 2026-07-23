@@ -38,13 +38,35 @@ extension Panel {
         rightContainer.addSubview(previewFocusRing)   // last -> stays on top
     }
 
+    /// Wrap a terminal in a padded container: `termMargin` between the pane
+    /// edge and the text, margin painted in the theme background. The split
+    /// views hold these containers; the terminal autoresizes inside.
+    func makeTermPane(_ t: LocalProcessTerminalView) -> NSView {
+        let pane = NSView(frame: t.frame)
+        pane.wantsLayer = true
+        pane.layer?.backgroundColor = nsColor(activePalette().bg).cgColor
+        t.frame = pane.bounds.insetBy(dx: termMargin, dy: termMargin)
+        t.autoresizingMask = [.width, .height]
+        pane.addSubview(t)
+        return pane
+    }
+
+    /// Repaint the pane margins in the active palette (theme changes).
+    func styleTermPanes() {
+        let bg = nsColor(activePalette().bg).cgColor
+        for pane in [termPane, term2Pane, bottomPane] {
+            pane?.layer?.backgroundColor = bg
+        }
+    }
+
     /// Build the split view holding terminal (left) and preview (right).
     func buildSplitView() {
         split = NSSplitView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
         split.isVertical = true            // vertical divider -> panes side by side
         split.dividerStyle = .thin
         split.delegate = self              // keep proportions on resize, min widths
-        split.addSubview(term)
+        termPane = makeTermPane(term)
+        split.addSubview(termPane)
         split.addSubview(rightContainer)
         split.setPosition(760, ofDividerAt: 0)
     }
@@ -67,16 +89,16 @@ extension Panel {
     func layoutOuterPanes(terminalHeight: CGFloat? = nil) {
         let w = outerSplit.frame.width
         let h = outerSplit.frame.height
-        guard let t = bottomTerm, t.superview === outerSplit else {
+        guard let pane = bottomPane, pane.superview === outerSplit else {
             split.frame = NSRect(x: 0, y: 0, width: w, height: h)
             return
         }
-        let want = terminalHeight ?? t.frame.height
+        let want = terminalHeight ?? pane.frame.height
         let termH = min(max(minTermHeight, want),
                         max(minTermHeight, h - minPane - outerSplit.dividerThickness))
         let mainH = h - termH - outerSplit.dividerThickness
         split.frame = NSRect(x: 0, y: 0, width: w, height: mainH)
-        t.frame = NSRect(x: 0, y: mainH + outerSplit.dividerThickness, width: w, height: termH)
+        pane.frame = NSRect(x: 0, y: mainH + outerSplit.dividerThickness, width: w, height: termH)
     }
 
     /// Build the shortcut bar: one line of key/label pairs in the theme
@@ -263,12 +285,14 @@ extension Panel {
         guard term2 == nil else { return }
         let t2 = makeTerm()
         term2 = t2
+        let pane = makeTermPane(t2)
+        term2Pane = pane
         // Keep the preview rightmost: the second terminal goes between the
         // left terminal and the preview container.
         if previewAttached {
-            split.addSubview(t2, positioned: .above, relativeTo: term)
+            split.addSubview(pane, positioned: .above, relativeTo: termPane)
         } else {
-            split.addSubview(t2)
+            split.addSubview(pane)
         }
         evenOutPanes()
         // Same FIFO as the left pane: only the pane being navigated emits
@@ -282,7 +306,8 @@ extension Panel {
     func removeSecondPane() {
         guard let t2 = term2 else { return }
         term2 = nil
-        if t2.superview != nil { t2.removeFromSuperview() }
+        term2Pane?.removeFromSuperview()
+        term2Pane = nil
         t2.terminate()
         if previewAttached {
             evenOutPanes()      // preview never left the window — no rebuild needed

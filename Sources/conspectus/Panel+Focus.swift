@@ -95,10 +95,10 @@ extension Panel {
     func updateFocusBorders() {
         guard let window = window else { return }
         let fr = window.firstResponder
-        var targets: [(NSView, Bool)] = [(term, fr === term)]
-        if let t2 = term2 { targets.append((t2, fr === t2)) }
+        var targets: [(NSView, Bool)] = [(termPane, fr === term)]
+        if let t2 = term2, let pane = term2Pane { targets.append((pane, fr === t2)) }
         if previewAttached { targets.append((previewFocusRing, previewHasFocus(fr))) }
-        if let bt = bottomTerm { targets.append((bt, fr === bt)) }
+        if let bt = bottomTerm, let pane = bottomPane { targets.append((pane, fr === bt)) }
         let show = targets.count > 1
         let color = nsColor(activePalette().fg).withAlphaComponent(0.25).cgColor
         for (view, focused) in targets {

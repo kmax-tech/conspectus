@@ -30,7 +30,9 @@ extension Panel {
         guard bottomTerm == nil else { return }
         let t = makeTerm()
         bottomTerm = t
-        outerSplit.addSubview(t)
+        let pane = makeTermPane(t)
+        bottomPane = pane
+        outerSplit.addSubview(pane)
         layoutOuterPanes(terminalHeight: termPanelHeight)   // frames BEFORE startProcess so cols/rows fit
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
@@ -45,7 +47,8 @@ extension Panel {
     func closeBottomTerminal() {
         guard let t = bottomTerm else { return }
         bottomTerm = nil
-        if t.superview != nil { t.removeFromSuperview() }
+        bottomPane?.removeFromSuperview()
+        bottomPane = nil
         t.terminate()
         layoutOuterPanes()
         window.makeFirstResponder(term)
