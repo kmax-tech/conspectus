@@ -20,13 +20,13 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var previewButton: NSButton!
     var term: LocalProcessTerminalView!
     var term2: LocalProcessTerminalView?
-    // Padded containers around the terminals: a light margin between window
+    // Padded containers around the terminals: light padding between pane
     // edge and text (the preview pane brings its own). The split views hold
     // these panes; the terminal views live inset inside them.
     var termPane: NSView!
     var term2Pane: NSView?
     var bottomPane: NSView?
-    let termMargin: CGFloat = 8
+    let termPadding: CGFloat = 8
     var preview: IntentFocusPreviewView!
     var previewFocusRing: PassthroughBorderView!
     var focusObservation: NSKeyValueObservation?

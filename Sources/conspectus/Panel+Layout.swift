@@ -38,20 +38,20 @@ extension Panel {
         rightContainer.addSubview(previewFocusRing)   // last -> stays on top
     }
 
-    /// Wrap a terminal in a padded container: `termMargin` between the pane
-    /// edge and the text, margin painted in the theme background. The split
+    /// Wrap a terminal in a padded container: `termPadding` between the pane
+    /// edge and the text, padding painted in the theme background. The split
     /// views hold these containers; the terminal autoresizes inside.
     func makeTermPane(_ t: LocalProcessTerminalView) -> NSView {
         let pane = NSView(frame: t.frame)
         pane.wantsLayer = true
         pane.layer?.backgroundColor = nsColor(activePalette().bg).cgColor
-        t.frame = pane.bounds.insetBy(dx: termMargin, dy: termMargin)
+        t.frame = pane.bounds.insetBy(dx: termPadding, dy: termPadding)
         t.autoresizingMask = [.width, .height]
         pane.addSubview(t)
         return pane
     }
 
-    /// Repaint the pane margins in the active palette (theme changes).
+    /// Repaint the pane padding in the active palette (theme changes).
     func styleTermPanes() {
         let bg = nsColor(activePalette().bg).cgColor
         for pane in [termPane, term2Pane, bottomPane] {
