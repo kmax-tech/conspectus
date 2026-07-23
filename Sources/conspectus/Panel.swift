@@ -136,6 +136,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         startMainThreadWatchdog()
     }
 
+    /// Single-window app: closing the window (red button) quits, exactly like
+    /// ⌘Q or quitting yazi — the app must never linger window-less (that state
+    /// crashed in applicationDidResignActive on the released window).
+    func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
+
     /// Main-thread watchdog: a utility thread pings the main thread every 2s;
     /// if a ping goes unanswered for 2s the UI is frozen. The stall is then
     /// logged to stderr and `/usr/bin/sample` captures our own call stacks to

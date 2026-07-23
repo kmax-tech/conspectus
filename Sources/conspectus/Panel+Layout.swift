@@ -168,6 +168,12 @@ extension Panel {
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
                           backing: .buffered, defer: false)
         window.title = "conspectus"
+        // AppKit's legacy default releases a closed window even though `self.window`
+        // still points at it — the next access (e.g. applicationDidResignActive
+        // touching firstResponder) is then a use-after-free crash. Keep ownership
+        // with ARC; closing quits the app via
+        // applicationShouldTerminateAfterLastWindowClosed.
+        window.isReleasedWhenClosed = false
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 1340, height: 900))
         outerSplit.autoresizingMask = [.width, .height]
         content.addSubview(hintBar)
