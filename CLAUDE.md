@@ -11,8 +11,12 @@ The thread through every rule: **nothing important should be implicit.**
 
 - `Sources/ConspectusCore/` — pure, unit-testable logic (start-dir resolution,
   palettes/hex parsing, icon mapping, listing order). No SwiftTerm dependency.
-- `Sources/conspectus/` — the AppKit shell (`main.swift`) and app icon
-  (`Icon.swift`). UI, processes, FIFO — the side-effect edge of the system.
+- `Sources/conspectus/` — the AppKit shell: `main.swift` (bootstrap only),
+  `Appearance.swift` (theming/rendering), `Panel.swift` (state + lifecycle)
+  with themed extensions (`Panel+Layout`, `Panel+Focus`, `Panel+Preview`,
+  `Panel+Terminal`, `Panel+CheatSheet`), and `Icon.swift`. UI, processes,
+  FIFO — the side-effect edge of the system. Top-level code stays in
+  `main.swift` (Swift requires it); stored properties stay in `Panel.swift`.
 - `Tests/ConspectusCoreTests/` — XCTest suite for the core, mirroring its files.
 - `bin/conspectus` — launcher script (builds the yazi overlay config and
   injects the bundled plugin).
