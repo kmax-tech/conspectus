@@ -39,9 +39,17 @@ function M:setup()
 	local ok2, peer = pcall(function() return os.getenv("CONSPECTUS_PEER") end)
 	if ok2 and peer and #peer > 0 then
 		local emit = ya.emit or ya.mgr_emit
+		-- panesync-cd: enter a directory (folder-row click, `=` key).
 		ps.sub_remote("panesync-cd", function(body)
 			if type(body) == "string" and #body > 0 then
 				emit("cd", { body })
+			end
+		end)
+		-- panesync-reveal: move the cursor onto a path (file-row click) — cds
+		-- to its parent and selects it, so the hover sub above previews it.
+		ps.sub_remote("panesync-reveal", function(body)
+			if type(body) == "string" and #body > 0 then
+				emit("reveal", { body })
 			end
 		end)
 	end

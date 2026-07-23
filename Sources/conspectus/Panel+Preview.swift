@@ -54,52 +54,40 @@ extension Panel {
     }
 
     // MARK: NSTextViewDelegate — click a row in the folder listing.
-    // Folder → navigate yazi there; file → preview it in the Quick Look pane
-    // (a peek: yazi's cursor stays put; the listing returns on the next hover).
+    // Both cases just hand the path to yazi and let the normal hover pipeline
+    // do the rest: a folder is entered (cd), a file is revealed (cursor moves
+    // onto it) — which fires a hover and previews it. Symmetric, no special
+    // preview handling here.
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
         guard let url = link as? URL else { return false }
-        if url.hasDirectoryPath {
-            navigateYazi(to: url.path)
-        } else {
-            previewFile(url.path)
-        }
+        sendToYazi(url.path, action: url.hasDirectoryPath ? "cd" : "reveal")
         return true
     }
 
-    /// Show a file in the Quick Look pane on demand (folder-row click), without
-    /// touching yazi. Bumps the listing generation so an in-flight folder load
-    /// can't cover the preview back up, then uncovers and sets the item.
-    func previewFile(_ path: String) {
-        guard previewAttached else { return }
-        _ = bumpListingGeneration()
-        preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
-        preview.refreshPreviewItem()
-        folderScroll.isHidden = true   // uncover the preview
-    }
-
-    /// Ask the yazi pane(s) to cd — the same `panesync-cd` DDS broadcast the
-    /// `=` key uses; the panesync plugin (guarded by CONSPECTUS_PEER) follows.
-    /// Works from outside yazi without a YAZI_ID (verified). In triple mode
-    /// both panes follow — the `=` semantics. yazi then publishes new hover
-    /// events, so the preview updates to the entered directory by itself.
+    /// Broadcast a path to the yazi pane(s) over the DDS — `cd` enters a
+    /// directory, `reveal` moves the cursor onto a file (the bundled
+    /// conspectus.yazi plugin, guarded by CONSPECTUS_PEER, subscribes to
+    /// `panesync-<action>`). Works from outside yazi without a YAZI_ID. yazi
+    /// then emits a hover event, so the preview updates by itself — same path
+    /// as any keyboard navigation. In triple mode both panes follow.
     /// Side effects: spawns `ya` via a login shell.
-    func navigateYazi(to dir: String) {
+    func sendToYazi(_ path: String, action: String) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        p.arguments = ["-lc", "ya pub-to 0 panesync-cd --str \"$CONSPECTUS_CLICK_DIR\""]
+        p.arguments = ["-lc", "ya pub-to 0 panesync-\(action) --str \"$CONSPECTUS_CLICK_PATH\""]
         var env = ProcessInfo.processInfo.environment
-        env["CONSPECTUS_CLICK_DIR"] = dir
+        env["CONSPECTUS_CLICK_PATH"] = path
         p.environment = env
         p.terminationHandler = { proc in
             if proc.terminationStatus != 0 {
                 warn("conspectus: ya pub-to failed (exit \(proc.terminationStatus)) — "
-                     + "click-to-cd needs yazi's panesync plugin")
+                     + "click-to-navigate needs the bundled conspectus.yazi plugin")
             }
         }
         do {
             try p.run()
         } catch {
-            warn("conspectus: cannot spawn ya for click-to-cd: \(error.localizedDescription)")
+            warn("conspectus: cannot spawn ya for click-to-navigate: \(error.localizedDescription)")
         }
     }
 
