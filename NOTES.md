@@ -178,7 +178,28 @@ manual recovery for a wedged preview.
 
 **Notes:** QLPreviewView state rules learned so far: (1) leaves window →
 auto-closes, must rebuild; (2) request churn → debounce; (3) hide/unhide →
-never do it, cover instead.
+never do it, cover instead; (4) pointer exit/re-entry → remote may stop
+processing wheel events, re-arm with a focus nudge (next entry).
+
+## 2026-07-24 — Fourth QLPreviewView trap: wheel events die after mouse re-entry
+
+**Problem:** Scroll the PDF preview (works), move the pointer to another
+pane — no click — and back: the same document is still displayed but no
+longer scrolls. User-discovered recovery: focusing the preview (⌘⌥→)
+revives it. The remote QL extension apparently stops processing forwarded
+wheel events once the pointer leaves, and only a first-responder change
+re-arms its event routing.
+
+**Solution:** `IntentFocusPreviewView` owns a tracking area; every
+`mouseEntered` performs the same nudge invisibly — make the view first
+responder and hand the keyboard straight back to the previous responder in
+the same runloop turn. The focus-by-intent contract holds (no keystroke
+can land in the preview in between; `allowFocus` is reset immediately).
+
+**Notes:** Diagnosed with CONSPECTUS_EVENT_LOG (scroll arrival vs. preview
+requests) plus the user's "focusing fixes it" observation — the nudge is
+that observation, automated. The launcher temporarily defaults the event
+log; remove that block once the fix is confirmed in daily use.
 
 ## 2026-07-23 — Click-to-navigate felt sluggish: a login shell per click
 

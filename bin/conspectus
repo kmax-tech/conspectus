@@ -85,4 +85,10 @@ else
 fi
 
 export YAZI_CONFIG_HOME="$ov"
+
+# TEMPORARY diagnosis default (remove once the preview-scroll wake-up fix is
+# confirmed): trace preview requests + QL scroll events, truncated per launch.
+export CONSPECTUS_EVENT_LOG="${CONSPECTUS_EVENT_LOG:-$HOME/.cache/conspectus/events.log}"
+: > "$CONSPECTUS_EVENT_LOG"
+
 exec "$BIN" "$@"

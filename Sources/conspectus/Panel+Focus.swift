@@ -16,6 +16,8 @@ final class IntentFocusPreviewView: QLPreviewView {
     var allowFocus = false
     override var acceptsFirstResponder: Bool { allowFocus }
 
+    private var wakeTracking: NSTrackingArea?
+
     // Diagnosis hook (CONSPECTUS_EVENT_LOG): proves whether wheel events still
     // reach this view when "scrolling stopped working" — arriving events with
     // no visible effect indict the remote QL extension, absent events indict
@@ -23,6 +25,34 @@ final class IntentFocusPreviewView: QLPreviewView {
     override func scrollWheel(with event: NSEvent) {
         logEvent("scrollWheel@QLPreviewView phase=\(event.phase.rawValue) momentum=\(event.momentumPhase.rawValue) dy=\(event.scrollingDeltaY)")
         super.scrollWheel(with: event)
+    }
+
+    // Fourth QLPreviewView state trap (see NOTES): after the pointer leaves
+    // the pane and comes back, the remote extension can stop processing wheel
+    // events for the still-displayed document — scrolling goes dead until the
+    // pane is focused once (user-verified). Re-arm it on every mouse re-entry
+    // with exactly that focus nudge, but hand the keyboard straight back in
+    // the same runloop turn, so the focus-by-intent contract holds and no
+    // keystroke can land in the preview in between.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let t = wakeTracking { removeTrackingArea(t) }
+        let t = NSTrackingArea(rect: .zero,
+                               options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                               owner: self, userInfo: nil)
+        addTrackingArea(t)
+        wakeTracking = t
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        guard let win = window, let prev = win.firstResponder, prev !== self else { return }
+        logEvent("wakeRemote: focus nudge (restoring \(type(of: prev)))")
+        allowFocus = true
+        if win.makeFirstResponder(self) {
+            win.makeFirstResponder(prev)
+        }
+        allowFocus = false
     }
 }
 
