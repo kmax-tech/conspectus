@@ -39,6 +39,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var cheatPanel: NSPanel?
     var cheatText: NSTextView?
     var lastPath: String?
+    /// Absolute path of the `ya` CLI, resolved once at startup by
+    /// `resolveYaPath()` — click-to-navigate spawns it directly instead of
+    /// paying a login-shell startup (~150ms+) on every click. Main thread only.
+    var yaPath: String?
     weak var lastFocusedTerm: LocalProcessTerminalView?
     weak var lastTopTerm: LocalProcessTerminalView?   // ⌥↑ returns here from the terminal panel
 
@@ -121,6 +125,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // auto-generates its own DDS ids, so no fixed ids are set here.
         launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"], rememberCwd: true)
         startFifoReader()
+        resolveYaPath()                     // once, so clicks don't pay a login shell
 
         // Pane layout is two independent toggles: the second yazi pane (⌘D)
         // and the preview pane (⌘E, always rightmost). `split` starts 2-pane

@@ -64,20 +64,58 @@ extension Panel {
         return true
     }
 
+    /// Find the `ya` CLI once through a login shell (the app inherits no
+    /// useful PATH when launched from Spotlight/Hammerspoon) and cache it in
+    /// `yaPath`, so every click can spawn `ya` directly — the ~150ms+ shell
+    /// startup is paid once here instead of on each click.
+    /// Side effects: spawns a login shell, sets `yaPath`, warns if `ya` is missing.
+    func resolveYaPath() {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            p.arguments = ["-lc", "command -v ya"]
+            let out = Pipe()
+            p.standardOutput = out
+            do {
+                try p.run()
+                let data = out.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                let found = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if p.terminationStatus == 0, !found.isEmpty {
+                    DispatchQueue.main.async { self?.yaPath = found }
+                } else {
+                    warn("conspectus: `ya` not found on the login-shell PATH — "
+                         + "click-to-navigate will fall back to a slow shell per click")
+                }
+            } catch {
+                warn("conspectus: cannot resolve `ya`: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// Broadcast a path to the yazi pane(s) over the DDS — `cd` enters a
     /// directory, `reveal` moves the cursor onto a file (the bundled
     /// conspectus.yazi plugin, guarded by CONSPECTUS_PEER, subscribes to
     /// `panesync-<action>`). Works from outside yazi without a YAZI_ID. yazi
     /// then emits a hover event, so the preview updates by itself — same path
     /// as any keyboard navigation. In triple mode both panes follow.
-    /// Side effects: spawns `ya` via a login shell.
+    /// Side effects: spawns `ya` (directly via the cached `yaPath`; through a
+    /// login shell only if resolution hasn't landed or failed).
     func sendToYazi(_ path: String, action: String) {
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        p.arguments = ["-lc", "ya pub-to 0 panesync-\(action) --str \"$CONSPECTUS_CLICK_PATH\""]
-        var env = ProcessInfo.processInfo.environment
-        env["CONSPECTUS_CLICK_PATH"] = path
-        p.environment = env
+        if let ya = yaPath {
+            p.executableURL = URL(fileURLWithPath: ya)
+            p.arguments = ["pub-to", "0", "panesync-\(action)", "--str", path]
+        } else {
+            // `ya` not resolved (yet) — pay the slow login shell rather than
+            // drop the click.
+            p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            p.arguments = ["-lc", "ya pub-to 0 panesync-\(action) --str \"$CONSPECTUS_CLICK_PATH\""]
+            var env = ProcessInfo.processInfo.environment
+            env["CONSPECTUS_CLICK_PATH"] = path
+            p.environment = env
+        }
         p.terminationHandler = { proc in
             if proc.terminationStatus != 0 {
                 warn("conspectus: ya pub-to failed (exit \(proc.terminationStatus)) — "
