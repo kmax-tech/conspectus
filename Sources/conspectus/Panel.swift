@@ -104,6 +104,15 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
     func applicationDidFinishLaunching(_ n: Notification) {
         UserDefaults.standard.register(defaults: [showHintsKey: true])   // bar starts visible
+        // Pin the scroller style (app-scoped, must be `set`, not `register` —
+        // the system preference lives in the higher-priority global domain):
+        // macOS flips overlay/legacy scrollers when it re-detects the input
+        // device, and QuickLook's QLScrollController crashes in its scroller
+        // teardown when that switch lands mid WebKit layer commit (KVO
+        // removeObserver throws; crash seen 2026-07-24 while wheel-scrolling
+        // a Web2 preview). A constant style removes the trigger; the cost is
+        // always-visible scrollbars in the right pane.
+        UserDefaults.standard.set("Always", forKey: "AppleShowScrollBars")
         createFifo()
         term = makeTerm()
         observeAppearanceChanges()

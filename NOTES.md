@@ -186,7 +186,12 @@ manual recovery for a wedged preview.
 **Notes:** QLPreviewView state rules learned so far: (1) leaves window →
 auto-closes, must rebuild; (2) request churn → debounce; (3) hide/unhide →
 never do it, cover instead; (4) pointer exit/re-entry → remote may stop
-processing wheel events, re-arm with a focus nudge (next entry).
+processing wheel events, re-arm with a lazy focus nudge (next entry);
+(5) the same `_teardownScrollers` KVO crash also fires when macOS switches
+the recommended scroller style mid WebKit layer commit (fast wheel
+scrolling a Web2 preview) — the app pins `AppleShowScrollBars = Always`
+(app-domain `set`, registration domain would lose to the global pref) so
+the style can never change.
 
 ## 2026-07-24 — Fourth QLPreviewView trap: wheel events die after mouse re-entry
 
