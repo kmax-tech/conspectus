@@ -38,9 +38,12 @@ cat > "$APP/Contents/MacOS/Conspectus" <<EOF
 #!/bin/bash
 # Bundle launcher — runs the repo launcher (overlay + binary) so Finder and the
 # shell command share one code path. Args from \`open --args\` pass through.
-# Finder/launchd only hands over a minimal PATH, so load the full login PATH
-# (same trick as the Alfred scripts) — otherwise yazi/qlpeek aren't found.
-export PATH="\$(/bin/zsh -lic 'print -rn -- \$PATH' 2>/dev/null)"
+# Finder/launchd only hands over a minimal PATH, so load the login PATH —
+# otherwise yazi/qlpeek aren't found. Deliberately NON-interactive (-lc, not
+# -lic): zprofile provides the same dirs, an interactive shell costs ~0.8s+
+# per launch (omz/p10k), and p10k pollutes the captured value with an OSC 7
+# escape sequence glued to the first entry.
+export PATH="\$(/bin/zsh -lc 'print -rn -- \$PATH' 2>/dev/null)"
 exec "$REPO/bin/conspectus" "\$@"
 EOF
 chmod +x "$APP/Contents/MacOS/Conspectus"
