@@ -6,6 +6,13 @@
 // except that the (unfixable, framework-internal) KVO exception no longer
 // terminates the process. Worst case after a swallowed throw: the preview's
 // scrollers are half-torn until the next preview request rebuilds them.
+//
+// Note: class_getInstanceMethod resolves inherited methods, so if
+// _teardownScrollers ever moves to a superclass the swizzle lands there and
+// covers all its subclasses. That is acceptable here — the wrapper is
+// semantically transparent (original runs unchanged, only the throw is
+// contained), so wider coverage widens the protection, not the behavior
+// change.
 bool conspectus_installQLTeardownShield(void) {
     Class cls = NSClassFromString(@"QLScrollController");
     SEL sel = NSSelectorFromString(@"_teardownScrollers");

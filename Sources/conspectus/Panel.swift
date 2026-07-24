@@ -40,6 +40,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var cheatPanel: NSPanel?
     var cheatText: NSTextView?
     var lastPath: String?
+    /// Time of the last wheel event anywhere in the app (stamped by a local
+    /// event monitor) — gates the terminal repaint insurance. Main thread only.
+    var lastWheelActivity = Date.distantPast
     /// Absolute path of the `ya` CLI, resolved once at startup by
     /// `resolveYaPath()` — click-to-navigate spawns it directly instead of
     /// paying a login-shell startup (~150ms+) on every click. Main thread only.
@@ -105,20 +108,18 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
     func applicationDidFinishLaunching(_ n: Notification) {
         UserDefaults.standard.register(defaults: [showHintsKey: true])   // bar starts visible
-        // Pin the scroller style (app-scoped, must be `set`, not `register` —
-        // the system preference lives in the higher-priority global domain):
-        // macOS flips overlay/legacy scrollers when it re-detects the input
-        // device, and QuickLook's QLScrollController crashes in its scroller
-        // teardown when that switch lands mid WebKit layer commit (KVO
-        // removeObserver throws; crash seen 2026-07-24 while wheel-scrolling
-        // a Web2 preview). NOTE: the pin alone did NOT stop the style-switch
-        // plumbing (second identical crash with the pin active) — the real
-        // protection is the ObjC @try/@catch shield below; the pin stays as
-        // a cheap trigger-reducer.
-        UserDefaults.standard.set("Always", forKey: "AppleShowScrollBars")
+        // Remove the AppleShowScrollBars=Always pin earlier builds persisted:
+        // it was meant to suppress the QL scroller-style-switch crash, did
+        // provably NOT (second identical crash with the pin active), and as
+        // an app-wide default it forced legacy scrollbars onto every scroll
+        // view — a UI regression that would otherwise survive in the plist
+        // forever. The working protection is the shield below.
+        UserDefaults.standard.removeObject(forKey: "AppleShowScrollBars")
         // Fail-loud, not fail-silent: without the shield the crash class is
         // simply back (e.g. after a macOS update renames the private method).
-        if !conspectus_installQLTeardownShield() {
+        if conspectus_installQLTeardownShield() {
+            logEvent("QL teardown shield installed")
+        } else {
             warn("conspectus: QL teardown shield NOT installed (private API changed) — "
                  + "style-switch crashes during wheel scrolling are possible again")
         }
@@ -159,17 +160,28 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// wheel-event floods: the terminal buffer keeps advancing (navigation
     /// works, hover events flow) but the view stops painting until something
     /// forces a redraw. Root cause is SwiftTerm-internal and unfixed upstream;
-    /// until then this insurance repaints all terminal views once a second —
-    /// worst-case staleness drops below perception, and redrawing the visible
-    /// rows of an idle terminal is cheap. Scheduled in .common modes so it
+    /// until then this insurance repaints the terminal views — but GATED on
+    /// recent wheel activity (a local event monitor stamps it): the wedge only
+    /// ever appears during/after wheel floods, and an idle app must not burn
+    /// battery repainting nothing (App Nap stays effective; the no-op timer
+    /// tick with tolerance is negligible). Scheduled in .common modes so it
     /// keeps firing during scroll gestures (event-tracking run-loop mode),
     /// which is exactly when the wedge happens.
-    /// Side effects: schedules a repeating main-runloop timer.
+    /// Side effects: installs a local scrollWheel event monitor, schedules a
+    /// repeating main-runloop timer.
     func startTerminalRepaintInsurance() {
-        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
+        let repaintInterval: TimeInterval = 1.0   // worst-case visible staleness
+        let activityWindow: TimeInterval = 3.0    // repaint only this long after the last wheel tick
+        NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            self?.lastWheelActivity = Date()
+            return event
+        }
+        let timer = Timer(timeInterval: repaintInterval, repeats: true) { [weak self] _ in
+            guard let self = self,
+                  Date().timeIntervalSince(self.lastWheelActivity) < activityWindow else { return }
             for t in [self.term, self.term2, self.bottomTerm] { t?.needsDisplay = true }
         }
+        timer.tolerance = 0.3   // let the system coalesce wakeups
         RunLoop.main.add(timer, forMode: .common)
     }
 

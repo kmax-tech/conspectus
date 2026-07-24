@@ -24,13 +24,18 @@ final class IntentFocusPreviewView: QLPreviewView {
     // (user-verified). Wheel events normally TERMINATE inside the remote
     // subview and never bubble up here — one arriving is itself the proof
     // that the remote dropped them. So the focus nudge runs lazily, exactly
-    // then (throttled to 1/s): first responder for one call, keyboard handed
-    // straight back within the runloop turn. The earlier eager
-    // nudge-on-every-mouse-entry was REVERTED: its resign/become churn on the
-    // terminal view could wedge SwiftTerm's repainting (frozen yazi pane
-    // while navigation kept working underneath).
+    // then. The throttle (0.25s) only guards against a dance per wheel TICK
+    // if the bubbling assumption is ever wrong — it must stay well below
+    // human retry time, or a dead preview feels dead for that long. The
+    // earlier eager nudge-on-every-mouse-entry was REVERTED: its
+    // resign/become churn on the terminal view could wedge SwiftTerm's
+    // repainting (frozen yazi pane while navigation kept working underneath).
+    //
+    // `prev !== self` also means: a DELIBERATELY focused preview (⌥→) never
+    // enters this branch, so the unconditional `allowFocus = false` below
+    // cannot revoke an intentional focus — focusPreview() re-grants it anyway.
     override func scrollWheel(with event: NSEvent) {
-        if Date().timeIntervalSince(lastNudge) > 1.0,
+        if Date().timeIntervalSince(lastNudge) > 0.25,
            let win = window, let prev = win.firstResponder, prev !== self {
             lastNudge = Date()
             logEvent("scroll-nudge: re-arming QL remote (restoring \(type(of: prev)))")

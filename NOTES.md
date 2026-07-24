@@ -190,11 +190,13 @@ processing wheel events, re-arm with a lazy focus nudge (next entry);
 (5) the same `_teardownScrollers` KVO crash also fires when macOS switches
 the recommended scroller style mid WebKit layer commit (fast wheel
 scrolling a Web2/markdown preview). Pinning `AppleShowScrollBars=Always`
-did NOT stop it (second identical crash with the pin verifiably active) —
-the working protection is the ConspectusShield target: an ObjC swizzle
-wrapping `-[QLScrollController _teardownScrollers]` in @try/@catch (Swift
-cannot catch ObjC exceptions). Fails loud at startup if the private
-method disappears in a macOS update.
+did NOT stop it (second identical crash with the pin verifiably active)
+and was itself a bug — an app-wide persistent default forcing legacy
+scrollbars everywhere; startup now REMOVES that stale key. The working
+protection is the ConspectusShield target: an ObjC swizzle wrapping
+`-[QLScrollController _teardownScrollers]` in @try/@catch (Swift cannot
+catch ObjC exceptions). Fails loud at startup if the private method
+disappears in a macOS update; success is visible in the event log.
 
 ## 2026-07-24 — SwiftTerm display wedge under wheel floods; repaint insurance
 
@@ -207,7 +209,9 @@ eager focus nudge — the freeze reproduced with the nudge removed.
 
 **Solution:** Band-aid until the root cause is found in SwiftTerm (1.15.0,
 latest release): a 1s repeating timer in `.common` run-loop modes (so it
-fires during scroll gestures) sets `needsDisplay` on all terminal views.
+fires during scroll gestures) sets `needsDisplay` on all terminal views —
+GATED on wheel activity in the last 3s (local scrollWheel event monitor
+stamps it), so an idle app repaints nothing and App Nap stays effective.
 `drawRect` renders from the current buffer, so worst-case staleness is ~1s
 regardless of what wedged internally.
 
