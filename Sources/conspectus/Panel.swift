@@ -162,6 +162,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
         startMainThreadWatchdog()
         startTerminalRepaintInsurance()
+        startPreviewClickMonitor()
     }
 
     /// SwiftTerm (1.15.0) can wedge its display-update pipeline under fast

@@ -7,11 +7,12 @@ import ConspectusCore
 // the subtle focus border, and restoration after app switches.
 
 /// QLPreviewView with focus-by-intent: it refuses first-responder status
-/// unless `allowFocus` is set — so clicks and app switches can never steal
-/// the keyboard from the terminal panes (which silently swallowed
-/// hjkl/arrows), but ⌘⌥→ can hand it over deliberately. A focused Quick Look
-/// natively takes arrows, PgUp/PgDn, and Space (PDF paging, video play).
-/// The permission is revoked as soon as focus moves elsewhere.
+/// unless `allowFocus` is set — so *unintended* focus changes (app switches,
+/// stray events) can never silently steal the keyboard from the terminals.
+/// Focus is granted deliberately: by ⌥→ or by a click in the pane (the
+/// Panel's click monitor sets allowFocus + makes it first responder). A
+/// focused Quick Look natively takes arrows, PgUp/PgDn, and Space. The
+/// permission is revoked as soon as focus moves elsewhere.
 final class IntentFocusPreviewView: QLPreviewView {
     var allowFocus = false
     override var acceptsFirstResponder: Bool { allowFocus }
@@ -60,10 +61,10 @@ final class PassthroughBorderView: NSView {
 /// Native PDF preview — "perlege light". PDFs bypass the fragile Quick Look
 /// machinery entirely and render in PDFKit, page-wise by default (mouse wheel
 /// flips pages). Same focus-by-intent contract as the Quick Look view: wheel
-/// works unfocused, clicks are swallowed so they can never steal the keyboard
-/// from the terminals, and only ⌥→ hands it the keys. Focused, it answers to
-/// perlege's bindings (shared/keymap.json is the reference): J/]/space next
-/// page, K/[ previous, +/- zoom, f fit, s toggles single ↔ continuous.
+/// works unfocused; focus is granted deliberately by ⌥→ or a click in the
+/// pane. Focused, it answers to perlege's bindings (shared/keymap.json is the
+/// reference): J/]/space next page, K/[ previous, +/- zoom, f fit, s toggles
+/// single ↔ continuous.
 final class IntentFocusPDFView: PDFView {
     var allowFocus = false
     override var acceptsFirstResponder: Bool { allowFocus }
@@ -76,10 +77,11 @@ final class IntentFocusPDFView: PDFView {
         return true
     }
 
+    // A deliberate click IS intent: it grants focus (the click monitor in the
+    // Panel does this), so let PDFKit handle the click normally for selection
+    // and link activation.
     override func mouseDown(with event: NSEvent) {
-        // A preview click must never move the first responder; interaction
-        // (text selection, link clicks) is perlege's job, not the preview's.
-        if allowFocus { super.mouseDown(with: event) }
+        super.mouseDown(with: event)
     }
 
     /// Mirror of perlege's displayMode toggle (`s`), minus the twoUp modes —
@@ -176,6 +178,26 @@ extension Panel {
         if fr === preview { return true }
         if let v = fr as? NSView { return v.isDescendant(of: rightContainer) }
         return false
+    }
+
+    /// Click-to-focus: a deliberate click in the preview pane focuses it and
+    /// shows the focus border, exactly like clicking a terminal pane does via
+    /// SwiftTerm. This does NOT reopen the silent-focus-steal bug the
+    /// focus-by-intent contract guards against — that was about *unintended*
+    /// focus loss (app reactivation, stray events); a click is intent. The
+    /// monitor grants focus but returns the event, so buttons in the PDF
+    /// toolbar and text selection still work. Terminal panes already focus on
+    /// click (SwiftTerm), so we only handle clicks that land in the preview.
+    /// Side effects: installs a local leftMouseDown monitor.
+    func startPreviewClickMonitor() {
+        NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            guard let self = self, self.previewAttached,
+                  let hit = self.window?.contentView?.hitTest(event.locationInWindow),
+                  hit.isDescendant(of: self.rightContainer),
+                  !self.previewHasFocus(self.window?.firstResponder) else { return event }
+            self.focusPreview()
+            return event   // don't swallow — the click still selects / clicks buttons
+        }
     }
 
     /// React to any first-responder change (KVO): revoke the preview's
