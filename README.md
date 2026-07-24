@@ -191,9 +191,10 @@ the active instance automatically — no focus tracking involved. Note that
 - Text/source/notes/config (`.md`, `.tex`, `.py`, `.json`, …) preview in a
   **native in-process `NSTextView`** — off Quick Look and the third-party
   sbarex QL plugins entirely, which takes the common and most crash-prone
-  case (markdown → WebKit) off the fragile remote path. Themed monospace for
-  now; syntax highlighting is the next step. Everything not text or PDF still
-  uses Quick Look.
+  case (markdown → WebKit) off the fragile remote path. **Syntax-highlighted
+  via `bat`** (its ANSI parsed to an attributed string, Catppuccin theme
+  matching the app's light/dark palette); falls back to plain monospace if
+  `bat` isn't installed. Everything not text or PDF still uses Quick Look.
 - PDFs preview in a native PDFKit view ("perlege light"), **page-wise** by
   default — the mouse wheel flips pages. Focus the pane (⌥→) and perlege's
   keys work: `J`/`]`/Space next page, `K`/`[` previous, `+`/`-` zoom, `f` fit,

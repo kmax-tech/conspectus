@@ -55,6 +55,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var lastPath: String?
     /// Path currently shown in the native text preview — dedup for showTextPreview.
     var lastTextPath: String?
+    /// Absolute path of `bat`, resolved once at startup; nil until resolved or
+    /// if missing (then the text preview stays plain monospace). Main thread only.
+    var batPath: String?
     /// Time of the last wheel event anywhere in the app (stamped by a local
     /// event monitor) — gates the terminal repaint insurance. Main thread only.
     var lastWheelActivity = Date.distantPast
@@ -159,7 +162,14 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // auto-generates its own DDS ids, so no fixed ids are set here.
         launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"], rememberCwd: true)
         startFifoReader()
-        resolveYaPath()                     // once, so clicks don't pay a login shell
+        // Resolve external CLIs once (no per-use login shell): `ya` for clicks,
+        // `bat` for text-preview syntax highlighting.
+        resolveOnLoginPath("ya", missingWarning:
+            "conspectus: `ya` not found on the login-shell PATH — click-to-navigate "
+            + "falls back to a slow shell per click") { [weak self] in self?.yaPath = $0 }
+        resolveOnLoginPath("bat", missingWarning:
+            "conspectus: `bat` not found — text preview falls back to plain monospace "
+            + "(no syntax highlighting)") { [weak self] in self?.batPath = $0 }
 
         // Pane layout is two independent toggles: the second yazi pane (⌘D)
         // and the preview pane (⌘E, always rightmost). `split` starts 2-pane

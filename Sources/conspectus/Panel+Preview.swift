@@ -73,16 +73,16 @@ extension Panel {
         return true
     }
 
-    /// Find the `ya` CLI once through a login shell (the app inherits no
-    /// useful PATH when launched from Spotlight/Hammerspoon) and cache it in
-    /// `yaPath`, so every click can spawn `ya` directly — the ~150ms+ shell
-    /// startup is paid once here instead of on each click.
-    /// Side effects: spawns a login shell, sets `yaPath`, warns if `ya` is missing.
-    func resolveYaPath() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+    /// Resolve a CLI on the login-shell PATH once, off the main thread (the app
+    /// inherits no useful PATH from Spotlight/Hammerspoon). `then` runs on the
+    /// main thread with the resolved absolute path; a missing tool warns once
+    /// with `missingWarning`. Used for `ya` (clicks) and `bat` (highlighting).
+    /// Side effects: spawns a login shell; calls `then` on main.
+    func resolveOnLoginPath(_ cmd: String, missingWarning: String, then: @escaping (String) -> Void) {
+        DispatchQueue.global(qos: .utility).async {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            p.arguments = ["-lc", "command -v ya"]
+            p.arguments = ["-lc", "command -v \(cmd)"]
             let out = Pipe()
             p.standardOutput = out
             do {
@@ -92,13 +92,12 @@ extension Panel {
                 let found = String(data: data, encoding: .utf8)?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 if p.terminationStatus == 0, !found.isEmpty {
-                    DispatchQueue.main.async { self?.yaPath = found }
+                    DispatchQueue.main.async { then(found) }
                 } else {
-                    warn("conspectus: `ya` not found on the login-shell PATH — "
-                         + "click-to-navigate will fall back to a slow shell per click")
+                    warn(missingWarning)
                 }
             } catch {
-                warn("conspectus: cannot resolve `ya`: \(error.localizedDescription)")
+                warn("conspectus: cannot resolve `\(cmd)`: \(error.localizedDescription)")
             }
         }
     }
@@ -235,8 +234,9 @@ extension Panel {
     }
 
     /// Render a text/source file in the native NSTextView, loaded off the main
-    /// thread (mirrors showFolder). Themed monospace — no syntax highlighting
-    /// yet (step 2). Covering the QL view; the file is already size-capped by
+    /// thread (mirrors showFolder). Syntax-highlighted via `bat` (parsed from
+    /// ANSI, themed to the palette); plain themed monospace if `bat` isn't
+    /// resolved yet or is missing. Covering the QL view; already size-capped by
     /// requestFilePreview. Dedup: if the view already shows this path, skip.
     func showTextPreview(_ path: String, generation gen: Int) {
         if !textScroll.isHidden, lastTextPath == path { return }
@@ -245,23 +245,51 @@ extension Panel {
         pdfPane.isHidden = true
         textScroll.isHidden = false   // cover the always-alive QL view
         lastTextPath = path
-        let pal = activePalette()
         let font = terminalFont(size: 12)
-        let fg = nsColor(pal.fg)
+        let fg = nsColor(activePalette().fg)
+        let bat = batPath          // snapshot on main
+        let theme = batTheme()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            // Read as UTF-8; fall back to Latin-1 so a non-UTF-8 file still
-            // shows *something* rather than nothing (deliberate lenient decode).
-            let text = (try? String(contentsOfFile: path, encoding: .utf8))
-                ?? (try? String(contentsOfFile: path, encoding: .isoLatin1))
-                ?? "(cannot decode as text)"
+            let attr: NSAttributedString
+            if let bat = bat, let ansi = self.runBat(bat, theme: theme, path: path) {
+                attr = renderANSI(parseANSI(ansi), font: font, defaultFg: fg)
+            } else {
+                // Fallback: raw text, themed monospace. UTF-8 then Latin-1 so a
+                // non-UTF-8 file still shows something (deliberate lenient decode).
+                let text = (try? String(contentsOfFile: path, encoding: .utf8))
+                    ?? (try? String(contentsOfFile: path, encoding: .isoLatin1))
+                    ?? "(cannot decode as text)"
+                attr = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: fg])
+            }
             guard self.isCurrentListing(gen) else { return }
-            let attr = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: fg])
             DispatchQueue.main.async {
                 guard self.isCurrentListing(gen), !self.textScroll.isHidden else { return }
                 self.textView.textStorage?.setAttributedString(attr)
                 self.textView.scroll(NSPoint.zero)
             }
+        }
+    }
+
+    /// Run `bat` and return its ANSI-coloured output, or nil on failure (caller
+    /// falls back to plain text). `--style=plain` = no line numbers/decorations;
+    /// `--wrap=never` lets the NSTextView do the wrapping. Off the main thread.
+    private func runBat(_ bat: String, theme: String, path: String) -> String? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: bat)
+        p.arguments = ["--color=always", "--style=plain", "--paging=never",
+                       "--wrap=never", "--theme=\(theme)", path]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = Pipe()   // swallow bat's stderr
+        do {
+            try p.run()
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            guard p.terminationStatus == 0 else { return nil }
+            return String(data: data, encoding: .utf8)
+        } catch {
+            return nil
         }
     }
 

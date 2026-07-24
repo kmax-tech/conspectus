@@ -13,6 +13,37 @@ func systemIsDark() -> Bool {
 
 func activePalette() -> Palette { systemIsDark() ? mocha : latte }
 
+/// bat theme matching the app's palette (Catppuccin Latte/Mocha, same as the
+/// terminal + yazi), or the user's `BAT_THEME` if they set one. Both Catppuccin
+/// bat themes ship with recent bat; a missing theme makes bat fall back to its
+/// default, which is degraded but not broken.
+func batTheme() -> String {
+    if let t = ProcessInfo.processInfo.environment["BAT_THEME"], !t.isEmpty { return t }
+    return systemIsDark() ? "Catppuccin Mocha" : "Catppuccin Latte"
+}
+
+/// Turn parsed ANSI runs (from `bat --color=always`) into an attributed string:
+/// truecolor foreground per run, bold/italic via font traits, underline as an
+/// attribute. `defaultFg` fills runs with no explicit colour; the background is
+/// the pane's (we ignore any ANSI bg so text always sits on the themed bg).
+func renderANSI(_ runs: [AnsiRun], font: NSFont, defaultFg: NSColor) -> NSAttributedString {
+    let fm = NSFontManager.shared
+    let bold = fm.convert(font, toHaveTrait: .boldFontMask)
+    let italic = fm.convert(font, toHaveTrait: .italicFontMask)
+    let boldItalic = fm.convert(bold, toHaveTrait: .italicFontMask)
+    let result = NSMutableAttributedString()
+    for run in runs {
+        let f = run.bold && run.italic ? boldItalic : run.bold ? bold : run.italic ? italic : font
+        var attrs: [NSAttributedString.Key: Any] = [.font: f]
+        attrs[.foregroundColor] = run.fg.map {
+            NSColor(srgbRed: CGFloat($0.r) / 255, green: CGFloat($0.g) / 255, blue: CGFloat($0.b) / 255, alpha: 1)
+        } ?? defaultFg
+        if run.underline { attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+        result.append(NSAttributedString(string: run.text, attributes: attrs))
+    }
+    return result
+}
+
 /// SwiftTerm color from a palette hex string (validated by Palette's init;
 /// see nsColor in ConspectusCore for why try! is the honest choice here).
 func stColor(_ hex: String) -> SwiftTerm.Color {

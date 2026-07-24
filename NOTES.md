@@ -215,11 +215,16 @@ cancellation. PDFs → PDFKit (already). Everything else → Quick Look
 (fallback for the long tail). Verified live via the FIFO: .md/.tex/.json →
 showTextPreview, .pdf → PDFKit, .png → QL.
 
-**Notes:** Themed monospace only for now — syntax highlighting is step 2
-(pipe `bat`/`highlight`, parse the ANSI to an attributed string). Images →
-NSImageView is the other easy native win. QL is now off the hot path, so
-its shield + ⌘E rebuild only guard the shrunk fallback surface. Direction
-lives in the memory `project-hardening-native-previews`.
+**Notes:** Step 2 (done same day): syntax highlighting via `bat`.
+`ConspectusCore.parseANSI` (pure, tested) turns `bat --color=always` output
+into styled `AnsiRun`s; `renderANSI` (executable) maps them to an attributed
+string (truecolor fg, bold/italic via font traits). `bat` is resolved once
+at startup via the shared `resolveOnLoginPath` (with `ya`); theme follows
+the palette (Catppuccin Latte/Mocha, or `$BAT_THEME`). Missing `bat` → plain
+monospace fallback. We ignore ANSI background so text always sits on the
+themed pane bg. Images → NSImageView is the remaining easy native win. QL is
+now off the hot path; its shield + ⌘E rebuild only guard the shrunk fallback.
+Direction lives in the memory `project-hardening-native-previews`.
 
 ## 2026-07-24 — SwiftTerm display wedge under wheel floods; repaint insurance
 
