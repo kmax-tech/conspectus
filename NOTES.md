@@ -193,6 +193,25 @@ scrolling a Web2 preview) — the app pins `AppleShowScrollBars = Always`
 (app-domain `set`, registration domain would lose to the global pref) so
 the style can never change.
 
+## 2026-07-24 — SwiftTerm display wedge under wheel floods; repaint insurance
+
+**Problem:** Fast mouse-wheel scrolling over the yazi pane could freeze the
+terminal *display*: the buffer keeps advancing (navigation works, hover
+events keep flowing — "navigation hat geklappt, aber die Ansicht nicht"),
+the app's main thread is provably idle, but SwiftTerm stops painting until
+something forces a redraw (a click revives it). First misattributed to the
+eager focus nudge — the freeze reproduced with the nudge removed.
+
+**Solution:** Band-aid until the root cause is found in SwiftTerm (1.15.0,
+latest release): a 1s repeating timer in `.common` run-loop modes (so it
+fires during scroll gestures) sets `needsDisplay` on all terminal views.
+`drawRect` renders from the current buffer, so worst-case staleness is ~1s
+regardless of what wedged internally.
+
+**Notes:** If SwiftTerm ships a display-pipeline fix, drop the insurance.
+The `.common` mode matters: a default-mode timer pauses during
+event-tracking — exactly when the wedge happens.
+
 ## 2026-07-24 — Fourth QLPreviewView trap: wheel events die after mouse re-entry
 
 **Problem:** Scroll the PDF preview (works), move the pointer to another

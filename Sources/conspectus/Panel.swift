@@ -143,6 +143,25 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         if splitMode || tripleMode { addSecondPane() }
 
         startMainThreadWatchdog()
+        startTerminalRepaintInsurance()
+    }
+
+    /// SwiftTerm (1.15.0) can wedge its display-update pipeline under fast
+    /// wheel-event floods: the terminal buffer keeps advancing (navigation
+    /// works, hover events flow) but the view stops painting until something
+    /// forces a redraw. Root cause is SwiftTerm-internal and unfixed upstream;
+    /// until then this insurance repaints all terminal views once a second —
+    /// worst-case staleness drops below perception, and redrawing the visible
+    /// rows of an idle terminal is cheap. Scheduled in .common modes so it
+    /// keeps firing during scroll gestures (event-tracking run-loop mode),
+    /// which is exactly when the wedge happens.
+    /// Side effects: schedules a repeating main-runloop timer.
+    func startTerminalRepaintInsurance() {
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            for t in [self.term, self.term2, self.bottomTerm] { t?.needsDisplay = true }
+        }
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     /// Single-window app: closing the window (red button) quits, exactly like
