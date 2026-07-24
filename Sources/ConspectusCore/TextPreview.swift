@@ -48,3 +48,16 @@ public func isTextPreviewable(_ path: String) -> Bool {
     // extension-less names like "Makefile" — match those by full basename.
     return textPreviewBasenames.contains(name)
 }
+
+/// Raster image extensions that preview in the native NSImageView (in-process)
+/// instead of Quick Look. SVG is NOT here — it's XML, handled as text above.
+public let imagePreviewExtensions: Set<String> = [
+    "png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "heic", "heif",
+    "webp", "ico", "icns", "avif", "jp2", "jpf", "psd",
+]
+
+/// True if the file at `path` should preview as a native image. Pure.
+public func isImagePreviewable(_ path: String) -> Bool {
+    let ext = ((path as NSString).lastPathComponent as NSString).pathExtension.lowercased()
+    return !ext.isEmpty && imagePreviewExtensions.contains(ext)
+}

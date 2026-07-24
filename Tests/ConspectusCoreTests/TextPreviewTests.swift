@@ -28,4 +28,19 @@ final class TextPreviewTests: XCTestCase {
             XCTAssertFalse(isTextPreviewable(p), "\(p) should fall back to Quick Look")
         }
     }
+
+    func testImageExtensions() {
+        for p in ["/x/photo.png", "/x/scan.JPG", "/x/anim.gif", "/x/pic.heic",
+                  "/x/logo.webp", "/x/icon.icns"] {
+            XCTAssertTrue(isImagePreviewable(p), "\(p) should preview as image")
+        }
+    }
+
+    func testImageVsTextVsOther() {
+        XCTAssertTrue(isTextPreviewable("/x/diagram.svg"))    // SVG is XML → text
+        XCTAssertFalse(isImagePreviewable("/x/diagram.svg"))
+        XCTAssertFalse(isImagePreviewable("/x/notes.md"))
+        XCTAssertFalse(isImagePreviewable("/x/paper.pdf"))    // PDF has its own path
+        XCTAssertFalse(isImagePreviewable("/x/clip.mp4"))     // video → Quick Look
+    }
 }

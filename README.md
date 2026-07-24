@@ -194,7 +194,11 @@ the active instance automatically — no focus tracking involved. Note that
   case (markdown → WebKit) off the fragile remote path. **Syntax-highlighted
   via `bat`** (its ANSI parsed to an attributed string, Catppuccin theme
   matching the app's light/dark palette); falls back to plain monospace if
-  `bat` isn't installed. Everything not text or PDF still uses Quick Look.
+  `bat` isn't installed.
+- Images (`.png`, `.jpg`, `.gif`, `.heic`, …) preview in a native
+  `NSImageView`, fit-to-pane, letterboxed in the theme background.
+- Only the long tail (video, audio, office, fonts, …) still uses Quick Look —
+  text, images, and PDFs are all native, in-process, off the fragile path.
 - PDFs preview in a native PDFKit view ("perlege light"), **page-wise** by
   default — the mouse wheel flips pages. Focus the pane (⌥→) and perlege's
   keys work: `J`/`]`/Space next page, `K`/`[` previous, `+`/`-` zoom, `f` fit,

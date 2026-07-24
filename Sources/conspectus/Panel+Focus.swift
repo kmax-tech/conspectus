@@ -146,6 +146,24 @@ final class IntentFocusTextView: NSTextView {
     }
 }
 
+/// Native image preview — raster images render here (in-process NSImageView,
+/// fit-to-pane) instead of Quick Look. Focus-by-intent like the other previews
+/// so the border and h/l navigation stay consistent; there is nothing to
+/// scroll or page, so it only handles h/← (return to yazi).
+final class IntentFocusImageView: NSImageView {
+    var allowFocus = false
+    var onFocusLeft: (() -> Void)?
+    override var acceptsFirstResponder: Bool { allowFocus }
+
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == "h" || event.keyCode == 123 {
+            onFocusLeft?()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+}
+
 /// The folder-listing text view: display + clickable rows only. It must never
 /// take the keyboard — a click on a row would otherwise make it first
 /// responder and silently swallow all yazi keystrokes (same trap the preview
@@ -206,6 +224,10 @@ extension Panel {
             textView.allowFocus = true
             let ok = window.makeFirstResponder(textView)
             logEvent("focusPreview -> textView ok=\(ok) fr=\(type(of: window.firstResponder))")
+        } else if let iv = imageView, !iv.isHidden {
+            imageView.allowFocus = true
+            let ok = window.makeFirstResponder(imageView)
+            logEvent("focusPreview -> imageView ok=\(ok) fr=\(type(of: window.firstResponder))")
         } else if let pane = pdfPane, !pane.isHidden {
             pdfView.allowFocus = true
             let ok = window.makeFirstResponder(pdfView)
@@ -257,6 +279,7 @@ extension Panel {
             preview?.allowFocus = false
             pdfView?.allowFocus = false
             textView?.allowFocus = false
+            imageView?.allowFocus = false
         }
         if let fr = window?.firstResponder as? LocalProcessTerminalView, fr !== bottomTerm {
             lastTopTerm = fr

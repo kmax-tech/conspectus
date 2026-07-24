@@ -150,6 +150,7 @@ extension Panel {
             textView.drawsBackground = true
             textView.backgroundColor = nsColor(pal.bg)
         }
+        imageView?.layer?.backgroundColor = nsColor(pal.bg).cgColor   // letterbox
         stylePDFBar()   // bar + pdf letterbox follow the palette too
     }
 
@@ -194,6 +195,16 @@ extension Panel {
     /// the always-alive QL view: text/source/notes → native NSTextView (off
     /// the fragile Quick Look path); PDFs → native PDFKit view; everything else
     /// → Quick Look (fallback for the long tail). Exactly one cover shows.
+    /// Hide every cover over the always-alive QL view. Each show-path calls
+    /// this, then reveals exactly its own cover — so only one is ever visible,
+    /// and the QL view shows when all are hidden.
+    func hideAllCovers() {
+        folderScroll?.isHidden = true
+        pdfPane?.isHidden = true
+        textScroll?.isHidden = true
+        imageView?.isHidden = true
+    }
+
     func requestFilePreview(_ path: String, generation gen: Int) {
         // Size cap: don't hand any renderer a file big enough to wedge it
         // (hundreds of MB of JSON, a giant log) — show a note instead.
@@ -213,6 +224,10 @@ extension Panel {
             showTextPreview(path, generation: gen)
             return
         }
+        if isImagePreviewable(path) {
+            showImagePreview(path, generation: gen)
+            return
+        }
         if pdfPreviewMode != "ql", path.lowercased().hasSuffix(".pdf") {
             let url = URL(fileURLWithPath: path)
             if pdfView.document?.documentURL != url {   // dedup, mirrors the QL check
@@ -223,14 +238,30 @@ extension Panel {
                 if let first = pdfView.document?.page(at: 0) { pdfView.go(to: first) }
             }
             updatePDFBar()
-            textScroll.isHidden = true
-            folderScroll.isHidden = true
+            hideAllCovers()
             pdfPane.isHidden = false
             return
         }
-        textScroll.isHidden = true
-        pdfPane.isHidden = true
+        hideAllCovers()
         requestQLPreview(path)
+    }
+
+    /// Render a raster image in the native NSImageView, loaded off the main
+    /// thread. Covering the QL view; already size-capped by requestFilePreview.
+    func showImagePreview(_ path: String, generation gen: Int) {
+        logEvent("showImagePreview \(path)")
+        hideAllCovers()
+        imageView.layer?.backgroundColor = nsColor(activePalette().bg).cgColor
+        imageView.isHidden = false
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let img = NSImage(contentsOfFile: path)
+            guard self.isCurrentListing(gen) else { return }
+            DispatchQueue.main.async {
+                guard self.isCurrentListing(gen), !self.imageView.isHidden else { return }
+                self.imageView.image = img
+            }
+        }
     }
 
     /// Render a text/source file in the native NSTextView, loaded off the main
@@ -241,8 +272,7 @@ extension Panel {
     func showTextPreview(_ path: String, generation gen: Int) {
         if !textScroll.isHidden, lastTextPath == path { return }
         logEvent("showTextPreview \(path)")
-        folderScroll.isHidden = true
-        pdfPane.isHidden = true
+        hideAllCovers()
         textScroll.isHidden = false   // cover the always-alive QL view
         lastTextPath = path
         let font = terminalFont(size: 12)
@@ -323,8 +353,7 @@ extension Panel {
         ])
         folderText.textStorage?.setAttributedString(attr)
         folderText.scroll(NSPoint.zero)
-        pdfPane.isHidden = true
-        textScroll.isHidden = true
+        hideAllCovers()
         folderScroll.isHidden = false   // cover the always-alive Quick Look view
     }
 
@@ -340,8 +369,7 @@ extension Panel {
     /// preview class of bugs). Covering sidesteps all of it.
     func showFolder(_ path: String, generation gen: Int) {
         logEvent("showFolder \(path)")
-        pdfPane.isHidden = true
-        textScroll.isHidden = true
+        hideAllCovers()
         lastTextPath = nil
         folderScroll.isHidden = false   // opaque — covers the always-alive preview
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in

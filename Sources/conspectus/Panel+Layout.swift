@@ -41,6 +41,8 @@ extension Panel {
         rightContainer.addSubview(pdfPane)
         buildTextPreview()
         rightContainer.addSubview(textScroll)
+        buildImagePreview()
+        rightContainer.addSubview(imageView)
         rightContainer.addSubview(folderScroll)
         previewFocusRing = PassthroughBorderView(frame: rightContainer.bounds)
         previewFocusRing.autoresizingMask = [.width, .height]
@@ -63,6 +65,18 @@ extension Panel {
         textView.onFocusLeft = { [weak self] in self?.focusLeftPane() }
         textScroll.documentView = textView
         textScroll.isHidden = true
+    }
+
+    /// Native image preview: an NSImageView covering the QL view, scaled to fit
+    /// with the theme background as letterbox.
+    func buildImagePreview() {
+        imageView = IntentFocusImageView(frame: rightContainer.bounds)
+        imageView.autoresizingMask = [.width, .height]
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignCenter
+        imageView.wantsLayer = true
+        imageView.onFocusLeft = { [weak self] in self?.focusLeftPane() }
+        imageView.isHidden = true
     }
 
     /// Wrap a terminal in a padded container: `termPadding` between the pane

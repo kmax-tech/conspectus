@@ -46,6 +46,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// collide with the clickable folder rows.
     var textScroll: NSScrollView!
     var textView: IntentFocusTextView!
+    /// Native image preview, another cover over the QL view. Fit-to-pane,
+    /// letterboxed in the theme background.
+    var imageView: IntentFocusImageView!
     var outerSplit: NSSplitView!
     var bottomTerm: LocalProcessTerminalView?
     var hintBar: NSView!

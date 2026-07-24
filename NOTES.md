@@ -222,9 +222,19 @@ string (truecolor fg, bold/italic via font traits). `bat` is resolved once
 at startup via the shared `resolveOnLoginPath` (with `ya`); theme follows
 the palette (Catppuccin Latte/Mocha, or `$BAT_THEME`). Missing `bat` → plain
 monospace fallback. We ignore ANSI background so text always sits on the
-themed pane bg. Images → NSImageView is the remaining easy native win. QL is
-now off the hot path; its shield + ⌘E rebuild only guard the shrunk fallback.
-Direction lives in the memory `project-hardening-native-previews`.
+themed pane bg. Direction lives in the memory
+`project-hardening-native-previews`.
+
+**Step 3 (done same day): images → native NSImageView.**
+`isImagePreviewable` (pure, tested) classifies raster extensions;
+`showImagePreview` loads NSImage off-thread and fits it to the pane,
+letterboxed in the theme bg. The four covers over the QL view (folder
+listing, text, image, PDF) are now managed by one `hideAllCovers()` helper —
+each show-path hides all then reveals its own, so exactly one shows and QL
+appears only when all are hidden. Result: text, images, and PDFs are all
+native/in-process; Quick Look (with its shield + ⌘E rebuild) now guards only
+the long tail (video/audio/office/fonts). The most-hovered and most
+crash-prone cases are off the fragile out-of-process path entirely.
 
 ## 2026-07-24 — SwiftTerm display wedge under wheel floods; repaint insurance
 
