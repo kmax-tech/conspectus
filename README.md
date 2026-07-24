@@ -185,6 +185,9 @@ the active instance automatically — no focus tracking involved. Note that
 - Event diagnosis (off by default): `CONSPECTUS_EVENT_LOG=<path>` appends a line
   per preview request and per scroll event reaching the Quick Look view — for
   debugging a preview that stops reacting.
+- Preview size cap: files above `CONSPECTUS_PREVIEW_MAX_MB` (default 50) show a
+  short "too large" note instead of previewing — a several-hundred-MB JSON
+  would otherwise wedge Quick Look and spike memory. `0` disables the cap.
 - PDFs preview in a native PDFKit view ("perlege light"), **page-wise** by
   default — the mouse wheel flips pages. Focus the pane (⌥→) and perlege's
   keys work: `J`/`]`/Space next page, `K`/`[` previous, `+`/`-` zoom, `f` fit,

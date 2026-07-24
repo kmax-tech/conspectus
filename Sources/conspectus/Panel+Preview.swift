@@ -181,6 +181,20 @@ extension Panel {
     /// Quick Look fragility), everything else to Quick Look. The PDF view is
     /// ours, so hiding it is safe; the QL view below stays alive and covered.
     func requestFilePreview(_ path: String) {
+        // Size cap: don't hand Quick Look / PDFKit a file big enough to wedge
+        // it (hundreds of MB of JSON, a giant log) — show a note instead.
+        if previewMaxBytes > 0,
+           let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size]) as? Int,
+           size > previewMaxBytes {
+            logEvent("preview skipped (too large): \(path) \(size / 1_048_576)MB")
+            showPreviewMessage("""
+                \((path as NSString).lastPathComponent)
+
+                \(size / 1_048_576) MB — too large to preview
+                (limit \(previewMaxBytes / 1_048_576) MB; set CONSPECTUS_PREVIEW_MAX_MB)
+                """)
+            return
+        }
         if pdfPreviewMode != "ql", path.lowercased().hasSuffix(".pdf") {
             let url = URL(fileURLWithPath: path)
             if pdfView.document?.documentURL != url {   // dedup, mirrors the QL check
@@ -213,6 +227,24 @@ extension Panel {
         preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
         preview.refreshPreviewItem()
         folderScroll.isHidden = true   // uncover the preview
+    }
+
+    /// Show a short centered note in the preview pane (reusing the folder
+    /// listing's text view as the opaque cover over the Quick Look view) —
+    /// for the "too large to preview" case. The next normal hover replaces or
+    /// uncovers it via the usual paths.
+    func showPreviewMessage(_ message: String) {
+        let pal = activePalette()
+        let para = NSMutableParagraphStyle(); para.alignment = .center
+        let attr = NSAttributedString(string: "\n\n" + message, attributes: [
+            .font: terminalFont(size: 13),
+            .foregroundColor: nsColor(pal.fg).withAlphaComponent(0.7),
+            .paragraphStyle: para,
+        ])
+        folderText.textStorage?.setAttributedString(attr)
+        folderText.scroll(NSPoint.zero)
+        pdfPane.isHidden = true
+        folderScroll.isHidden = false   // cover the always-alive Quick Look view
     }
 
     /// Swap the right pane to the folder listing and load it off the main

@@ -49,6 +49,19 @@ let pdfPreviewMode: String = {
     return raw
 }()
 
+/// Preview size cap: files larger than CONSPECTUS_PREVIEW_MAX_MB (default 50)
+/// are not previewed — a several-hundred-MB JSON would wedge Quick Look and
+/// spike memory. The pane shows a short "too large" note instead. 0 = no cap.
+/// Invalid values fail loud and use the default.
+let previewMaxBytes: Int = {
+    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_PREVIEW_MAX_MB"] ?? "50"
+    guard let mb = Int(raw), mb >= 0 else {
+        warn("conspectus: CONSPECTUS_PREVIEW_MAX_MB must be a non-negative integer (got '\(raw)') — using 50")
+        return 50 * 1_048_576
+    }
+    return mb * 1_048_576
+}()
+
 /// Event diagnosis, off by default: CONSPECTUS_EVENT_LOG=<path> appends one
 /// timestamped line per instrumented event (scrolls reaching the Quick Look
 /// view, preview requests). Used to tell "events never arrive" (routing bug)
