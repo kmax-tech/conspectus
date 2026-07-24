@@ -54,7 +54,7 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 <plist version="1.0"><dict>
   <key>CFBundleName</key><string>Conspectus</string>
   <key>CFBundleDisplayName</key><string>Conspectus</string>
-  <key>CFBundleIdentifier</key><string>de.uni-weimar.max.conspectus</string>
+  <key>CFBundleIdentifier</key><string>com.max.conspectus</string>
   <key>CFBundleVersion</key><string>1.0</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>
