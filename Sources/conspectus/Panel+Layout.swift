@@ -32,15 +32,12 @@ extension Panel {
         folderScroll.isHidden = true
         styleFolder()
         rightContainer.addSubview(preview)
-        // The PDF view sits ABOVE the always-alive Quick Look view (cover
-        // pattern) and BELOW the folder listing; it is our own view, so
-        // hiding/showing it is safe — the QL hide/unhide rules don't apply.
-        pdfView = IntentFocusPDFView(frame: rightContainer.bounds)
-        pdfView.autoresizingMask = [.width, .height]
-        pdfView.autoScales = true
-        pdfView.displayMode = pdfPreviewMode == "continuous" ? .singlePageContinuous : .singlePage
-        pdfView.isHidden = true
-        rightContainer.addSubview(pdfView)
+        // The PDF pane (toolbar + PDFKit view) sits ABOVE the always-alive
+        // Quick Look view (cover pattern) and BELOW the folder listing; it is
+        // entirely our own, so hiding/showing it is safe — the QL hide/unhide
+        // rules don't apply.
+        buildPDFPane()
+        rightContainer.addSubview(pdfPane)
         rightContainer.addSubview(folderScroll)
         previewFocusRing = PassthroughBorderView(frame: rightContainer.bounds)
         previewFocusRing.autoresizingMask = [.width, .height]

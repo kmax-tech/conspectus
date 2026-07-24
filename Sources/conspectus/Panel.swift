@@ -30,6 +30,13 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     let termPadding: CGFloat = 8
     var preview: IntentFocusPreviewView!
     var pdfView: IntentFocusPDFView!
+    /// PDF preview chrome: pane = toolbar + pdfView (the unit that covers the
+    /// QL view), bar = the perlege-style control strip, labels live-update.
+    var pdfPane: NSView!
+    var pdfBar: NSView!
+    var pdfPageLabel: NSTextField!
+    var pdfZoomLabel: NSTextField!
+    var pdfRecolored = false
     var previewFocusRing: PassthroughBorderView!
     var focusObservation: NSKeyValueObservation?
     var folderScroll: NSScrollView!

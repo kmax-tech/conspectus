@@ -148,9 +148,9 @@ extension Panel {
     /// the Quick Look view (arrows/Space natively).
     func focusPreview() {
         guard previewAttached else { return }
-        if let pv = pdfView, !pv.isHidden {
-            pv.allowFocus = true
-            window.makeFirstResponder(pv)
+        if let pane = pdfPane, !pane.isHidden {
+            pdfView.allowFocus = true
+            window.makeFirstResponder(pdfView)
         } else {
             preview.allowFocus = true
             window.makeFirstResponder(preview)

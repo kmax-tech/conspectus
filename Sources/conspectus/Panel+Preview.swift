@@ -136,7 +136,7 @@ extension Panel {
         folderScroll.backgroundColor = nsColor(pal.bg)
         folderText.drawsBackground = true
         folderText.backgroundColor = nsColor(pal.bg)
-        pdfView?.backgroundColor = nsColor(pal.bg)   // letterbox around pages
+        stylePDFBar()   // bar + pdf letterbox follow the palette too
     }
 
     func update(_ path: String) {
@@ -187,11 +187,12 @@ extension Panel {
                 logEvent("requestPDFPreview \(path)")
                 pdfView.document = PDFDocument(url: url)
             }
-            pdfView.isHidden = false
+            updatePDFBar()
+            pdfPane.isHidden = false
             folderScroll.isHidden = true
             return
         }
-        pdfView.isHidden = true
+        pdfPane.isHidden = true
         requestQLPreview(path)
     }
 
