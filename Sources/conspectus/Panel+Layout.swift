@@ -14,6 +14,7 @@ extension Panel {
         rightContainer = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 900))
         preview = IntentFocusPreviewView(frame: rightContainer.bounds, style: .normal) ?? IntentFocusPreviewView()
         preview.autoresizingMask = [.width, .height]
+        preview.onFocusLeft = { [weak self] in self?.focusLeftPane() }
         folderScroll = NSScrollView(frame: rightContainer.bounds)
         folderScroll.hasVerticalScroller = true
         folderScroll.autoresizingMask = [.width, .height]

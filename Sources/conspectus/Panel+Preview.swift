@@ -15,6 +15,7 @@ extension Panel {
         let fresh = IntentFocusPreviewView(frame: preview.frame, style: .normal) ?? IntentFocusPreviewView()
         fresh.autoresizingMask = [.width, .height]
         fresh.isHidden = preview.isHidden
+        fresh.onFocusLeft = { [weak self] in self?.focusLeftPane() }
         rightContainer.replaceSubview(preview, with: fresh)
         preview = fresh
     }
@@ -45,7 +46,15 @@ extension Panel {
                 while getline(&buf, &cap, f) > 0 {
                     guard let b = buf else { continue }
                     let s = String(cString: b).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !s.isEmpty { self?.update(s) }
+                    // Control message, not a path: yazi's `l`-on-a-file binding
+                    // asks to move focus into the preview (h/l pane navigation).
+                    // Real hover paths are absolute (start with "/"), so the
+                    // "@"-prefixed sentinel can never collide with one.
+                    if s == focusPreviewSentinel {
+                        DispatchQueue.main.async { self?.focusPreview() }
+                    } else if !s.isEmpty {
+                        self?.update(s)
+                    }
                 }
                 free(buf); buf = nil; cap = 0
                 fclose(f)

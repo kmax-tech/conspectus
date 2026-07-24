@@ -35,6 +35,12 @@ func die(_ msg: String) -> Never {
     exit(1)
 }
 
+/// FIFO control message asking conspectus to move keyboard focus into the
+/// preview pane — written by yazi's `l`/→-on-a-file binding so h/l pane
+/// navigation flows from yazi into the preview. Not a path (those are
+/// absolute), so it can never collide with a hovered file.
+let focusPreviewSentinel = "@FOCUS_PREVIEW"
+
 /// PDF preview mode (CONSPECTUS_PDF_MODE): "page" (default) previews PDFs in
 /// the native PDFKit view, page-wise — "perlege light", same keys as perlege
 /// when the pane is focused; "continuous" starts that view in continuous

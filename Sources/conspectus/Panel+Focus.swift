@@ -15,7 +15,19 @@ import ConspectusCore
 /// permission is revoked as soon as focus moves elsewhere.
 final class IntentFocusPreviewView: QLPreviewView {
     var allowFocus = false
+    /// Return to yazi — set by the Panel; `h`/← invoke it. Best-effort for the
+    /// QL view: Quick Look's remote content may consume keys first, in which
+    /// case ⌥←/⌥[ still returns. (The PDF view handles h/← reliably.)
+    var onFocusLeft: (() -> Void)?
     override var acceptsFirstResponder: Bool { allowFocus }
+
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == "h" || event.keyCode == 123 {
+            onFocusLeft?()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
 
     private var lastNudge = Date.distantPast
 
@@ -67,6 +79,9 @@ final class PassthroughBorderView: NSView {
 /// single ↔ continuous.
 final class IntentFocusPDFView: PDFView {
     var allowFocus = false
+    /// Return to the yazi pane — set by the Panel; `h`/← invoke it so h/l
+    /// pane navigation is symmetric (yazi `l`→preview, preview `h`→yazi).
+    var onFocusLeft: (() -> Void)?
     override var acceptsFirstResponder: Bool { allowFocus }
 
     // PDFView redirects first-responder status to an internal document view,
@@ -99,7 +114,10 @@ final class IntentFocusPDFView: PDFView {
         case "-":                zoomOut(nil)
         case "f":                autoScales = true
         case "s":                toggleDisplayMode()
-        default:                 super.keyDown(with: event)   // arrows, PgUp/PgDn native
+        case "h":                onFocusLeft?()               // back to yazi (h/l nav)
+        default:
+            if event.keyCode == 123 { onFocusLeft?() }        // ← also returns
+            else { super.keyDown(with: event) }               // arrows, PgUp/PgDn native
         }
     }
 }

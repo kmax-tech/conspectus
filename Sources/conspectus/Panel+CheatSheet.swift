@@ -49,6 +49,7 @@ let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
                     ("⌘W", "close terminal panel"),
                     ("⌘/", "toggle shortcut bar"), ("⌘K", "this cheat sheet"),
                     ("⌥← → / ⌥[ ]", "cycle pane focus (→ into preview: arrows page/scroll)"),
+                    ("l / →", "on a file: focus the preview (h / ← there returns to yazi)"),
                     ("click", "focus the clicked pane (border follows)"),
                     ("", "PDF preview focused: J/] next  K/[ prev  +/- zoom  s single↔continuous"),
                     ("⌥↑ ↓", "pane area ⇄ terminal panel"),

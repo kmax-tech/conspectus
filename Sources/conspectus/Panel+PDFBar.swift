@@ -28,6 +28,7 @@ extension Panel {
         pdfView.autoresizingMask = [.width, .height]
         pdfView.autoScales = true
         pdfView.displayMode = pdfPreviewMode == "continuous" ? .singlePageContinuous : .singlePage
+        pdfView.onFocusLeft = { [weak self] in self?.focusLeftPane() }
 
         pdfPane.addSubview(pdfView)
         pdfPane.addSubview(pdfBar)
