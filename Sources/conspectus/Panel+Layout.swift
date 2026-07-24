@@ -272,6 +272,10 @@ extension Panel {
         addFocusItem(viewMenu, "Focus Right Pane", NSRightArrowFunctionKey, #selector(focusRightPane))
         addFocusItem(viewMenu, "Focus Terminal Panel", NSDownArrowFunctionKey, #selector(focusDown))
         addFocusItem(viewMenu, "Focus Pane Above", NSUpArrowFunctionKey, #selector(focusUp))
+        // HHKB-friendly alternates for horizontal focus: ⌥[ / ⌥] — no arrow
+        // keys needed. Same actions as ⌥←/→; both stay live.
+        addFocusKeyItem(viewMenu, "Focus Left Pane (⌥[)", "[", #selector(focusLeftPane))
+        addFocusKeyItem(viewMenu, "Focus Right Pane (⌥])", "]", #selector(focusRightPane))
         viewItem.submenu = viewMenu
 
         NSApp.mainMenu = main
@@ -288,6 +292,13 @@ extension Panel {
         alias.keyEquivalentModifierMask = [.command, .option]; alias.target = self
         alias.isAlternate = true
         menu.addItem(alias)
+    }
+
+    /// Add a focus menu item bound to ⌥+<char> (for the ⌥[ / ⌥] alternates).
+    func addFocusKeyItem(_ menu: NSMenu, _ title: String, _ key: String, _ action: Selector) {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.keyEquivalentModifierMask = [.option]; item.target = self
+        menu.addItem(item)
     }
 
     @objc func toggleSecondPane()  { term2 == nil ? addSecondPane() : removeSecondPane() }
