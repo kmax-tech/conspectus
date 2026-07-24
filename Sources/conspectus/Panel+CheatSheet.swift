@@ -60,13 +60,13 @@ extension Panel {
         if let p = cheatPanel, p.isVisible { p.orderOut(nil); return }
         if cheatPanel == nil { buildCheatSheet() }
         styleCheatSheet()
-        cheatPanel?.makeKeyAndOrderFront(nil)
+        cheatPanel?.orderFront(nil)   // KeylessPanel: never takes the keyboard
     }
 
     /// Build the floating panel holding the cheat sheet; frame persists
     /// across launches.
     func buildCheatSheet() {
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 660),
+        let panel = KeylessPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 660),
                             styleMask: [.titled, .closable, .resizable, .utilityWindow],
                             backing: .buffered, defer: false)
         panel.title = "Shortcuts"

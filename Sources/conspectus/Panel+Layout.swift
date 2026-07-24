@@ -17,7 +17,7 @@ extension Panel {
         folderScroll = NSScrollView(frame: rightContainer.bounds)
         folderScroll.hasVerticalScroller = true
         folderScroll.autoresizingMask = [.width, .height]
-        folderText = NSTextView(frame: rightContainer.bounds)
+        folderText = NonFocusableTextView(frame: rightContainer.bounds)
         folderText.isEditable = false
         folderText.isVerticallyResizable = true
         folderText.isHorizontallyResizable = false
