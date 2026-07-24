@@ -198,6 +198,29 @@ protection is the ConspectusShield target: an ObjC swizzle wrapping
 catch ObjC exceptions). Fails loud at startup if the private method
 disappears in a macOS update; success is visible in the event log.
 
+## 2026-07-25 — Hardening step 1: native text preview off Quick Look
+
+**Problem:** Every QLPreviewView crash/wedge traces to Quick Look being
+out-of-process (remote extension + private internals). The most hovered
+files are text/source/notes, and markdown specifically routed through the
+third-party QLMarkdown plugin → HTML → Apple's Web2/WebKit display plugin —
+the exact `_teardownScrollers` abort path. So the common case sat on the
+most fragile path.
+
+**Solution:** Type-dispatched preview. `ConspectusCore.isTextPreviewable`
+(pure, tested) classifies by extension/basename; text files render in a
+native in-process `IntentFocusTextView` (`showTextPreview`), covering the
+QL view like the folder listing, loaded off-thread with the same generation
+cancellation. PDFs → PDFKit (already). Everything else → Quick Look
+(fallback for the long tail). Verified live via the FIFO: .md/.tex/.json →
+showTextPreview, .pdf → PDFKit, .png → QL.
+
+**Notes:** Themed monospace only for now — syntax highlighting is step 2
+(pipe `bat`/`highlight`, parse the ANSI to an attributed string). Images →
+NSImageView is the other easy native win. QL is now off the hot path, so
+its shield + ⌘E rebuild only guard the shrunk fallback surface. Direction
+lives in the memory `project-hardening-native-previews`.
+
 ## 2026-07-24 — SwiftTerm display wedge under wheel floods; repaint insurance
 
 **Problem:** Fast mouse-wheel scrolling over the yazi pane could freeze the

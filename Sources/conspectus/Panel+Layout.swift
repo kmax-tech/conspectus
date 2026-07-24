@@ -39,10 +39,30 @@ extension Panel {
         // rules don't apply.
         buildPDFPane()
         rightContainer.addSubview(pdfPane)
+        buildTextPreview()
+        rightContainer.addSubview(textScroll)
         rightContainer.addSubview(folderScroll)
         previewFocusRing = PassthroughBorderView(frame: rightContainer.bounds)
         previewFocusRing.autoresizingMask = [.width, .height]
         rightContainer.addSubview(previewFocusRing)   // last -> stays on top
+    }
+
+    /// Native text preview: an NSTextView in a scroll view, covering the QL
+    /// view like the folder listing. Ours, in-process — safe to hide/show.
+    func buildTextPreview() {
+        textScroll = NSScrollView(frame: rightContainer.bounds)
+        textScroll.hasVerticalScroller = true
+        textScroll.autoresizingMask = [.width, .height]
+        textView = IntentFocusTextView(frame: rightContainer.bounds)
+        textView.isEditable = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainerInset = NSSize(width: 10, height: 10)
+        textView.textContainer?.widthTracksTextView = true
+        textView.onFocusLeft = { [weak self] in self?.focusLeftPane() }
+        textScroll.documentView = textView
+        textScroll.isHidden = true
     }
 
     /// Wrap a terminal in a padded container: `termPadding` between the pane

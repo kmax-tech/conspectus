@@ -122,6 +122,30 @@ final class IntentFocusPDFView: PDFView {
     }
 }
 
+/// Native text preview — the first step of moving off Quick Look. Text/source/
+/// config/notes render here (in-process NSTextView) instead of through Quick
+/// Look and the third-party sbarex QL plugins, so the common and crash-prone
+/// (markdown → QLMarkdown → WebKit) cases leave the fragile remote path. Same
+/// focus-by-intent contract as the other previews: wheel scrolls unfocused,
+/// focus is granted by ⌥→ or a click / l-on-file; then j/k scroll a line,
+/// arrows/PgUp/PgDn scroll natively, h/← return to yazi.
+final class IntentFocusTextView: NSTextView {
+    var allowFocus = false
+    var onFocusLeft: (() -> Void)?
+    override var acceptsFirstResponder: Bool { allowFocus }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.charactersIgnoringModifiers {
+        case "j": scrollLineDown(nil)
+        case "k": scrollLineUp(nil)
+        case "h": onFocusLeft?()
+        default:
+            if event.keyCode == 123 { onFocusLeft?() }   // ← returns to yazi
+            else { super.keyDown(with: event) }
+        }
+    }
+}
+
 /// The folder-listing text view: display + clickable rows only. It must never
 /// take the keyboard — a click on a row would otherwise make it first
 /// responder and silently swallow all yazi keystrokes (same trap the preview
@@ -176,7 +200,13 @@ extension Panel {
     /// the Quick Look view (arrows/Space natively).
     func focusPreview() {
         guard previewAttached else { return }
-        if let pane = pdfPane, !pane.isHidden {
+        // Whichever cover is showing gets the keyboard: native text, native
+        // PDF, else the Quick Look view.
+        if let ts = textScroll, !ts.isHidden {
+            textView.allowFocus = true
+            let ok = window.makeFirstResponder(textView)
+            logEvent("focusPreview -> textView ok=\(ok) fr=\(type(of: window.firstResponder))")
+        } else if let pane = pdfPane, !pane.isHidden {
             pdfView.allowFocus = true
             let ok = window.makeFirstResponder(pdfView)
             logEvent("focusPreview -> pdfView ok=\(ok) fr=\(type(of: window.firstResponder))")
@@ -226,6 +256,7 @@ extension Panel {
         if !previewHasFocus(window?.firstResponder) {
             preview?.allowFocus = false
             pdfView?.allowFocus = false
+            textView?.allowFocus = false
         }
         if let fr = window?.firstResponder as? LocalProcessTerminalView, fr !== bottomTerm {
             lastTopTerm = fr

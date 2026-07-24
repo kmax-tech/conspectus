@@ -188,6 +188,12 @@ the active instance automatically — no focus tracking involved. Note that
 - Preview size cap: files above `CONSPECTUS_PREVIEW_MAX_MB` (default 50) show a
   short "too large" note instead of previewing — a several-hundred-MB JSON
   would otherwise wedge Quick Look and spike memory. `0` disables the cap.
+- Text/source/notes/config (`.md`, `.tex`, `.py`, `.json`, …) preview in a
+  **native in-process `NSTextView`** — off Quick Look and the third-party
+  sbarex QL plugins entirely, which takes the common and most crash-prone
+  case (markdown → WebKit) off the fragile remote path. Themed monospace for
+  now; syntax highlighting is the next step. Everything not text or PDF still
+  uses Quick Look.
 - PDFs preview in a native PDFKit view ("perlege light"), **page-wise** by
   default — the mouse wheel flips pages. Focus the pane (⌥→) and perlege's
   keys work: `J`/`]`/Space next page, `K`/`[` previous, `+`/`-` zoom, `f` fit,

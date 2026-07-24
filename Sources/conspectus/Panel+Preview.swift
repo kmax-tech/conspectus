@@ -145,6 +145,12 @@ extension Panel {
         folderScroll.backgroundColor = nsColor(pal.bg)
         folderText.drawsBackground = true
         folderText.backgroundColor = nsColor(pal.bg)
+        if let textScroll = textScroll, let textView = textView {
+            textScroll.drawsBackground = true
+            textScroll.backgroundColor = nsColor(pal.bg)
+            textView.drawsBackground = true
+            textView.backgroundColor = nsColor(pal.bg)
+        }
         stylePDFBar()   // bar + pdf letterbox follow the palette too
     }
 
@@ -179,19 +185,19 @@ extension Panel {
                 // thread (see NOTES).
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                     guard self.isCurrentListing(gen), self.previewAttached else { return }
-                    self.requestFilePreview(path)
+                    self.requestFilePreview(path, generation: gen)
                 }
             }
         }
     }
 
-    /// Route a settled file hover to the right preview: PDFs go to the native
-    /// PDFKit view ("perlege light" — page-wise, perlege keys, none of the
-    /// Quick Look fragility), everything else to Quick Look. The PDF view is
-    /// ours, so hiding it is safe; the QL view below stays alive and covered.
-    func requestFilePreview(_ path: String) {
-        // Size cap: don't hand Quick Look / PDFKit a file big enough to wedge
-        // it (hundreds of MB of JSON, a giant log) — show a note instead.
+    /// Route a settled file hover to the right preview. Priority, all covering
+    /// the always-alive QL view: text/source/notes → native NSTextView (off
+    /// the fragile Quick Look path); PDFs → native PDFKit view; everything else
+    /// → Quick Look (fallback for the long tail). Exactly one cover shows.
+    func requestFilePreview(_ path: String, generation gen: Int) {
+        // Size cap: don't hand any renderer a file big enough to wedge it
+        // (hundreds of MB of JSON, a giant log) — show a note instead.
         if previewMaxBytes > 0,
            let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size]) as? Int,
            size > previewMaxBytes {
@@ -204,6 +210,10 @@ extension Panel {
                 """)
             return
         }
+        if isTextPreviewable(path) {
+            showTextPreview(path, generation: gen)
+            return
+        }
         if pdfPreviewMode != "ql", path.lowercased().hasSuffix(".pdf") {
             let url = URL(fileURLWithPath: path)
             if pdfView.document?.documentURL != url {   // dedup, mirrors the QL check
@@ -214,12 +224,45 @@ extension Panel {
                 if let first = pdfView.document?.page(at: 0) { pdfView.go(to: first) }
             }
             updatePDFBar()
-            pdfPane.isHidden = false
+            textScroll.isHidden = true
             folderScroll.isHidden = true
+            pdfPane.isHidden = false
             return
         }
+        textScroll.isHidden = true
         pdfPane.isHidden = true
         requestQLPreview(path)
+    }
+
+    /// Render a text/source file in the native NSTextView, loaded off the main
+    /// thread (mirrors showFolder). Themed monospace — no syntax highlighting
+    /// yet (step 2). Covering the QL view; the file is already size-capped by
+    /// requestFilePreview. Dedup: if the view already shows this path, skip.
+    func showTextPreview(_ path: String, generation gen: Int) {
+        if !textScroll.isHidden, lastTextPath == path { return }
+        logEvent("showTextPreview \(path)")
+        folderScroll.isHidden = true
+        pdfPane.isHidden = true
+        textScroll.isHidden = false   // cover the always-alive QL view
+        lastTextPath = path
+        let pal = activePalette()
+        let font = terminalFont(size: 12)
+        let fg = nsColor(pal.fg)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            // Read as UTF-8; fall back to Latin-1 so a non-UTF-8 file still
+            // shows *something* rather than nothing (deliberate lenient decode).
+            let text = (try? String(contentsOfFile: path, encoding: .utf8))
+                ?? (try? String(contentsOfFile: path, encoding: .isoLatin1))
+                ?? "(cannot decode as text)"
+            guard self.isCurrentListing(gen) else { return }
+            let attr = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: fg])
+            DispatchQueue.main.async {
+                guard self.isCurrentListing(gen), !self.textScroll.isHidden else { return }
+                self.textView.textStorage?.setAttributedString(attr)
+                self.textView.scroll(NSPoint.zero)
+            }
+        }
     }
 
     /// Point Quick Look at `path` and uncover the preview. Main thread only.
@@ -253,6 +296,7 @@ extension Panel {
         folderText.textStorage?.setAttributedString(attr)
         folderText.scroll(NSPoint.zero)
         pdfPane.isHidden = true
+        textScroll.isHidden = true
         folderScroll.isHidden = false   // cover the always-alive Quick Look view
     }
 
@@ -268,6 +312,9 @@ extension Panel {
     /// preview class of bugs). Covering sidesteps all of it.
     func showFolder(_ path: String, generation gen: Int) {
         logEvent("showFolder \(path)")
+        pdfPane.isHidden = true
+        textScroll.isHidden = true
+        lastTextPath = nil
         folderScroll.isHidden = false   // opaque — covers the always-alive preview
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }

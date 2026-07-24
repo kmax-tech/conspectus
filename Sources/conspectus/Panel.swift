@@ -41,6 +41,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var focusObservation: NSKeyValueObservation?
     var folderScroll: NSScrollView!
     var folderText: NSTextView!
+    /// Native text preview (source/notes/config), covering the QL view like the
+    /// folder listing does — separate view so its focus/scroll semantics don't
+    /// collide with the clickable folder rows.
+    var textScroll: NSScrollView!
+    var textView: IntentFocusTextView!
     var outerSplit: NSSplitView!
     var bottomTerm: LocalProcessTerminalView?
     var hintBar: NSView!
@@ -48,6 +53,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var cheatPanel: NSPanel?
     var cheatText: NSTextView?
     var lastPath: String?
+    /// Path currently shown in the native text preview — dedup for showTextPreview.
+    var lastTextPath: String?
     /// Time of the last wheel event anywhere in the app (stamped by a local
     /// event monitor) — gates the terminal repaint insurance. Main thread only.
     var lastWheelActivity = Date.distantPast
