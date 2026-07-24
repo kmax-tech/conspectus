@@ -48,7 +48,8 @@ let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
                     ("⌘J", "terminal panel (opens in yazi's dir)"),
                     ("⌘W", "close terminal panel"),
                     ("⌘/", "toggle shortcut bar"), ("⌘K", "this cheat sheet"),
-                    ("⌥← →", "cycle pane focus (→ into preview: arrows/Space scroll)"),
+                    ("⌥← →", "cycle pane focus (→ into preview: arrows page/scroll)"),
+                    ("", "PDF preview focused: J/] next  K/[ prev  +/- zoom  s single↔continuous"),
                     ("⌥↑ ↓", "pane area ⇄ terminal panel"),
                     ("=", "sync cd to other pane")]),
 ]

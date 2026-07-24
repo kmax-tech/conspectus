@@ -57,6 +57,43 @@ final class PassthroughBorderView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
+/// Native PDF preview — "perlege light". PDFs bypass the fragile Quick Look
+/// machinery entirely and render in PDFKit, page-wise by default (mouse wheel
+/// flips pages). Same focus-by-intent contract as the Quick Look view: wheel
+/// works unfocused, clicks are swallowed so they can never steal the keyboard
+/// from the terminals, and only ⌥→ hands it the keys. Focused, it answers to
+/// perlege's bindings (shared/keymap.json is the reference): J/]/space next
+/// page, K/[ previous, +/- zoom, f fit, s toggles single ↔ continuous.
+final class IntentFocusPDFView: PDFView {
+    var allowFocus = false
+    override var acceptsFirstResponder: Bool { allowFocus }
+
+    override func mouseDown(with event: NSEvent) {
+        // A preview click must never move the first responder; interaction
+        // (text selection, link clicks) is perlege's job, not the preview's.
+        if allowFocus { super.mouseDown(with: event) }
+    }
+
+    /// Mirror of perlege's displayMode toggle (`s`), minus the twoUp modes —
+    /// the preview pane is too narrow for spreads.
+    func toggleDisplayMode() {
+        displayMode = displayMode == .singlePage ? .singlePageContinuous : .singlePage
+        autoScales = true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.charactersIgnoringModifiers {
+        case "j", "J", "]", " ": goToNextPage(nil)
+        case "k", "K", "[":      goToPreviousPage(nil)
+        case "+", "=":           zoomIn(nil)
+        case "-":                zoomOut(nil)
+        case "f":                autoScales = true
+        case "s":                toggleDisplayMode()
+        default:                 super.keyDown(with: event)   // arrows, PgUp/PgDn native
+        }
+    }
+}
+
 /// The folder-listing text view: display + clickable rows only. It must never
 /// take the keyboard — a click on a row would otherwise make it first
 /// responder and silently swallow all yazi keystrokes (same trap the preview
@@ -106,11 +143,18 @@ extension Panel {
         window.makeFirstResponder(lastTopTerm ?? term)
     }
 
-    /// Hand the keyboard to the preview deliberately (clicks cannot).
+    /// Hand the keyboard to the preview deliberately (clicks cannot). Goes to
+    /// whichever preview is currently showing: the PDF view (perlege keys) or
+    /// the Quick Look view (arrows/Space natively).
     func focusPreview() {
         guard previewAttached else { return }
-        preview.allowFocus = true
-        window.makeFirstResponder(preview)
+        if let pv = pdfView, !pv.isHidden {
+            pv.allowFocus = true
+            window.makeFirstResponder(pv)
+        } else {
+            preview.allowFocus = true
+            window.makeFirstResponder(preview)
+        }
     }
 
     /// True if the keyboard currently sits in the preview pane. Quick Look
@@ -130,6 +174,7 @@ extension Panel {
     func focusDidChange() {
         if !previewHasFocus(window?.firstResponder) {
             preview?.allowFocus = false
+            pdfView?.allowFocus = false
         }
         if let fr = window?.firstResponder as? LocalProcessTerminalView, fr !== bottomTerm {
             lastTopTerm = fr

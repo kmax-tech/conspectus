@@ -29,6 +29,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var bottomPane: NSView?
     let termPadding: CGFloat = 8
     var preview: IntentFocusPreviewView!
+    var pdfView: IntentFocusPDFView!
     var previewFocusRing: PassthroughBorderView!
     var focusObservation: NSKeyValueObservation?
     var folderScroll: NSScrollView!

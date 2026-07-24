@@ -136,6 +136,7 @@ extension Panel {
         folderScroll.backgroundColor = nsColor(pal.bg)
         folderText.drawsBackground = true
         folderText.backgroundColor = nsColor(pal.bg)
+        pdfView?.backgroundColor = nsColor(pal.bg)   // letterbox around pages
     }
 
     func update(_ path: String) {
@@ -169,10 +170,29 @@ extension Panel {
                 // thread (see NOTES).
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                     guard self.isCurrentListing(gen), self.previewAttached else { return }
-                    self.requestQLPreview(path)
+                    self.requestFilePreview(path)
                 }
             }
         }
+    }
+
+    /// Route a settled file hover to the right preview: PDFs go to the native
+    /// PDFKit view ("perlege light" — page-wise, perlege keys, none of the
+    /// Quick Look fragility), everything else to Quick Look. The PDF view is
+    /// ours, so hiding it is safe; the QL view below stays alive and covered.
+    func requestFilePreview(_ path: String) {
+        if pdfPreviewMode != "ql", path.lowercased().hasSuffix(".pdf") {
+            let url = URL(fileURLWithPath: path)
+            if pdfView.document?.documentURL != url {   // dedup, mirrors the QL check
+                logEvent("requestPDFPreview \(path)")
+                pdfView.document = PDFDocument(url: url)
+            }
+            pdfView.isHidden = false
+            folderScroll.isHidden = true
+            return
+        }
+        pdfView.isHidden = true
+        requestQLPreview(path)
     }
 
     /// Point Quick Look at `path` and uncover the preview. Main thread only.

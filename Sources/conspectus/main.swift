@@ -35,6 +35,20 @@ func die(_ msg: String) -> Never {
     exit(1)
 }
 
+/// PDF preview mode (CONSPECTUS_PDF_MODE): "page" (default) previews PDFs in
+/// the native PDFKit view, page-wise — "perlege light", same keys as perlege
+/// when the pane is focused; "continuous" starts that view in continuous
+/// scrolling instead; "ql" routes PDFs through Quick Look like any other file
+/// (escape hatch). Invalid values fail loud and use the default.
+let pdfPreviewMode: String = {
+    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_PDF_MODE"] ?? "page"
+    guard ["page", "continuous", "ql"].contains(raw) else {
+        warn("conspectus: CONSPECTUS_PDF_MODE must be page|continuous|ql (got '\(raw)') — using page")
+        return "page"
+    }
+    return raw
+}()
+
 /// Event diagnosis, off by default: CONSPECTUS_EVENT_LOG=<path> appends one
 /// timestamped line per instrumented event (scrolls reaching the Quick Look
 /// view, preview requests). Used to tell "events never arrive" (routing bug)
