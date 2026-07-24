@@ -71,6 +71,11 @@ LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServic
 [ -x "$LSREG" ] && "$LSREG" -f "$APP" >/dev/null 2>&1 || true
 
 rm -rf "$tmp"
+# rm -rf + recreate can leave the LaunchServices DB stale — launchOrFocus
+# (Hammerspoon Hyper+F) then silently fails until something re-registers the
+# bundle. Register it explicitly.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
+
 echo "==> installed: $APP"
 echo "    Launch from Finder/Launchpad, or: open -a Conspectus   (split: open -a Conspectus --args split)"
 echo "    Shell command unchanged: conspectus | conspectus split"
