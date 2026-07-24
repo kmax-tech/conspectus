@@ -68,6 +68,14 @@ final class IntentFocusPDFView: PDFView {
     var allowFocus = false
     override var acceptsFirstResponder: Bool { allowFocus }
 
+    // PDFView redirects first-responder status to an internal document view,
+    // so keyDown on the PDFView itself may never fire. Claim it back on
+    // becomeFirstResponder so our key handler below is the one that runs.
+    override func becomeFirstResponder() -> Bool {
+        _ = super.becomeFirstResponder()
+        return true
+    }
+
     override func mouseDown(with event: NSEvent) {
         // A preview click must never move the first responder; interaction
         // (text selection, link clicks) is perlege's job, not the preview's.
@@ -150,11 +158,14 @@ extension Panel {
         guard previewAttached else { return }
         if let pane = pdfPane, !pane.isHidden {
             pdfView.allowFocus = true
-            window.makeFirstResponder(pdfView)
+            let ok = window.makeFirstResponder(pdfView)
+            logEvent("focusPreview -> pdfView ok=\(ok) fr=\(type(of: window.firstResponder))")
         } else {
             preview.allowFocus = true
-            window.makeFirstResponder(preview)
+            let ok = window.makeFirstResponder(preview)
+            logEvent("focusPreview -> QL ok=\(ok) fr=\(type(of: window.firstResponder))")
         }
+        updateFocusBorders()   // belt-and-suspenders: paint immediately, not only on the KVO tick
     }
 
     /// True if the keyboard currently sits in the preview pane. Quick Look
