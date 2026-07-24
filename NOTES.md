@@ -189,9 +189,12 @@ never do it, cover instead; (4) pointer exit/re-entry → remote may stop
 processing wheel events, re-arm with a lazy focus nudge (next entry);
 (5) the same `_teardownScrollers` KVO crash also fires when macOS switches
 the recommended scroller style mid WebKit layer commit (fast wheel
-scrolling a Web2 preview) — the app pins `AppleShowScrollBars = Always`
-(app-domain `set`, registration domain would lose to the global pref) so
-the style can never change.
+scrolling a Web2/markdown preview). Pinning `AppleShowScrollBars=Always`
+did NOT stop it (second identical crash with the pin verifiably active) —
+the working protection is the ConspectusShield target: an ObjC swizzle
+wrapping `-[QLScrollController _teardownScrollers]` in @try/@catch (Swift
+cannot catch ObjC exceptions). Fails loud at startup if the private
+method disappears in a macOS update.
 
 ## 2026-07-24 — SwiftTerm display wedge under wheel floods; repaint insurance
 

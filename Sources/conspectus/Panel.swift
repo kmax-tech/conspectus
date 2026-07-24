@@ -1,6 +1,7 @@
 import Cocoa
 import Quartz
 import SwiftTerm
+import ConspectusShield
 
 // Panel — the application delegate and owner of the whole window. This file
 // holds the stored state and the app lifecycle (startup, FIFO management,
@@ -110,9 +111,17 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // device, and QuickLook's QLScrollController crashes in its scroller
         // teardown when that switch lands mid WebKit layer commit (KVO
         // removeObserver throws; crash seen 2026-07-24 while wheel-scrolling
-        // a Web2 preview). A constant style removes the trigger; the cost is
-        // always-visible scrollbars in the right pane.
+        // a Web2 preview). NOTE: the pin alone did NOT stop the style-switch
+        // plumbing (second identical crash with the pin active) — the real
+        // protection is the ObjC @try/@catch shield below; the pin stays as
+        // a cheap trigger-reducer.
         UserDefaults.standard.set("Always", forKey: "AppleShowScrollBars")
+        // Fail-loud, not fail-silent: without the shield the crash class is
+        // simply back (e.g. after a macOS update renames the private method).
+        if !conspectus_installQLTeardownShield() {
+            warn("conspectus: QL teardown shield NOT installed (private API changed) — "
+                 + "style-switch crashes during wheel scrolling are possible again")
+        }
         createFifo()
         term = makeTerm()
         observeAppearanceChanges()
