@@ -154,7 +154,15 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                 let sem = DispatchSemaphore(value: 0)
                 DispatchQueue.main.async { sem.signal() }
                 if sem.wait(timeout: .now() + 2.0) == .timedOut {
-                    if Date().timeIntervalSince(lastSample) > 30 {
+                    // A stall nobody can see is not a freeze: in sleep/DarkWake
+                    // maintenance windows the App-Napped main thread misses
+                    // pings while this utility thread runs (observed as 5:56am
+                    // reports with empty sample call graphs). Only report when
+                    // someone was plausibly at the machine.
+                    let anyInput = CGEventType(rawValue: ~0) ?? .null
+                    let idle = CGEventSource.secondsSinceLastEventType(
+                        .combinedSessionState, eventType: anyInput)
+                    if idle < 60, Date().timeIntervalSince(lastSample) > 30 {
                         lastSample = Date()
                         let out = (cacheDir as NSString)
                             .appendingPathComponent("freeze-\(Int(Date().timeIntervalSince1970)).txt")

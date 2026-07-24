@@ -265,8 +265,11 @@ modes, split included), generates init.lua (user's init first), and only
 sets the catppuccin theme if the flavors are installed.
 
 **Notes:** Users with the dotfiles qlpeek plugin get double FIFO writes per
-hover (their plugin + bundled one) — harmless, the app's debounce coalesces
-them. The `[[ -e $entry ]]` guards matter: with an empty config dir, bash
+hover (their plugin + bundled one). 2026-07-24: the event log disproved the
+old "harmless, the debounce coalesces them" claim — the second write often
+lands outside the 120ms window and doubled every QL request.
+`requestQLPreview` now drops requests for the item the uncovered preview
+already shows. The `[[ -e $entry ]]` guards matter: with an empty config dir, bash
 leaves the glob literal and a symlink named `*` lands in the overlay.
 
 ## 2026-07-22 — Dual-pane yazi: DDS ids and cd-sync

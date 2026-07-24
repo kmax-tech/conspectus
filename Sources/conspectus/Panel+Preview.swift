@@ -176,7 +176,15 @@ extension Panel {
     }
 
     /// Point Quick Look at `path` and uncover the preview. Main thread only.
+    /// Duplicate hover writes are dropped: two plugins can feed the FIFO
+    /// (bundled + dotfiles qlpeek), and the event log proved the second write
+    /// often lands outside the debounce window — re-requesting the item the
+    /// uncovered preview already shows would only double the QL churn.
     func requestQLPreview(_ path: String) {
+        if folderScroll.isHidden, preview.previewItem?.previewItemURL?.path == path {
+            logEvent("requestQLPreview dedup \(path)")
+            return
+        }
         logEvent("requestQLPreview \(path)")
         preview.previewItem = URL(fileURLWithPath: path) as QLPreviewItem
         preview.refreshPreviewItem()
