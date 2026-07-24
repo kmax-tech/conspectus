@@ -96,14 +96,16 @@ extension Panel {
     /// white paper turns dark. Pure view-level — the file is untouched.
     @objc func pdfToggleRecolor() {
         pdfRecolored.toggle()
+        // CIFilters on a layer are IGNORED on macOS unless the view opts in
+        // with layerUsesCoreImageFilters — that was the missing piece.
         pdfView.wantsLayer = true
+        pdfView.layerUsesCoreImageFilters = true
         if pdfRecolored,
            let invert = CIFilter(name: "CIColorInvert"),
            let hue = CIFilter(name: "CIHueAdjust") {
-            hue.setValue(Double.pi, forKey: kCIInputAngleKey)
+            hue.setValue(Double.pi, forKey: kCIInputAngleKey)   // 180° back → colours stay ~right, paper goes dark
             pdfView.layer?.filters = [invert, hue]
         } else {
-            pdfRecolored = false
             pdfView.layer?.filters = nil
         }
     }
