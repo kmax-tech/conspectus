@@ -142,6 +142,13 @@ running, so per-call-site updates would miss them. `updateTitle()` also
 repaints borders because attach/detach changes the target set without a
 first-responder change.
 
+2026-07-24: two more silent keyboard thieves of the same family — a click
+on a folder-listing row focused its NSTextView, and the ⌘K cheat panel
+took key-window status; both left yazi deaf with the app looking healthy.
+Rule: anything display-only (listing, reference panels) must refuse first
+responder / key status (`NonFocusableTextView`, `KeylessPanel`) — links,
+scrolling, and close buttons all work without the keyboard.
+
 ## 2026-07-22 — FIFO per instance; reader opens O_RDWR (wedged-open bug)
 
 **Problem:** All instances shared `~/.cache/conspectus/target`. Any new
