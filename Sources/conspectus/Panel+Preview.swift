@@ -186,6 +186,9 @@ extension Panel {
             if pdfView.document?.documentURL != url {   // dedup, mirrors the QL check
                 logEvent("requestPDFPreview \(path)")
                 pdfView.document = PDFDocument(url: url)
+                // New document: start at page 1 (PDFKit otherwise keeps the
+                // previous scroll offset in continuous mode / on reload).
+                if let first = pdfView.document?.page(at: 0) { pdfView.go(to: first) }
             }
             updatePDFBar()
             pdfPane.isHidden = false

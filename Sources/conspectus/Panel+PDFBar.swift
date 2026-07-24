@@ -34,6 +34,7 @@ extension Panel {
         pdfPane.isHidden = true
 
         buildPDFBarControls()
+        stylePDFBar()   // opaque background NOW — else the covered QL view bleeds through the bar
 
         // Live labels: PDFKit posts on page flips and zoom changes.
         NotificationCenter.default.addObserver(forName: .PDFViewPageChanged, object: pdfView,
