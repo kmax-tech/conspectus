@@ -132,12 +132,15 @@ final class IntentFocusPDFView: PDFView {
 final class IntentFocusTextView: NSTextView {
     var allowFocus = false
     var onFocusLeft: (() -> Void)?
+    /// `m` — toggle markdown between rendered (glow) and source (bat).
+    var onToggleMarkdown: (() -> Void)?
     override var acceptsFirstResponder: Bool { allowFocus }
 
     override func keyDown(with event: NSEvent) {
         switch event.charactersIgnoringModifiers {
         case "j": scrollLineDown(nil)
         case "k": scrollLineUp(nil)
+        case "m": onToggleMarkdown?()
         case "h": onFocusLeft?()
         default:
             if event.keyCode == 123 { onFocusLeft?() }   // ← returns to yazi

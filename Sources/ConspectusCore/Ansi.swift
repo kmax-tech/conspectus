@@ -12,15 +12,19 @@ public struct RGB: Equatable {
 }
 
 /// A maximal stretch of text sharing the same styling. `fg == nil` means the
-/// default foreground (the caller's themed text colour).
+/// default foreground; `bg == nil` means the themed pane background (glow's
+/// code blocks / some themes set a background). `bg` defaults to nil so the
+/// text-only callers and tests need not mention it.
 public struct AnsiRun: Equatable {
     public let text: String
     public let fg: RGB?
+    public let bg: RGB?
     public let bold: Bool
     public let italic: Bool
     public let underline: Bool
-    public init(text: String, fg: RGB?, bold: Bool, italic: Bool, underline: Bool) {
-        self.text = text; self.fg = fg; self.bold = bold; self.italic = italic; self.underline = underline
+    public init(text: String, fg: RGB?, bold: Bool, italic: Bool, underline: Bool, bg: RGB? = nil) {
+        self.text = text; self.fg = fg; self.bg = bg
+        self.bold = bold; self.italic = italic; self.underline = underline
     }
 }
 
@@ -47,6 +51,7 @@ private func xterm256(_ n: Int) -> RGB {
 public func parseANSI(_ input: String) -> [AnsiRun] {
     var runs: [AnsiRun] = []
     var fg: RGB? = nil
+    var bg: RGB? = nil
     var bold = false, italic = false, underline = false
     var buf = ""
     let chars = Array(input.unicodeScalars)
@@ -54,7 +59,7 @@ public func parseANSI(_ input: String) -> [AnsiRun] {
 
     func flush() {
         guard !buf.isEmpty else { return }
-        runs.append(AnsiRun(text: buf, fg: fg, bold: bold, italic: italic, underline: underline))
+        runs.append(AnsiRun(text: buf, fg: fg, bold: bold, italic: italic, underline: underline, bg: bg))
         buf = ""
     }
 
@@ -68,7 +73,7 @@ public func parseANSI(_ input: String) -> [AnsiRun] {
             let final = j < chars.count ? chars[j] : "m"
             if final == "m" {
                 flush()
-                applySGR(params, &fg, &bold, &italic, &underline)
+                applySGR(params, &fg, &bg, &bold, &italic, &underline)
             }
             i = j + 1
             continue
@@ -80,15 +85,16 @@ public func parseANSI(_ input: String) -> [AnsiRun] {
     return runs
 }
 
-/// Apply one `\e[…m` parameter list to the running style.
-private func applySGR(_ params: String, _ fg: inout RGB?, _ bold: inout Bool,
-                      _ italic: inout Bool, _ underline: inout Bool) {
+/// Apply one `\e[…m` parameter list to the running style (foreground,
+/// background, and the bold/italic/underline flags).
+private func applySGR(_ params: String, _ fg: inout RGB?, _ bg: inout RGB?,
+                      _ bold: inout Bool, _ italic: inout Bool, _ underline: inout Bool) {
     let codes = params.split(separator: ";", omittingEmptySubsequences: false).map { Int($0) ?? 0 }
-    if codes.isEmpty { fg = nil; bold = false; italic = false; underline = false; return }
+    if codes.isEmpty { fg = nil; bg = nil; bold = false; italic = false; underline = false; return }
     var k = 0
     while k < codes.count {
         switch codes[k] {
-        case 0: fg = nil; bold = false; italic = false; underline = false
+        case 0: fg = nil; bg = nil; bold = false; italic = false; underline = false
         case 1: bold = true
         case 22: bold = false
         case 3: italic = true
@@ -98,12 +104,18 @@ private func applySGR(_ params: String, _ fg: inout RGB?, _ bold: inout Bool,
         case 30...37: fg = ansi16[codes[k] - 30]
         case 90...97: fg = ansi16[codes[k] - 90 + 8]
         case 39: fg = nil
-        case 38:
+        case 40...47: bg = ansi16[codes[k] - 40]
+        case 100...107: bg = ansi16[codes[k] - 100 + 8]
+        case 49: bg = nil
+        case 38, 48:
+            let isFg = codes[k] == 38
+            var colour: RGB? = nil
             if k + 1 < codes.count, codes[k + 1] == 5, k + 2 < codes.count {
-                fg = xterm256(codes[k + 2]); k += 2
+                colour = xterm256(codes[k + 2]); k += 2
             } else if k + 1 < codes.count, codes[k + 1] == 2, k + 4 < codes.count {
-                fg = RGB(UInt8(clamping: codes[k + 2]), UInt8(clamping: codes[k + 3]), UInt8(clamping: codes[k + 4])); k += 4
+                colour = RGB(UInt8(clamping: codes[k + 2]), UInt8(clamping: codes[k + 3]), UInt8(clamping: codes[k + 4])); k += 4
             }
+            if isFg { fg = colour } else { bg = colour }
         default: break
         }
         k += 1

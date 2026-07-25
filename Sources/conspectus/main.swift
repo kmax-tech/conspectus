@@ -35,6 +35,20 @@ func die(_ msg: String) -> Never {
     exit(1)
 }
 
+/// How markdown files preview: "render" (glow → formatted, the default) or
+/// "source" (bat → highlighted markdown source). Toggle at runtime with `m`
+/// while the text preview is focused. Invalid values fail loud → default.
+let markdownRenderDefault: Bool = {
+    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_MD_MODE"] ?? "render"
+    switch raw {
+    case "render": return true
+    case "source": return false
+    default:
+        warn("conspectus: CONSPECTUS_MD_MODE must be render|source (got '\(raw)') — using render")
+        return true
+    }
+}()
+
 /// FIFO control message asking conspectus to move keyboard focus into the
 /// preview pane — written by yazi's `l`/→-on-a-file binding so h/l pane
 /// navigation flows from yazi into the preview. Not a path (those are

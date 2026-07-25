@@ -32,17 +32,22 @@ func renderANSI(_ runs: [AnsiRun], font: NSFont, defaultFg: NSColor) -> NSAttrib
     let italic = fm.convert(font, toHaveTrait: .italicFontMask)
     let boldItalic = fm.convert(bold, toHaveTrait: .italicFontMask)
     let result = NSMutableAttributedString()
+    func color(_ c: RGB) -> NSColor {
+        NSColor(srgbRed: CGFloat(c.r) / 255, green: CGFloat(c.g) / 255, blue: CGFloat(c.b) / 255, alpha: 1)
+    }
     for run in runs {
         let f = run.bold && run.italic ? boldItalic : run.bold ? bold : run.italic ? italic : font
         var attrs: [NSAttributedString.Key: Any] = [.font: f]
-        attrs[.foregroundColor] = run.fg.map {
-            NSColor(srgbRed: CGFloat($0.r) / 255, green: CGFloat($0.g) / 255, blue: CGFloat($0.b) / 255, alpha: 1)
-        } ?? defaultFg
+        attrs[.foregroundColor] = run.fg.map(color) ?? defaultFg
+        if let bg = run.bg { attrs[.backgroundColor] = color(bg) }   // glow code blocks / themed bg
         if run.underline { attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue }
         result.append(NSAttributedString(string: run.text, attributes: attrs))
     }
     return result
 }
+
+/// glow style matching the app appearance (its built-in dark/light styles).
+func glowStyle() -> String { systemIsDark() ? "dark" : "light" }
 
 /// SwiftTerm color from a palette hex string (validated by Palette's init;
 /// see nsColor in ConspectusCore for why try! is the honest choice here).

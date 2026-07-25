@@ -63,6 +63,7 @@ extension Panel {
         textView.textContainerInset = NSSize(width: 10, height: 10)
         textView.textContainer?.widthTracksTextView = true
         textView.onFocusLeft = { [weak self] in self?.focusLeftPane() }
+        textView.onToggleMarkdown = { [weak self] in self?.toggleMarkdownMode() }
         textScroll.documentView = textView
         textScroll.isHidden = true
     }

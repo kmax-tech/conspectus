@@ -52,6 +52,7 @@ let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
                     ("l / →", "on a file: focus the preview (h / ← there returns to yazi)"),
                     ("click", "focus the clicked pane (border follows)"),
                     ("", "PDF preview focused: J/] next  K/[ prev  +/- zoom  s single↔continuous"),
+                    ("", "text preview focused: j/k scroll  m markdown render↔source"),
                     ("⌥↑ ↓", "pane area ⇄ terminal panel"),
                     ("=", "sync cd to other pane")]),
 ]

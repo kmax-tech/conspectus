@@ -34,4 +34,20 @@ final class AnsiTests: XCTestCase {
         let runs = parseANSI("a\nb\nc")
         XCTAssertEqual(runs.map(\.text).joined(), "a\nb\nc")
     }
+
+    func testBackgroundColor() {
+        // truecolor bg (glow code blocks) then reset
+        let runs = parseANSI("\u{1B}[48;2;40;40;40mcode\u{1B}[0mplain")
+        XCTAssertEqual(runs[0].bg, RGB(40, 40, 40))
+        XCTAssertNil(runs[0].fg)
+        XCTAssertNil(runs[1].bg)   // reset clears bg too
+    }
+
+    func testEmptyParamsAreReset() {
+        // glow emits `\e[;;1m` (bold with empty leading params) and `\e[;3m`
+        let bold = parseANSI("\u{1B}[;;1mH\u{1B}[0m")[0]
+        XCTAssertTrue(bold.bold)
+        let italic = parseANSI("\u{1B}[;3mI\u{1B}[0m")[0]
+        XCTAssertTrue(italic.italic)
+    }
 }

@@ -279,10 +279,20 @@ extension Panel {
         let fg = nsColor(activePalette().fg)
         let bat = batPath          // snapshot on main
         let theme = batTheme()
+        // Markdown in render mode → glow (formatted); else → bat (highlighted
+        // source). Both emit ANSI that the same parseANSI/renderANSI handle.
+        let ext = ((path as NSString).lastPathComponent as NSString).pathExtension.lowercased()
+        let renderMd = markdownRender && (ext == "md" || ext == "markdown")
+        let glow = glowPath
+        let mdStyle = glowStyle()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let attr: NSAttributedString
-            if let bat = bat, let ansi = self.runBat(bat, theme: theme, path: path) {
+            if renderMd, let glow = glow, let ansi = self.runGlow(glow, style: mdStyle, path: path) {
+                logEvent("textPreview via glow (render) \(path)")
+                attr = renderANSI(parseANSI(ansi), font: font, defaultFg: fg)
+            } else if let bat = bat, let ansi = self.runBat(bat, theme: theme, path: path) {
+                logEvent("textPreview via bat (source) \(path)")
                 attr = renderANSI(parseANSI(ansi), font: font, defaultFg: fg)
             } else {
                 // Fallback: raw text, themed monospace. UTF-8 then Latin-1 so a
@@ -301,6 +311,19 @@ extension Panel {
         }
     }
 
+    /// Toggle markdown preview between rendered (glow) and source (bat), then
+    /// re-render the current markdown file. No-op unless the preview currently
+    /// shows a markdown file. Bound to `m` in the focused text preview.
+    func toggleMarkdownMode() {
+        guard let path = lastTextPath, !textScroll.isHidden else { return }
+        let ext = ((path as NSString).lastPathComponent as NSString).pathExtension.lowercased()
+        guard ext == "md" || ext == "markdown" else { return }
+        markdownRender.toggle()
+        logEvent("markdown mode -> \(markdownRender ? "render" : "source")")
+        lastTextPath = nil                                  // defeat the dedup
+        showTextPreview(path, generation: bumpListingGeneration())
+    }
+
     /// Run `bat` and return its ANSI-coloured output, or nil on failure (caller
     /// falls back to plain text). `--style=plain` = no line numbers/decorations;
     /// `--wrap=never` lets the NSTextView do the wrapping. Off the main thread.
@@ -312,6 +335,27 @@ extension Panel {
         let out = Pipe()
         p.standardOutput = out
         p.standardError = Pipe()   // swallow bat's stderr
+        do {
+            try p.run()
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            guard p.terminationStatus == 0 else { return nil }
+            return String(data: data, encoding: .utf8)
+        } catch {
+            return nil
+        }
+    }
+
+    /// Render markdown to ANSI with `glow` (formatted: styled headers, lists,
+    /// bold/italic, code blocks), or nil on failure (caller falls back to bat).
+    /// `--width 0` lets glow use the natural width; off the main thread.
+    private func runGlow(_ glow: String, style: String, path: String) -> String? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: glow)
+        p.arguments = ["--style=\(style)", "--width", "0", path]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = Pipe()
         do {
             try p.run()
             let data = out.fileHandleForReading.readDataToEndOfFile()

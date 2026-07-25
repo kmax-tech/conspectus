@@ -195,6 +195,11 @@ the active instance automatically — no focus tracking involved. Note that
   via `bat`** (its ANSI parsed to an attributed string, Catppuccin theme
   matching the app's light/dark palette); falls back to plain monospace if
   `bat` isn't installed.
+- Markdown previews **rendered** by default (`glow` → formatted headers,
+  lists, bold/italic, code blocks) or as highlighted **source** (`bat`).
+  `CONSPECTUS_MD_MODE=render|source` sets the default; **`m`** toggles it live
+  while the preview is focused. Both feed the same in-process ANSI renderer;
+  no `glow` → falls back to source. (`brew install glow` for render mode.)
 - Images (`.png`, `.jpg`, `.gif`, `.heic`, …) preview in a native
   `NSImageView`, fit-to-pane, letterboxed in the theme background.
 - Only the long tail (video, audio, office, fonts, …) still uses Quick Look —
