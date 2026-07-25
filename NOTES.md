@@ -235,6 +235,9 @@ appears only when all are hidden. Result: text, images, and PDFs are all
 native/in-process; Quick Look (with its shield + ⌘E rebuild) now guards only
 the long tail (video/audio/office/fonts). The most-hovered and most
 crash-prone cases are off the fragile out-of-process path entirely.
+`CONSPECTUS_QUICKLOOK=off` disables the fallback outright (long tail shows a
+note; the remote extension is never spawned) for users who want zero QL
+surface — on by default.
 
 ## 2026-07-24 — SwiftTerm display wedge under wheel floods; repaint insurance
 

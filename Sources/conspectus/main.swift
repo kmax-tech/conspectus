@@ -55,6 +55,31 @@ let markdownRenderDefault: Bool = {
 /// absolute), so it can never collide with a hovered file.
 let focusPreviewSentinel = "@FOCUS_PREVIEW"
 
+/// Quick Look fallback toggle (CONSPECTUS_QUICKLOOK): "on" (default) previews
+/// the long tail — video, audio, office, fonts, anything not text/image/PDF —
+/// through Quick Look. "off" disables it entirely; those files show a short
+/// "no native preview" note instead.
+///
+/// WHY this exists: Quick Look is the one preview path conspectus does NOT own
+/// — it renders out-of-process in a private, undocumented system extension, and
+/// every preview crash/wedge in the project's history traces to that (the
+/// `_teardownScrollers` KVO abort, the WebKit scroller-style crash, the churn
+/// wedge). Text, images, and PDFs are already native/in-process; Quick Look now
+/// only serves the long tail. A user who never previews those and wants ZERO
+/// Quick Look surface (no remote extension ever spawned, no crash class at all)
+/// can turn it off and trade long-tail previews for maximum stability. It stays
+/// ON by default because the fallback is still useful and the shield guards it.
+let quickLookEnabled: Bool = {
+    let raw = (ProcessInfo.processInfo.environment["CONSPECTUS_QUICKLOOK"] ?? "on").lowercased()
+    switch raw {
+    case "on", "1", "true", "yes": return true
+    case "off", "0", "false", "no": return false
+    default:
+        warn("conspectus: CONSPECTUS_QUICKLOOK must be on|off (got '\(raw)') — using on")
+        return true
+    }
+}()
+
 /// PDF preview mode (CONSPECTUS_PDF_MODE): "page" (default) previews PDFs in
 /// the native PDFKit view, page-wise — "perlege light", same keys as perlege
 /// when the pane is focused; "continuous" starts that view in continuous

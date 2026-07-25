@@ -204,6 +204,9 @@ the active instance automatically — no focus tracking involved. Note that
   `NSImageView`, fit-to-pane, letterboxed in the theme background.
 - Only the long tail (video, audio, office, fonts, …) still uses Quick Look —
   text, images, and PDFs are all native, in-process, off the fragile path.
+  `CONSPECTUS_QUICKLOOK=off` disables even that: the long tail shows a "no
+  native preview" note and Quick Look's out-of-process extension is never
+  spawned at all — maximum stability, no long-tail previews. On by default.
 - PDFs preview in a native PDFKit view ("perlege light"), **page-wise** by
   default — the mouse wheel flips pages. Focus the pane (⌥→) and perlege's
   keys work: `J`/`]`/Space next page, `K`/`[` previous, `+`/`-` zoom, `f` fit,

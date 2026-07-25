@@ -243,6 +243,17 @@ extension Panel {
             return
         }
         hideAllCovers()
+        guard quickLookEnabled else {
+            // Quick Look turned off (CONSPECTUS_QUICKLOOK=off): no remote
+            // extension is ever touched — the long tail just shows a note.
+            showPreviewMessage("""
+                \((path as NSString).lastPathComponent)
+
+                No native preview for this type.
+                Quick Look is off (CONSPECTUS_QUICKLOOK=on to enable).
+                """)
+            return
+        }
         requestQLPreview(path)
     }
 
