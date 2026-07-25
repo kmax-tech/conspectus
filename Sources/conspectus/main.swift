@@ -49,6 +49,15 @@ let markdownRenderDefault: Bool = {
     }
 }()
 
+/// Live preview refresh (CONSPECTUS_WATCH): "on" (default) watches the
+/// currently-previewed file and re-renders when it changes on disk — so
+/// editing a note in nvim (left) updates the preview (right) on save. "off"
+/// disables the watcher.
+let watchEnabled: Bool = {
+    let raw = (ProcessInfo.processInfo.environment["CONSPECTUS_WATCH"] ?? "on").lowercased()
+    return !(raw == "off" || raw == "0" || raw == "false" || raw == "no")
+}()
+
 /// FIFO control message asking conspectus to move keyboard focus into the
 /// preview pane — written by yazi's `l`/→-on-a-file binding so h/l pane
 /// navigation flows from yazi into the preview. Not a path (those are

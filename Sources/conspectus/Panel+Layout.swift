@@ -418,6 +418,7 @@ extension Panel {
     /// must rebuild it.
     func detachPreview() {
         guard previewAttached else { return }
+        stopWatchingPreviewFile()   // nothing visible to keep fresh
         rightContainer.removeFromSuperview()
         evenOutPanes()
         previewButton?.state = .off

@@ -198,6 +198,22 @@ protection is the ConspectusShield target: an ObjC swizzle wrapping
 catch ObjC exceptions). Fails loud at startup if the private method
 disappears in a macOS update; success is visible in the event log.
 
+## 2026-07-25 — Live preview refresh (edit in nvim, see it on save)
+
+**Problem:** The preview only updated on hover. Editing a note in nvim (left
+pane) and saving didn't refresh the preview (right).
+
+**Solution:** A `DispatchSourceFileSystemObject` watches the currently-
+previewed file (`watchPreviewFile`, armed in requestFilePreview, cancelled in
+showFolder/detach). On a change it calls `refreshCurrentPreview`, which busts
+the per-type dedups (text via lastTextPath=nil, PDF by clearing the document)
+and re-runs `update` (so the 120ms debounce + generation cancellation still
+apply). Editors save ATOMICALLY (write temp, rename over the original), which
+replaces the inode our fd points at — so on `.rename`/`.delete` we re-open
+the path and re-arm. Event-driven (no polling) so App Nap stays intact.
+`CONSPECTUS_WATCH=off` disables it. Live-verified: in-place write, append,
+and atomic rename-save all refresh; no loop (re-arm doesn't self-fire).
+
 ## 2026-07-25 — Markdown: native document render (swift-markdown) + toolbar toggle
 
 **Problem:** The rendered markdown mode used glow → ANSI → NSTextView, which

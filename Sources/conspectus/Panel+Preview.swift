@@ -200,6 +200,48 @@ extension Panel {
     /// the always-alive QL view: text/source/notes → native NSTextView (off
     /// the fragile Quick Look path); PDFs → native PDFKit view; everything else
     /// → Quick Look (fallback for the long tail). Exactly one cover shows.
+    /// Watch `path` for on-disk changes and refresh the preview when it fires.
+    /// Re-armed on rename/delete because editors save atomically (write a temp
+    /// file, rename over the original) — that replaces the inode our fd points
+    /// at, so we re-open the path. The 120ms debounce in `update` coalesces an
+    /// editor's write bursts. Side effects: opens an O_EVTONLY fd + dispatch
+    /// source; replaces any previous watcher.
+    func watchPreviewFile(_ path: String) {
+        stopWatchingPreviewFile()
+        guard watchEnabled else { return }
+        let fd = open(path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .extend, .rename, .delete], queue: .main)
+        src.setEventHandler { [weak self] in
+            guard let self = self else { return }
+            let flags = src.data
+            logEvent("preview file changed \(path)")
+            if flags.contains(.rename) || flags.contains(.delete) {
+                self.watchPreviewFile(path)   // atomic save replaced the inode — re-open
+            }
+            self.refreshCurrentPreview()
+        }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        fileWatch = src
+    }
+
+    func stopWatchingPreviewFile() {
+        fileWatch?.cancel()
+        fileWatch = nil
+    }
+
+    /// Re-render the currently-previewed file, bypassing the per-type dedups so
+    /// a same-path change actually shows. Goes through `update` so the debounce
+    /// and generation cancellation still apply.
+    func refreshCurrentPreview() {
+        guard previewAttached, let path = lastPath else { return }
+        lastTextPath = nil                                             // text/markdown dedup
+        if pdfView?.document?.documentURL == URL(fileURLWithPath: path) { pdfView.document = nil }  // pdf dedup
+        update(path)
+    }
+
     /// Hide every cover over the always-alive QL view. Each show-path calls
     /// this, then reveals exactly its own cover — so only one is ever visible,
     /// and the QL view shows when all are hidden.
@@ -211,6 +253,7 @@ extension Panel {
     }
 
     func requestFilePreview(_ path: String, generation gen: Int) {
+        watchPreviewFile(path)   // live-refresh this file if it's edited on disk
         // Size cap: don't hand any renderer a file big enough to wedge it
         // (hundreds of MB of JSON, a giant log) — show a note instead.
         if previewMaxBytes > 0,
@@ -447,6 +490,7 @@ extension Panel {
     /// preview class of bugs). Covering sidesteps all of it.
     func showFolder(_ path: String, generation gen: Int) {
         logEvent("showFolder \(path)")
+        stopWatchingPreviewFile()   // a directory has no single file to watch
         hideAllCovers()
         lastTextPath = nil
         folderScroll.isHidden = false   // opaque — covers the always-alive preview

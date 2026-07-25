@@ -63,6 +63,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var lastPath: String?
     /// Path currently shown in the native text preview — dedup for showTextPreview.
     var lastTextPath: String?
+    /// Watches the currently-previewed file for on-disk changes so an edit
+    /// (e.g. saving markdown in nvim on the left) refreshes the preview live.
+    var fileWatch: DispatchSourceFileSystemObject?
     /// Absolute path of `bat`, resolved once at startup; nil until resolved or
     /// if missing (then the text preview stays plain monospace). Main thread only.
     var batPath: String?
