@@ -182,10 +182,13 @@ the active instance automatically — no focus tracking involved. Note that
   yazi's default) is kept.
 - Font: JetBrainsMono Nerd Font Mono by default; override with `CONSPECTUS_FONT` /
   `CONSPECTUS_FONT_SIZE`.
-- Live refresh: the previewed file is watched, so editing a note in `nvim`
-  (left pane, `E t`) and saving updates the preview (right) on the fly —
-  handles editors' atomic saves (write-temp-then-rename). `CONSPECTUS_WATCH=off`
-  disables it.
+- Live refresh: the previewed file's mtime is polled (~0.7 s) while a file
+  preview is showing, so editing a note in `nvim` (left pane, `E t`) and saving
+  updates the preview (right) on the fly. Polling (not an fd watch) on purpose:
+  it survives a rebuild that deletes/recreates/moves the file — e.g. `latexmk`
+  producing a PDF — where the file briefly vanishes and an inode-bound watch
+  would be lost. Gated to an active file preview, so it stops when browsing
+  dirs / idle. `CONSPECTUS_WATCH=off` disables it.
 - Event diagnosis (off by default): `CONSPECTUS_EVENT_LOG=<path>` appends a line
   per preview request and per scroll event reaching the Quick Look view — for
   debugging a preview that stops reacting.

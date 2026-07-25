@@ -200,36 +200,51 @@ extension Panel {
     /// the always-alive QL view: text/source/notes → native NSTextView (off
     /// the fragile Quick Look path); PDFs → native PDFKit view; everything else
     /// → Quick Look (fallback for the long tail). Exactly one cover shows.
-    /// Watch `path` for on-disk changes and refresh the preview when it fires.
-    /// Re-armed on rename/delete because editors save atomically (write a temp
-    /// file, rename over the original) — that replaces the inode our fd points
-    /// at, so we re-open the path. The 120ms debounce in `update` coalesces an
-    /// editor's write bursts. Side effects: opens an O_EVTONLY fd + dispatch
-    /// source; replaces any previous watcher.
+    /// mtime of `path`, or nil if it can't be stat'd (e.g. momentarily gone
+    /// mid-rebuild). Pure path→mtime; no inode identity involved — which is the
+    /// whole point of polling over an fd watch.
+    func fileMtime(_ path: String) -> Date? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let m = attrs[.modificationDate] as? Date else { return nil }
+        return m
+    }
+
+    /// Watch `path` for on-disk changes and refresh the preview when its mtime
+    /// moves. Polling, not an fd watcher, ON PURPOSE: an editor saves by writing
+    /// a temp and renaming over the original, and latexmk goes further — it
+    /// deletes/recreates/moves the PDF several times per build, so the file is
+    /// briefly *absent*. An fd watch points at one inode; the moment latexmk's
+    /// new file replaces it, the fd is stale, and if the re-`open()` lands in
+    /// the gap where nothing is there, the watch is lost for good (this is what
+    /// bit perlege). `stat` on the path doesn't care about inodes — file gone
+    /// this tick, back the next, mtime moved, we refresh. Gated to an active
+    /// file preview so it stops on dir/idle. Side effects: starts a repeating
+    /// main-thread timer; replaces any previous one. The 120ms debounce in
+    /// `update` coalesces an editor's write bursts.
     func watchPreviewFile(_ path: String) {
         stopWatchingPreviewFile()
         guard watchEnabled else { return }
-        let fd = open(path, O_EVTONLY)
-        guard fd >= 0 else { return }
-        let src = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd, eventMask: [.write, .extend, .rename, .delete], queue: .main)
-        src.setEventHandler { [weak self] in
+        lastPreviewMtime = fileMtime(path)
+        let t = Timer(timeInterval: 0.7, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            let flags = src.data
-            logEvent("preview file changed \(path)")
-            if flags.contains(.rename) || flags.contains(.delete) {
-                self.watchPreviewFile(path)   // atomic save replaced the inode — re-open
+            // Only compare when the file is actually there; a nil (mid-rebuild
+            // gap) is not a change — we wait for it to come back with a new mtime.
+            guard let now = self.fileMtime(path) else { return }
+            if now != self.lastPreviewMtime {
+                self.lastPreviewMtime = now
+                logEvent("preview file changed \(path)")
+                self.refreshCurrentPreview()
             }
-            self.refreshCurrentPreview()
         }
-        src.setCancelHandler { close(fd) }
-        src.resume()
-        fileWatch = src
+        t.tolerance = 0.2   // let the scheduler coalesce; this is not latency-critical
+        RunLoop.main.add(t, forMode: .common)
+        previewWatchTimer = t
     }
 
     func stopWatchingPreviewFile() {
-        fileWatch?.cancel()
-        fileWatch = nil
+        previewWatchTimer?.invalidate()
+        previewWatchTimer = nil
+        lastPreviewMtime = nil
     }
 
     /// Re-render the currently-previewed file, bypassing the per-type dedups so

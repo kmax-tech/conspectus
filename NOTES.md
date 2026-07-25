@@ -203,16 +203,26 @@ disappears in a macOS update; success is visible in the event log.
 **Problem:** The preview only updated on hover. Editing a note in nvim (left
 pane) and saving didn't refresh the preview (right).
 
-**Solution:** A `DispatchSourceFileSystemObject` watches the currently-
-previewed file (`watchPreviewFile`, armed in requestFilePreview, cancelled in
-showFolder/detach). On a change it calls `refreshCurrentPreview`, which busts
-the per-type dedups (text via lastTextPath=nil, PDF by clearing the document)
-and re-runs `update` (so the 120ms debounce + generation cancellation still
-apply). Editors save ATOMICALLY (write temp, rename over the original), which
-replaces the inode our fd points at — so on `.rename`/`.delete` we re-open
-the path and re-arm. Event-driven (no polling) so App Nap stays intact.
-`CONSPECTUS_WATCH=off` disables it. Live-verified: in-place write, append,
-and atomic rename-save all refresh; no loop (re-arm doesn't self-fire).
+**Solution:** Poll the previewed file's mtime (`watchPreviewFile`, armed in
+requestFilePreview, cancelled in showFolder/detach). On a change it calls
+`refreshCurrentPreview`, which busts the per-type dedups (text via
+lastTextPath=nil, PDF by clearing the document) and re-runs `update` (so the
+120ms debounce + generation cancellation still apply).
+
+**Gotcha — why polling, not an fd watch (this is the perlege lesson):** the
+first version used a `DispatchSourceFileSystemObject` on an `O_EVTONLY` fd,
+re-arming on `.rename`/`.delete` to follow editors' atomic saves. That handles
+nvim (write-temp-then-rename, one clean swap) but NOT a build tool. `latexmk`
+deletes/recreates/moves the PDF several times per run, so the file is briefly
+*absent*; an fd is bound to one inode, and if the re-`open()` lands in the gap
+where nothing is there, the watch is lost for good — exactly the failure that
+plagued perlege. `stat` on the path has no inode identity: file gone this tick
+→ we skip (nil ≠ change), back next tick with a new mtime → refresh. A 0.7s
+repeating Timer (tolerance 0.2), gated to an active file preview so it stops on
+dir/idle (App Nap stays intact — a foreground app viewing a file isn't the idle
+case the gating protects). `CONSPECTUS_WATCH=off` disables it. Live-verified:
+in-place write, append, and atomic rename-save all refresh; no loop (re-arm
+records the fresh mtime, so it doesn't self-fire).
 
 ## 2026-07-25 — Markdown: native document render (swift-markdown) + toolbar toggle
 

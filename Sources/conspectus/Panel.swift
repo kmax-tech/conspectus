@@ -63,9 +63,15 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var lastPath: String?
     /// Path currently shown in the native text preview — dedup for showTextPreview.
     var lastTextPath: String?
-    /// Watches the currently-previewed file for on-disk changes so an edit
-    /// (e.g. saving markdown in nvim on the left) refreshes the preview live.
-    var fileWatch: DispatchSourceFileSystemObject?
+    /// Live-refresh: poll the previewed file's mtime while a file preview is
+    /// showing, so an edit (nvim on the left) or a rebuild (latexmk → PDF)
+    /// refreshes the preview. Polling, not an fd watcher, ON PURPOSE: latexmk
+    /// deletes/recreates/moves the PDF, and an fd watch loses the file the
+    /// moment it briefly vanishes; `stat` on the path doesn't care about inodes
+    /// (this is the lesson from perlege). Gated to an active file preview, so
+    /// it stops when browsing dirs / idle (App Nap stays intact).
+    var previewWatchTimer: Timer?
+    var lastPreviewMtime: Date?
     /// Absolute path of `bat`, resolved once at startup; nil until resolved or
     /// if missing (then the text preview stays plain monospace). Main thread only.
     var batPath: String?
