@@ -36,6 +36,20 @@ final class TextPreviewTests: XCTestCase {
         }
     }
 
+    func testStripFrontmatter() {
+        let withFm = "---\ntitle: Hi\ntags:\n  - a\n---\n\n# Heading\n\nBody."
+        XCTAssertEqual(stripFrontmatter(withFm), "# Heading\n\nBody.")
+        // closed with ...
+        XCTAssertEqual(stripFrontmatter("---\nid: x\n...\n# H"), "# H")
+        // no frontmatter → unchanged
+        XCTAssertEqual(stripFrontmatter("# Heading\n\n---\n\nmore"), "# Heading\n\n---\n\nmore")
+        // opened but never closed → unchanged (not valid)
+        let unclosed = "---\ntitle: Hi\n# H"
+        XCTAssertEqual(stripFrontmatter(unclosed), unclosed)
+        // a --- rule mid-document is not stripped
+        XCTAssertEqual(stripFrontmatter("text\n---\nmore"), "text\n---\nmore")
+    }
+
     func testImageVsTextVsOther() {
         XCTAssertTrue(isTextPreviewable("/x/diagram.svg"))    // SVG is XML → text
         XCTAssertFalse(isImagePreviewable("/x/diagram.svg"))

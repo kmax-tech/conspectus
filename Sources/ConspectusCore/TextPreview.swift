@@ -61,3 +61,25 @@ public func isImagePreviewable(_ path: String) -> Bool {
     let ext = ((path as NSString).lastPathComponent as NSString).pathExtension.lowercased()
     return !ext.isEmpty && imagePreviewExtensions.contains(ext)
 }
+
+/// Strip a leading YAML frontmatter block: if the text starts with a line that
+/// is exactly `---`, drop everything up to and including the next `---` or
+/// `...` delimiter line, plus any blank lines after it. Used by the RENDERED
+/// markdown view so the metadata header (title/tags/note_id …) doesn't show;
+/// the source view keeps the raw file. No closing delimiter → not treated as
+/// frontmatter (returned unchanged). Pure.
+public func stripFrontmatter(_ text: String) -> String {
+    var body = Substring(text)
+    if body.first == "\u{FEFF}" { body = body.dropFirst() }   // optional UTF-8 BOM
+    let lines = body.split(separator: "\n", omittingEmptySubsequences: false)
+    func delim(_ l: Substring) -> String { l.trimmingCharacters(in: .whitespaces) }
+    guard let first = lines.first, delim(first) == "---" else { return text }
+    for i in 1..<lines.count {
+        let d = delim(lines[i])
+        guard d == "---" || d == "..." else { continue }
+        var rest = Array(lines[(i + 1)...])
+        while let f = rest.first, f.trimmingCharacters(in: .whitespaces).isEmpty { rest.removeFirst() }
+        return rest.joined(separator: "\n")
+    }
+    return text   // opened but never closed → not valid frontmatter
+}

@@ -34,7 +34,9 @@ final class MarkdownRenderer {
     }
 
     func render(_ text: String) -> NSAttributedString {
-        let doc = Document(parsing: text)
+        // Hide any YAML frontmatter block in the rendered view (the metadata
+        // header); the source view still shows the raw file.
+        let doc = Document(parsing: stripFrontmatter(text))
         let out = NSMutableAttributedString()
         for child in doc.children { out.append(renderBlock(child)) }
         // Trim one trailing newline for tidiness.
