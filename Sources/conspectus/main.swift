@@ -55,6 +55,11 @@ let markdownRenderDefault: Bool = {
 /// absolute), so it can never collide with a hovered file.
 let focusPreviewSentinel = "@FOCUS_PREVIEW"
 
+/// FIFO control message asking conspectus to toggle markdown render↔source —
+/// written by yazi's `M` binding so the toggle works from any yazi pane
+/// (browsing), not only when the preview itself is focused.
+let toggleMarkdownSentinel = "@TOGGLE_MD"
+
 /// Quick Look fallback toggle (CONSPECTUS_QUICKLOOK): "on" (default) previews
 /// the long tail — video, audio, office, fonts, anything not text/image/PDF —
 /// through Quick Look. "off" disables it entirely; those files show a short

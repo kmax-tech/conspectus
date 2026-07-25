@@ -132,7 +132,8 @@ final class IntentFocusPDFView: PDFView {
 final class IntentFocusTextView: NSTextView {
     var allowFocus = false
     var onFocusLeft: (() -> Void)?
-    /// `m` — toggle markdown between rendered (glow) and source (bat).
+    /// `M` — toggle markdown between rendered (glow) and source (bat). Uppercase
+    /// to match yazi's `M` binding (lowercase `m` is yazi's linemode menu).
     var onToggleMarkdown: (() -> Void)?
     override var acceptsFirstResponder: Bool { allowFocus }
 
@@ -140,7 +141,7 @@ final class IntentFocusTextView: NSTextView {
         switch event.charactersIgnoringModifiers {
         case "j": scrollLineDown(nil)
         case "k": scrollLineUp(nil)
-        case "m": onToggleMarkdown?()
+        case "M": onToggleMarkdown?()
         case "h": onFocusLeft?()
         default:
             if event.keyCode == 123 { onFocusLeft?() }   // ← returns to yazi

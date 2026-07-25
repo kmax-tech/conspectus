@@ -46,12 +46,14 @@ extension Panel {
                 while getline(&buf, &cap, f) > 0 {
                     guard let b = buf else { continue }
                     let s = String(cString: b).trimmingCharacters(in: .whitespacesAndNewlines)
-                    // Control message, not a path: yazi's `l`-on-a-file binding
-                    // asks to move focus into the preview (h/l pane navigation).
+                    // Control messages, not paths: yazi bindings ask to focus the
+                    // preview (l-on-a-file) or toggle markdown render↔source (M).
                     // Real hover paths are absolute (start with "/"), so the
-                    // "@"-prefixed sentinel can never collide with one.
+                    // "@"-prefixed sentinels can never collide with one.
                     if s == focusPreviewSentinel {
                         DispatchQueue.main.async { self?.focusPreview() }
+                    } else if s == toggleMarkdownSentinel {
+                        DispatchQueue.main.async { self?.toggleMarkdownMode() }
                     } else if !s.isEmpty {
                         self?.update(s)
                     }
@@ -322,15 +324,17 @@ extension Panel {
         }
     }
 
-    /// Toggle markdown preview between rendered (glow) and source (bat), then
-    /// re-render the current markdown file. No-op unless the preview currently
-    /// shows a markdown file. Bound to `m` in the focused text preview.
+    /// Toggle the markdown mode (rendered via glow ↔ source via bat) — a global
+    /// setting, so `M` flips it consistently from any pane. If a markdown file
+    /// is on screen, re-render it so the change is visible immediately.
+    /// Triggered by yazi's `M` (via the FIFO sentinel) or `M` in the focused
+    /// text preview. Main thread only.
     func toggleMarkdownMode() {
+        markdownRender.toggle()
+        logEvent("markdown mode -> \(markdownRender ? "render" : "source")")
         guard let path = lastTextPath, !textScroll.isHidden else { return }
         let ext = ((path as NSString).lastPathComponent as NSString).pathExtension.lowercased()
         guard ext == "md" || ext == "markdown" else { return }
-        markdownRender.toggle()
-        logEvent("markdown mode -> \(markdownRender ? "render" : "source")")
         lastTextPath = nil                                  // defeat the dedup
         showTextPreview(path, generation: bumpListingGeneration())
     }
