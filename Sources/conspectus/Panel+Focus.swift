@@ -132,8 +132,8 @@ final class IntentFocusPDFView: PDFView {
 final class IntentFocusTextView: NSTextView {
     var allowFocus = false
     var onFocusLeft: (() -> Void)?
-    /// `M` — toggle markdown between rendered (glow) and source (bat). Uppercase
-    /// to match yazi's `M` binding (lowercase `m` is yazi's linemode menu).
+    /// `M` — toggle markdown between rendered and source. Uppercase to match
+    /// yazi's `M` binding (lowercase `m` is yazi's linemode menu).
     var onToggleMarkdown: (() -> Void)?
     override var acceptsFirstResponder: Bool { allowFocus }
 
@@ -224,7 +224,7 @@ extension Panel {
         guard previewAttached else { return }
         // Whichever cover is showing gets the keyboard: native text, native
         // PDF, else the Quick Look view.
-        if let ts = textScroll, !ts.isHidden {
+        if let tp = textPane, !tp.isHidden {
             textView.allowFocus = true
             let ok = window.makeFirstResponder(textView)
             logEvent("focusPreview -> textView ok=\(ok) fr=\(type(of: window.firstResponder))")

@@ -6,6 +6,9 @@ let package = Package(
     platforms: [.macOS(.v13)],
     dependencies: [
         .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.2.0"),
+        // Apple's Markdown parser → AST; the executable walks it into a themed
+        // NSAttributedString (document-quality markdown render, no WebKit).
+        .package(url: "https://github.com/apple/swift-markdown", from: "0.4.0"),
     ],
     targets: [
         // Pure, unit-testable helpers (start-dir resolution, palettes, icon
@@ -18,7 +21,10 @@ let package = Package(
         .target(name: "ConspectusShield", publicHeadersPath: "include"),
         .executableTarget(
             name: "conspectus",
-            dependencies: ["SwiftTerm", "ConspectusCore", "ConspectusShield"]
+            dependencies: [
+                "SwiftTerm", "ConspectusCore", "ConspectusShield",
+                .product(name: "Markdown", package: "swift-markdown"),
+            ]
         ),
         .testTarget(
             name: "ConspectusCoreTests",

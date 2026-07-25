@@ -44,6 +44,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// Native text preview (source/notes/config), covering the QL view like the
     /// folder listing does — separate view so its focus/scroll semantics don't
     /// collide with the clickable folder rows.
+    /// textPane = optional markdown toolbar (textBar) + textScroll. The PANE is
+    /// the cover over the QL view; the bar shows only for markdown files.
+    var textPane: NSView!
+    var textBar: NSView!
+    var mdSegment: NSSegmentedControl!
     var textScroll: NSScrollView!
     var textView: IntentFocusTextView!
     /// Native image preview, another cover over the QL view. Fit-to-pane,
@@ -61,11 +66,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// Absolute path of `bat`, resolved once at startup; nil until resolved or
     /// if missing (then the text preview stays plain monospace). Main thread only.
     var batPath: String?
-    /// Absolute path of `glow` (markdown renderer), resolved once at startup;
-    /// nil if missing → markdown render mode falls back to bat-highlighted source.
-    var glowPath: String?
-    /// Markdown preview: true = rendered (glow), false = source (bat). Starts
-    /// from CONSPECTUS_MD_MODE; `m` toggles it live. Main thread only.
+    /// Markdown preview: true = rendered (native swift-markdown → themed
+    /// NSAttributedString), false = source (bat). Starts from CONSPECTUS_MD_MODE;
+    /// `M` toggles it live. Main thread only.
     lazy var markdownRender: Bool = markdownRenderDefault
     /// Time of the last wheel event anywhere in the app (stamped by a local
     /// event monitor) — gates the terminal repaint insurance. Main thread only.
@@ -179,9 +182,6 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         resolveOnLoginPath("bat", missingWarning:
             "conspectus: `bat` not found — text preview falls back to plain monospace "
             + "(no syntax highlighting)") { [weak self] in self?.batPath = $0 }
-        resolveOnLoginPath("glow", missingWarning:
-            "conspectus: `glow` not found — markdown render mode falls back to bat "
-            + "source view (brew install glow)") { [weak self] in self?.glowPath = $0 }
 
         // Pane layout is two independent toggles: the second yazi pane (⌘D)
         // and the preview pane (⌘E, always rightmost). `split` starts 2-pane

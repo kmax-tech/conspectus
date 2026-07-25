@@ -35,9 +35,9 @@ func die(_ msg: String) -> Never {
     exit(1)
 }
 
-/// How markdown files preview: "render" (glow → formatted, the default) or
-/// "source" (bat → highlighted markdown source). Toggle at runtime with `m`
-/// while the text preview is focused. Invalid values fail loud → default.
+/// How markdown files preview: "render" (native swift-markdown → themed
+/// document, the default) or "source" (bat → highlighted markdown source).
+/// Toggle at runtime with `M`. Invalid values fail loud → default.
 let markdownRenderDefault: Bool = {
     let raw = ProcessInfo.processInfo.environment["CONSPECTUS_MD_MODE"] ?? "render"
     switch raw {

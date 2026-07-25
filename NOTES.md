@@ -198,6 +198,31 @@ protection is the ConspectusShield target: an ObjC swizzle wrapping
 catch ObjC exceptions). Fails loud at startup if the private method
 disappears in a macOS update; success is visible in the event log.
 
+## 2026-07-25 — Markdown: native document render (swift-markdown) + toolbar toggle
+
+**Problem:** The rendered markdown mode used glow → ANSI → NSTextView, which
+looks like a *terminal* (monospace, ANSI colours), not a *document* (the
+Claude-viewer target: proportional serif, real tables, code chips). glow
+can't cross that gap.
+
+**Solution:** A real document renderer. Added the swift-markdown SPM
+dependency (Apple; the second dependency after SwiftTerm — a deliberate,
+user-approved decision). `MarkdownRender.swift` walks the AST into a themed
+`NSAttributedString`: serif body/headings (via `.serif` font design), sized
+headings, bold/italic, inline-code chips (mono + subtle bg), fenced code
+blocks, lists, blockquotes, thematic rules, links, and **real tables via
+NSTextTable/NSTextTableBlock**. Themed to the palette. glow removed.
+
+A toolbar on the text preview (shown only for markdown) carries a segmented
+**eye / `</>`** toggle (rendered↔source), like the Claude artifact viewer;
+`M` (any pane, via the @TOGGLE_MD FIFO sentinel) and the focused preview do
+the same, all routed through `setMarkdownRender`.
+
+**Notes:** The render runs off-thread (fast for notes; size-capped).
+NSTextTable didn't crash on real tables (live-verified). Source mode still
+uses bat. Everything in-process, no WebKit — markdown never touches Quick
+Look / the sbarex QLMarkdown plugin now, whichever mode.
+
 ## 2026-07-25 — Hardening step 1: native text preview off Quick Look
 
 **Problem:** Every QLPreviewView crash/wedge traces to Quick Look being

@@ -151,6 +151,9 @@ extension Panel {
             textScroll.backgroundColor = nsColor(pal.bg)
             textView.drawsBackground = true
             textView.backgroundColor = nsColor(pal.bg)
+            textPane?.wantsLayer = true
+            textPane?.layer?.backgroundColor = nsColor(pal.bg).cgColor
+            textBar?.layer?.backgroundColor = nsColor(pal.bg).cgColor
         }
         imageView?.layer?.backgroundColor = nsColor(pal.bg).cgColor   // letterbox
         stylePDFBar()   // bar + pdf letterbox follow the palette too
@@ -203,7 +206,7 @@ extension Panel {
     func hideAllCovers() {
         folderScroll?.isHidden = true
         pdfPane?.isHidden = true
-        textScroll?.isHidden = true
+        textPane?.isHidden = true
         imageView?.isHidden = true
     }
 
@@ -283,27 +286,37 @@ extension Panel {
     /// resolved yet or is missing. Covering the QL view; already size-capped by
     /// requestFilePreview. Dedup: if the view already shows this path, skip.
     func showTextPreview(_ path: String, generation gen: Int) {
-        if !textScroll.isHidden, lastTextPath == path { return }
+        if !textPane.isHidden, lastTextPath == path { return }
         logEvent("showTextPreview \(path)")
         hideAllCovers()
-        textScroll.isHidden = false   // cover the always-alive QL view
+        textPane.isHidden = false   // cover the always-alive QL view
         lastTextPath = path
         let font = terminalFont(size: 12)
-        let fg = nsColor(activePalette().fg)
-        let bat = batPath          // snapshot on main
+        let pal = activePalette()          // snapshot on main
+        let fg = nsColor(pal.fg)
+        let bat = batPath
         let theme = batTheme()
-        // Markdown in render mode → glow (formatted); else → bat (highlighted
-        // source). Both emit ANSI that the same parseANSI/renderANSI handle.
+        // Markdown in render mode → native document render (swift-markdown →
+        // themed NSAttributedString: serif, tables, code chips). Else → bat
+        // (highlighted source, ANSI). Everything else → bat too.
         let ext = ((path as NSString).lastPathComponent as NSString).pathExtension.lowercased()
-        let renderMd = markdownRender && (ext == "md" || ext == "markdown")
-        let glow = glowPath
-        let mdStyle = glowStyle()
+        let isMd = ext == "md" || ext == "markdown"
+        // Toolbar (rendered↔source toggle) only for markdown; give the scroll
+        // view the freed strip back for other files.
+        textBar.isHidden = !isMd
+        mdSegment.selectedSegment = markdownRender ? 0 : 1
+        textScroll.frame = isMd
+            ? NSRect(x: 0, y: 0, width: textPane.bounds.width, height: textPane.bounds.height - pdfBarHeight)
+            : textPane.bounds
+        let renderMd = markdownRender && isMd
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let attr: NSAttributedString
-            if renderMd, let glow = glow, let ansi = self.runGlow(glow, style: mdStyle, path: path) {
-                logEvent("textPreview via glow (render) \(path)")
-                attr = renderANSI(parseANSI(ansi), font: font, defaultFg: fg)
+            if renderMd {
+                let text = (try? String(contentsOfFile: path, encoding: .utf8))
+                    ?? (try? String(contentsOfFile: path, encoding: .isoLatin1)) ?? ""
+                logEvent("textPreview via markdown-render \(path)")
+                attr = MarkdownRenderer(palette: pal).render(text)
             } else if let bat = bat, let ansi = self.runBat(bat, theme: theme, path: path) {
                 logEvent("textPreview via bat (source) \(path)")
                 attr = renderANSI(parseANSI(ansi), font: font, defaultFg: fg)
@@ -317,7 +330,7 @@ extension Panel {
             }
             guard self.isCurrentListing(gen) else { return }
             DispatchQueue.main.async {
-                guard self.isCurrentListing(gen), !self.textScroll.isHidden else { return }
+                guard self.isCurrentListing(gen), !self.textPane.isHidden else { return }
                 self.textView.textStorage?.setAttributedString(attr)
                 self.textView.scroll(NSPoint.zero)
             }
@@ -329,10 +342,16 @@ extension Panel {
     /// is on screen, re-render it so the change is visible immediately.
     /// Triggered by yazi's `M` (via the FIFO sentinel) or `M` in the focused
     /// text preview. Main thread only.
-    func toggleMarkdownMode() {
-        markdownRender.toggle()
-        logEvent("markdown mode -> \(markdownRender ? "render" : "source")")
-        guard let path = lastTextPath, !textScroll.isHidden else { return }
+    func toggleMarkdownMode() { setMarkdownRender(!markdownRender) }
+
+    /// Set the markdown mode (true = rendered, false = source), sync the toolbar
+    /// segment, and re-render the current file if it's markdown. Shared by `M`,
+    /// the FIFO sentinel, and the segmented control.
+    func setMarkdownRender(_ on: Bool) {
+        markdownRender = on
+        mdSegment?.selectedSegment = on ? 0 : 1
+        logEvent("markdown mode -> \(on ? "render" : "source")")
+        guard let path = lastTextPath, !textPane.isHidden else { return }
         let ext = ((path as NSString).lastPathComponent as NSString).pathExtension.lowercased()
         guard ext == "md" || ext == "markdown" else { return }
         lastTextPath = nil                                  // defeat the dedup

@@ -40,7 +40,7 @@ extension Panel {
         buildPDFPane()
         rightContainer.addSubview(pdfPane)
         buildTextPreview()
-        rightContainer.addSubview(textScroll)
+        rightContainer.addSubview(textPane)
         buildImagePreview()
         rightContainer.addSubview(imageView)
         rightContainer.addSubview(folderScroll)
@@ -49,23 +49,57 @@ extension Panel {
         rightContainer.addSubview(previewFocusRing)   // last -> stays on top
     }
 
-    /// Native text preview: an NSTextView in a scroll view, covering the QL
-    /// view like the folder listing. Ours, in-process — safe to hide/show.
+    /// Native text preview: a pane holding an optional markdown toolbar (a
+    /// rendered↔source segmented toggle, shown only for markdown) plus an
+    /// NSTextView in a scroll view. The pane covers the QL view like the folder
+    /// listing. Ours, in-process — safe to hide/show.
     func buildTextPreview() {
-        textScroll = NSScrollView(frame: rightContainer.bounds)
+        textPane = NSView(frame: rightContainer.bounds)
+        textPane.autoresizingMask = [.width, .height]
+
+        textBar = NSView(frame: NSRect(x: 0, y: textPane.bounds.height - pdfBarHeight,
+                                       width: textPane.bounds.width, height: pdfBarHeight))
+        textBar.autoresizingMask = [.width, .minYMargin]
+        textBar.wantsLayer = true
+        // rendered (eye) ↔ source (code) toggle — like the Claude viewer.
+        mdSegment = NSSegmentedControl(labels: [], trackingMode: .selectOne, target: self,
+                                       action: #selector(mdSegmentChanged))
+        mdSegment.segmentCount = 2
+        mdSegment.setImage(NSImage(systemSymbolName: "eye", accessibilityDescription: "Rendered"), forSegment: 0)
+        mdSegment.setImage(NSImage(systemSymbolName: "chevron.left.forwardslash.chevron.right", accessibilityDescription: "Source"), forSegment: 1)
+        mdSegment.setToolTip("Rendered", forSegment: 0)
+        mdSegment.setToolTip("Source", forSegment: 1)
+        mdSegment.selectedSegment = markdownRender ? 0 : 1
+        mdSegment.translatesAutoresizingMaskIntoConstraints = false
+        textBar.addSubview(mdSegment)
+        NSLayoutConstraint.activate([
+            mdSegment.trailingAnchor.constraint(equalTo: textBar.trailingAnchor, constant: -10),
+            mdSegment.centerYAnchor.constraint(equalTo: textBar.centerYAnchor),
+        ])
+
+        textScroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: textPane.bounds.width,
+                                                height: textPane.bounds.height - pdfBarHeight))
         textScroll.hasVerticalScroller = true
         textScroll.autoresizingMask = [.width, .height]
-        textView = IntentFocusTextView(frame: rightContainer.bounds)
+        textView = IntentFocusTextView(frame: textScroll.bounds)
         textView.isEditable = false
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
-        textView.textContainerInset = NSSize(width: 10, height: 10)
+        textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.textContainer?.widthTracksTextView = true
         textView.onFocusLeft = { [weak self] in self?.focusLeftPane() }
         textView.onToggleMarkdown = { [weak self] in self?.toggleMarkdownMode() }
         textScroll.documentView = textView
-        textScroll.isHidden = true
+
+        textPane.addSubview(textScroll)
+        textPane.addSubview(textBar)
+        textPane.isHidden = true
+    }
+
+    /// The segmented toggle changed — apply the chosen markdown mode.
+    @objc func mdSegmentChanged() {
+        setMarkdownRender(mdSegment.selectedSegment == 0)
     }
 
     /// Native image preview: an NSImageView covering the QL view, scaled to fit

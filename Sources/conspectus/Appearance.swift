@@ -46,8 +46,6 @@ func renderANSI(_ runs: [AnsiRun], font: NSFont, defaultFg: NSColor) -> NSAttrib
     return result
 }
 
-/// glow style matching the app appearance (its built-in dark/light styles).
-func glowStyle() -> String { systemIsDark() ? "dark" : "light" }
 
 /// SwiftTerm color from a palette hex string (validated by Palette's init;
 /// see nsColor in ConspectusCore for why try! is the honest choice here).
