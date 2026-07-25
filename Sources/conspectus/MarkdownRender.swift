@@ -9,7 +9,8 @@ import ConspectusCore
 // markdown mode. Themed to the app palette so it matches light/dark.
 
 final class MarkdownRenderer {
-    private let base: CGFloat = 14
+    // Base body size; headings scale off it. CONSPECTUS_MD_FONT_SIZE overrides.
+    private let base: CGFloat = CGFloat(Double(ProcessInfo.processInfo.environment["CONSPECTUS_MD_FONT_SIZE"] ?? "") ?? 16)
     private let fg, muted, code, codeBg, link, rule: NSColor
     private let mono: NSFont
 

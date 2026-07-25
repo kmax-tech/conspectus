@@ -291,7 +291,7 @@ extension Panel {
         hideAllCovers()
         textPane.isHidden = false   // cover the always-alive QL view
         lastTextPath = path
-        let font = terminalFont(size: 12)
+        let font = terminalFont(size: 13)
         let pal = activePalette()          // snapshot on main
         let fg = nsColor(pal.fg)
         let bat = batPath
