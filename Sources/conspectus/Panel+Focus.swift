@@ -189,6 +189,7 @@ extension Panel {
     // The preview is a real focus target (focus-by-intent) — a focused Quick
     // Look scrolls with arrows/PgUp/PgDn and pages PDFs with Space.
     @objc func focusLeftPane() {
+        if window.firstResponder === editorTerm { editorSplitNavOrHandoff("left"); return }
         if previewHasFocus(window.firstResponder) {
             window.makeFirstResponder(middleTerm ?? term)
         } else {
@@ -197,6 +198,7 @@ extension Panel {
     }
 
     @objc func focusRightPane() {
+        if window.firstResponder === editorTerm { editorSplitNavOrHandoff("right"); return }
         if window.firstResponder === term, let mid = middleTerm {
             window.makeFirstResponder(mid)
             return
@@ -210,11 +212,51 @@ extension Panel {
 
     // ⌥↓ / ⌥↑ — vertical focus between the pane area and the terminal panel.
     @objc func focusDown() {
+        if window.firstResponder === editorTerm { editorSplitNavOrHandoff("down"); return }
         if let bt = bottomTerm { window.makeFirstResponder(bt) }
     }
 
     @objc func focusUp() {
+        if window.firstResponder === editorTerm { editorSplitNavOrHandoff("up"); return }
         window.makeFirstResponder(lastTopTerm ?? term)
+    }
+
+    /// ⌥-arrow inside the ide editor: ask the editor's nvim to move within its
+    /// OWN splits first (RPC to its --listen server via `v:lua.conspectus_move`);
+    /// only if nvim is already at that edge ("edge", or the helper/nvim is
+    /// absent) hand off to the neighbouring conspectus pane. This is the
+    /// smart-splits handoff, with conspectus driving so it never depends on how
+    /// the terminal encodes ⌥-arrows. Without the (opt-in) nvim helper the RPC
+    /// simply fails and it degrades to a plain pane move — the old behaviour.
+    /// Side effects: spawns the nvim client off-thread; moves focus on main.
+    func editorSplitNavOrHandoff(_ dir: String) {
+        guard let nvim = nvimPath else { moveEditorNeighbour(dir); return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: nvim)
+            p.arguments = ["--server", nvimSocketPath, "--remote-expr", "v:lua.conspectus_move('\(dir)')"]
+            let out = Pipe(); p.standardOutput = out; p.standardError = Pipe()
+            var moved = false
+            do {
+                try p.run()
+                let d = out.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                moved = (String(data: d, encoding: .utf8) ?? "").contains("moved")
+            } catch { moved = false }
+            if !moved { DispatchQueue.main.async { self?.moveEditorNeighbour(dir) } }
+        }
+    }
+
+    /// Move focus out of the editor to the conspectus pane in `dir`. The editor
+    /// sits in the middle (yazi | nvim | preview): left → yazi, right → preview,
+    /// down → terminal panel; nothing sits above it.
+    func moveEditorNeighbour(_ dir: String) {
+        switch dir {
+        case "left":  window.makeFirstResponder(term)
+        case "right": if previewAttached { focusPreview() } else { window.makeFirstResponder(term) }
+        case "down":  if let bt = bottomTerm { window.makeFirstResponder(bt) }
+        default:      break   // "up": no pane above the editor
+        }
     }
 
     /// Hand the keyboard to the preview deliberately (clicks cannot). Goes to

@@ -19,6 +19,20 @@ channel, exports its address, yazi writes into it.
 
 The editor toggles at runtime too (**⌘I**), not just via `conspectus ide`.
 
+**Split handoff (⌥-arrows):** inside the editor, ⌥-arrows should navigate
+nvim's OWN splits first and only hand off to the neighbouring conspectus pane at
+nvim's edge (smart-splits, as across WezTerm/kitty). conspectus **drives** this
+over the RPC socket rather than forwarding ⌥-arrows through the terminal: on
+⌥-arrow with the editor focused, `editorSplitNavOrHandoff` spawns
+`nvim --server <sock> --remote-expr v:lua.conspectus_move('left')`, which moves
+within nvim and returns `"moved"` or `"edge"`; on anything but `"moved"`
+conspectus moves the pane. Chosen over key-forwarding because that would depend
+on SwiftTerm's ⌥-key encoding (whether ⌥← becomes a proper `<M-Left>` meta
+sequence) — brittle. It also degrades safely: no nvim helper / nvim missing →
+the RPC fails → plain pane move (the old behaviour), so the Swift side ships
+independently of the opt-in dotfiles helper (`plugins/smart-splits.lua` defines
+`_G.conspectus_move`).
+
 **Gotchas:** (1) `launch` grew a `run:` override because the editor pane runs
 nvim, not the global `command` (yazi). (2) The second-yazi slot (split/triple)
 and the editor slot (ide) are the same middle position and never coexist, so

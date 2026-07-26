@@ -59,6 +59,7 @@ let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
                     ("M", "toggle markdown render↔source (any yazi pane or the preview)"),
                     ("", "text preview focused: j/k scroll"),
                     ("o / Enter", "ide mode: send file(s) to the middle nvim (l/→ = peek in preview)"),
+                    ("⌥arrows in nvim", "move nvim's own splits first, hand off to the neighbour pane at the edge"),
                     ("⌥↑ ↓", "pane area ⇄ terminal panel"),
                     ("=", "sync cd to other pane")]),
 ]

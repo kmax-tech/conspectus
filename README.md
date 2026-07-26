@@ -127,9 +127,19 @@ edits it.) The mechanism mirrors the preview FIFO: conspectus owns the channel
 and hands its address to yazi.
 
 Pairs with **⌘P** (pin): pin the preview to the file you're editing and every
-save re-renders it live (mtime poll — survives even a `latexmk` rebuild). The
-editor is a fixture of the layout: quitting nvim (`:qa`) respawns a fresh one in
-place. Needs `nvim` (0.7+ for `--remote`) on the login-shell PATH.
+save re-renders it live (mtime poll — survives even a `latexmk` rebuild).
+Quitting nvim (`:qa`) collapses the editor pane; **⌘I** re-adds it. Needs `nvim`
+(0.7+ for `--remote`) on the login-shell PATH.
+
+**Split handoff (smart-splits):** ⌥←/→/↑/↓ inside the editor move between
+**nvim's own splits** first; only at nvim's edge do they hand off to the
+neighbouring conspectus pane (yazi / preview / terminal) — one set of keys for
+both, like smart-splits across WezTerm/kitty. conspectus drives it over nvim's
+RPC socket (it asks nvim to move and only steps in on "edge"), so it never
+depends on how the terminal encodes ⌥-arrows. This needs a tiny opt-in helper
+in your nvim config — a global `conspectus_move(dir)` that calls
+`smart-splits` and reports `moved`/`edge` (see the dotfiles
+`plugins/smart-splits.lua`). Without it, ⌥-arrows just move panes as usual.
 
 ### Focus
 

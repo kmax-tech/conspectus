@@ -445,6 +445,13 @@ extension Panel {
     /// nvim on `nvimSocketPath` (stale socket removed first); inserts the pane.
     func addEditorPane() {
         guard editorTerm == nil else { return }
+        // Resolve nvim once so the ⌥-arrow split handoff can hit its RPC server
+        // directly (no login shell per keystroke). Falls back to a plain pane
+        // move if unresolved / missing.
+        if nvimPath == nil {
+            resolveOnLoginPath("nvim", missingWarning:
+                "conspectus: `nvim` not found — the editor pane needs it") { [weak self] in self?.nvimPath = $0 }
+        }
         unlink(nvimSocketPath)                       // a crashed prior instance may have left it
         let e = makeTerm()
         editorTerm = e

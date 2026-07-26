@@ -101,6 +101,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// `resolveYaPath()` — click-to-navigate spawns it directly instead of
     /// paying a login-shell startup (~150ms+) on every click. Main thread only.
     var yaPath: String?
+    /// Absolute path of `nvim`, resolved once when the editor pane first opens.
+    /// Used to drive the ide editor's RPC server directly (⌥-arrow split
+    /// handoff) without paying a login shell per keystroke. Main thread only.
+    var nvimPath: String?
     weak var lastFocusedTerm: LocalProcessTerminalView?
     weak var lastTopTerm: LocalProcessTerminalView?   // ⌥↑ returns here from the terminal panel
 
