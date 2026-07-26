@@ -3,6 +3,30 @@
 Solved hard problems — the *why* the code can't show. Keep entries short:
 problem, solution, gotcha.
 
+## 2026-07-26 — IDE mode: send files to one nvim instead of spawning editors
+
+**Problem:** `conspectus ide` is yazi | nvim | preview. Opening a file from
+yazi must land in the *existing* middle nvim (as a buffer), not launch a new
+editor each time — and from either yazi pane in a split.
+
+**Solution:** The middle pane runs `nvim --listen <socket>` (nvim's RPC
+server). conspectus owns the socket path (`nvimSocketPath`, per-pid like the
+FIFO) and hands it to every yazi pane as `$CONSPECTUS_NVIM`. yazi's `o`/`Enter`
+binding then does `nvim --server $CONSPECTUS_NVIM --remote "$@"` — the client
+call adds the file(s) as buffers and returns immediately (no new UI). This is
+the exact channel-ownership pattern of the preview FIFO: conspectus owns the
+channel, exports its address, yazi writes into it.
+
+**Gotchas:** (1) `launch` grew a `run:` override because the editor pane runs
+nvim, not the global `command` (yazi). (2) The second-yazi slot (split/triple)
+and the editor slot (ide) are the same middle position and never coexist, so
+`middleTerm = term2 ?? editorTerm` unifies focus cycling / borders instead of
+special-casing. (3) The editor is a fixture: on `:qa` the process exits, so
+`processTerminated` respawns a fresh nvim in place rather than collapsing the
+pane (which would leave a dead socket and silently break `open`). (4) The yazi
+binding guards on `[ -S "$CONSPECTUS_NVIM" ]` so a not-yet-ready / absent
+socket falls back to the normal opener instead of erroring.
+
 ## 2026-07-22 — QLPreviewView comes back blank after being hidden
 
 **Problem:** Hovering a folder hides the `QLPreviewView`; on returning to a

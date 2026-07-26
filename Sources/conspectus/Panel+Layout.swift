@@ -403,6 +403,54 @@ extension Panel {
         updateTitle()
     }
 
+    /// Build the middle editor pane (ide mode): nvim running as an RPC server,
+    /// between yazi (left) and the preview (right). yazi's `open` sends files
+    /// here via `nvim --server $CONSPECTUS_NVIM --remote`, so one nvim collects
+    /// every file instead of spawning an instance per open. Side effects: starts
+    /// nvim on `nvimSocketPath` (stale socket removed first); inserts the pane.
+    func addEditorPane() {
+        guard editorTerm == nil else { return }
+        unlink(nvimSocketPath)                       // a crashed prior instance may have left it
+        let e = makeTerm()
+        editorTerm = e
+        let pane = makeTermPane(e)
+        editorPane = pane
+        // Middle slot: between the left terminal and the (rightmost) preview.
+        if previewAttached {
+            split.addSubview(pane, positioned: .above, relativeTo: termPane)
+        } else {
+            split.addSubview(pane)
+        }
+        setEditorPaneRatios()
+        launch(e, extraEnv: [:], run: "nvim --listen \"\(nvimSocketPath)\"")
+        window.makeFirstResponder(e)
+        updateTitle()
+    }
+
+    /// The editor is a fixture of ide mode, so if nvim exits (`:qa`) bring it
+    /// back with a fresh instance in place — the layout never loses its editor.
+    func respawnEditor() {
+        guard let old = editorPane else { return }
+        unlink(nvimSocketPath)
+        let e = makeTerm()
+        editorTerm = e
+        let pane = makeTermPane(e)
+        editorPane = pane
+        split.replaceSubview(old, with: pane)        // same slot, same order
+        setEditorPaneRatios()
+        launch(e, extraEnv: [:], run: "nvim --listen \"\(nvimSocketPath)\"")
+        window.makeFirstResponder(e)
+    }
+
+    /// yazi | nvim | preview widths: the editor gets the most room, yazi the
+    /// least. Falls back to equal panes if the layout isn't the expected three.
+    func setEditorPaneRatios() {
+        guard split.subviews.count == 3 else { evenOutPanes(); return }
+        let w = split.frame.width
+        split.setPosition((w * 0.25).rounded(), ofDividerAt: 0)   // yazi | editor
+        split.setPosition((w * 0.70).rounded(), ofDividerAt: 1)   // editor | preview
+    }
+
     func removeSecondPane() {
         guard let t2 = term2 else { return }
         term2 = nil

@@ -58,9 +58,12 @@ extension Panel {
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         DispatchQueue.main.async {
             if source === self.term {
-                unlink(fifoPath); NSApp.terminate(nil)   // left pane quit -> close app
+                unlink(fifoPath); unlink(nvimSocketPath)   // clean up both channels
+                NSApp.terminate(nil)                       // left pane quit -> close app
             } else if source === self.term2 {
                 self.removeSecondPane()                  // second pane's yazi quit -> collapse
+            } else if source === self.editorTerm {
+                self.respawnEditor()                     // the editor is a fixture of ide mode -> bring it back
             } else if source === self.bottomTerm {
                 self.closeBottomTerminal()               // `exit` in the shell -> collapse panel
             }

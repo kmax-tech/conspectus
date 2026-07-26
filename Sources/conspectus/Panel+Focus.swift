@@ -190,21 +190,21 @@ extension Panel {
     // Look scrolls with arrows/PgUp/PgDn and pages PDFs with Space.
     @objc func focusLeftPane() {
         if previewHasFocus(window.firstResponder) {
-            window.makeFirstResponder(term2 ?? term)
+            window.makeFirstResponder(middleTerm ?? term)
         } else {
             window.makeFirstResponder(term)
         }
     }
 
     @objc func focusRightPane() {
-        if window.firstResponder === term, let t2 = term2 {
-            window.makeFirstResponder(t2)
+        if window.firstResponder === term, let mid = middleTerm {
+            window.makeFirstResponder(mid)
             return
         }
         if previewAttached {
             focusPreview()
-        } else if let t2 = term2 {
-            window.makeFirstResponder(t2)
+        } else if let mid = middleTerm {
+            window.makeFirstResponder(mid)
         }
     }
 
@@ -299,6 +299,7 @@ extension Panel {
         let fr = window.firstResponder
         var targets: [(NSView, Bool)] = [(termPane, fr === term)]
         if let t2 = term2, let pane = term2Pane { targets.append((pane, fr === t2)) }
+        if let et = editorTerm, let pane = editorPane { targets.append((pane, fr === et)) }
         if previewAttached { targets.append((previewFocusRing, previewHasFocus(fr))) }
         if let bt = bottomTerm, let pane = bottomPane { targets.append((pane, fr === bt)) }
         let show = targets.count > 1

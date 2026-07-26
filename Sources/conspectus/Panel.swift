@@ -23,6 +23,15 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     weak var pinMenuItem: NSMenuItem?
     var term: LocalProcessTerminalView!
     var term2: LocalProcessTerminalView?
+    /// ide mode: the middle pane runs nvim as an RPC server (`--listen`), so
+    /// yazi's `open` sends files here instead of spawning a new editor. nil
+    /// outside ide mode. `editorPane` is its themed container.
+    var editorTerm: LocalProcessTerminalView?
+    var editorPane: NSView?
+    /// The single middle terminal, whichever role it plays: a second yazi
+    /// (split/triple) or the nvim editor (ide). They never coexist, so focus
+    /// cycling and borders can treat "the middle pane" uniformly.
+    var middleTerm: LocalProcessTerminalView? { term2 ?? editorTerm }
     // Padded containers around the terminals: light padding between pane
     // edge and text (the preview pane brings its own). The split views hold
     // these panes; the terminal views live inset inside them.
@@ -139,15 +148,18 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     // Login shell so PATH/config load, then exec the file manager. YAZI_ID/LEVEL
     // stripped so each pane is a fresh, separate yazi instance (they discover
     // each other via the DDS for cross-instance yank/paste).
-    func launch(_ t: LocalProcessTerminalView, extraEnv: [String: String], rememberCwd: Bool = false) {
+    func launch(_ t: LocalProcessTerminalView, extraEnv: [String: String],
+                rememberCwd: Bool = false, run: String? = nil) {
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
         env["YAZI_ID"] = nil; env["YAZI_LEVEL"] = nil
         for (k, v) in extraEnv { env[k] = v }
+        // `run` overrides the global command (e.g. the ide editor pane runs nvim).
+        let cmd = run ?? command
         // Left/yazi pane records its cwd on exit so the next bare launch resumes there.
-        let cwdFlag = (rememberCwd && command == "yazi") ? " --cwd-file \"\(lastCwdPath)\"" : ""
+        let cwdFlag = (rememberCwd && cmd == "yazi") ? " --cwd-file \"\(lastCwdPath)\"" : ""
         t.startProcess(executable: "/bin/zsh",
-                       args: ["-l", "-c", "cd \"\(startPath)\" && exec \(command)\(cwdFlag)"],
+                       args: ["-l", "-c", "cd \"\(startPath)\" && exec \(cmd)\(cwdFlag)"],
                        environment: env.map { "\($0.key)=\($0.value)" })
     }
 
@@ -187,7 +199,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // CONSPECTUS_PEER is a flag, not an id: it arms the `=` cd-sync (keymap
         // broadcasts via `ya pub-to 0`, the panesync plugin follows). yazi
         // auto-generates its own DDS ids, so no fixed ids are set here.
-        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"], rememberCwd: true)
+        // In ide mode the pane also learns the nvim socket so `open` routes there.
+        var leftEnv = ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"]
+        if ideMode { leftEnv["CONSPECTUS_NVIM"] = nvimSocketPath }
+        launch(term, extraEnv: leftEnv, rememberCwd: true)
         startFifoReader()
         // Resolve external CLIs once (no per-use login shell): `ya` for clicks,
         // `bat` for text-preview syntax highlighting.
@@ -203,6 +218,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // without preview, `triple` starts with both.
         if splitMode { detachPreview() }
         if splitMode || tripleMode { addSecondPane() }
+        if ideMode { addEditorPane() }   // yazi | nvim | preview
 
         startMainThreadWatchdog()
         startTerminalRepaintInsurance()

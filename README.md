@@ -76,6 +76,7 @@ conspectus ~/work      # start at a given directory (tilde/relative resolved)
 conspectus split       # two yazi panes side by side (dual-pane copy)
 conspectus split ~/work
 conspectus triple      # two yazi panes + Quick Look preview (3 panes)
+conspectus ide         # yazi | nvim | preview — a small IDE (see below)
 ./install-app.sh       # assemble /Applications/Conspectus.app (Finder/Dock icon)
 ```
 
@@ -106,6 +107,25 @@ titlebar **`Split` button**) and the preview pane (**⌘E**, always rightmost):
 
 Toggling the second pane off with the preview hidden brings the preview back
 (a lone terminal defeats the app's purpose).
+
+## IDE mode (`conspectus ide`)
+
+Three columns — **yazi | nvim | preview** — turn conspectus into a small IDE:
+pick files on the left, edit in the middle, watch them render on the right.
+
+The middle pane runs **one** nvim as an RPC server (`nvim --listen <socket>`).
+Each yazi pane is handed that socket as `$CONSPECTUS_NVIM`, so **`o` / `Enter`
+on a file sends it to that nvim** (`nvim --server … --remote`) as a buffer
+instead of launching a new editor. Select several files and they all pile up in
+the same nvim; in a split you can drive it from either yazi pane — there is only
+ever one editor. (`l` / `→` still peeks at a file in the preview; `o` / `Enter`
+edits it.) The mechanism mirrors the preview FIFO: conspectus owns the channel
+and hands its address to yazi.
+
+Pairs with **⌘P** (pin): pin the preview to the file you're editing and every
+save re-renders it live (mtime poll — survives even a `latexmk` rebuild). The
+editor is a fixture of the layout: quitting nvim (`:qa`) respawns a fresh one in
+place. Needs `nvim` (0.7+ for `--remote`) on the login-shell PATH.
 
 ### Focus
 

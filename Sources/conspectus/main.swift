@@ -13,6 +13,7 @@ import ConspectusCore
 //   conspectus [path]          # yazi + Quick Look preview; start dir = path or $HOME
 //   conspectus split [path]    # two yazi panes side by side (dual-pane copy)
 //   conspectus triple [path]   # two yazi panes + preview following the active one
+//   conspectus ide [path]      # yazi | nvim | preview — `open` sends files to the one nvim
 // The TUI is yazi by default; override with the CONSPECTUS_CMD env var.
 //
 // In triple mode both yazi instances write to the same FIFO; only the pane
@@ -193,10 +194,17 @@ let fifoPath = (cacheDir as NSString).appendingPathComponent("target-\(getpid())
 // resumes there, falling back to $HOME.
 let lastCwdPath = (cacheDir as NSString).appendingPathComponent("last-cwd")
 
+// nvim RPC socket for `ide` mode: the middle nvim runs `--listen` on it, and
+// each yazi pane gets the path as $CONSPECTUS_NVIM so its `open` sends files
+// into that one instance (nvim --server … --remote) instead of spawning a new
+// editor. Per-pid like the FIFO, so concurrent instances never collide.
+let nvimSocketPath = (cacheDir as NSString).appendingPathComponent("nvim-\(getpid()).sock")
+
 let cliArgs    = Array(CommandLine.arguments.dropFirst())
 let splitMode  = cliArgs.first == "split" || cliArgs.first == "-s"
 let tripleMode = cliArgs.first == "triple" || cliArgs.first == "-3"
-let rest       = (splitMode || tripleMode) ? Array(cliArgs.dropFirst()) : cliArgs
+let ideMode    = cliArgs.first == "ide"
+let rest       = (splitMode || tripleMode || ideMode) ? Array(cliArgs.dropFirst()) : cliArgs
 let start     = resolveStart(rest.first(where: { !$0.hasPrefix("-") }), lastCwdFile: lastCwdPath)
 let startPath = start.path
 let command   = ProcessInfo.processInfo.environment["CONSPECTUS_CMD"] ?? "yazi"
