@@ -63,7 +63,7 @@ extension Panel {
             } else if source === self.term2 {
                 self.removeSecondPane()                  // second pane's yazi quit -> collapse
             } else if source === self.editorTerm {
-                self.respawnEditor()                     // the editor is a fixture of ide mode -> bring it back
+                self.removeEditorPane()                  // nvim quit (:qa) -> collapse the editor (⌘I re-adds)
             } else if source === self.bottomTerm {
                 self.closeBottomTerminal()               // `exit` in the shell -> collapse panel
             }

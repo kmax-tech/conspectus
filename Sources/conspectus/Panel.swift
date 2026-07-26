@@ -199,10 +199,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // CONSPECTUS_PEER is a flag, not an id: it arms the `=` cd-sync (keymap
         // broadcasts via `ya pub-to 0`, the panesync plugin follows). yazi
         // auto-generates its own DDS ids, so no fixed ids are set here.
-        // In ide mode the pane also learns the nvim socket so `open` routes there.
-        var leftEnv = ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L"]
-        if ideMode { leftEnv["CONSPECTUS_NVIM"] = nvimSocketPath }
-        launch(term, extraEnv: leftEnv, rememberCwd: true)
+        // CONSPECTUS_NVIM is exported in every mode — the socket only exists
+        // while the editor pane runs, and yazi's `open` guards on it existing,
+        // so ⌘I can add the editor at runtime and routing follows automatically.
+        launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L",
+                                "CONSPECTUS_NVIM": nvimSocketPath], rememberCwd: true)
         startFifoReader()
         // Resolve external CLIs once (no per-use login shell): `ya` for clicks,
         // `bat` for text-preview syntax highlighting.

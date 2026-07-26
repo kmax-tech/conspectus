@@ -17,15 +17,20 @@ call adds the file(s) as buffers and returns immediately (no new UI). This is
 the exact channel-ownership pattern of the preview FIFO: conspectus owns the
 channel, exports its address, yazi writes into it.
 
+The editor toggles at runtime too (**⌘I**), not just via `conspectus ide`.
+
 **Gotchas:** (1) `launch` grew a `run:` override because the editor pane runs
 nvim, not the global `command` (yazi). (2) The second-yazi slot (split/triple)
 and the editor slot (ide) are the same middle position and never coexist, so
 `middleTerm = term2 ?? editorTerm` unifies focus cycling / borders instead of
-special-casing. (3) The editor is a fixture: on `:qa` the process exits, so
-`processTerminated` respawns a fresh nvim in place rather than collapsing the
-pane (which would leave a dead socket and silently break `open`). (4) The yazi
-binding guards on `[ -S "$CONSPECTUS_NVIM" ]` so a not-yet-ready / absent
-socket falls back to the normal opener instead of erroring.
+special-casing. (3) `$CONSPECTUS_NVIM` is exported to yazi in EVERY mode, not
+only ide — you can't inject env into an already-running yazi, so ⌘I could never
+enable routing after launch otherwise. The socket only exists while the editor
+runs, and the yazi binding guards on `[ -S "$CONSPECTUS_NVIM" ]`, so routing
+follows the pane automatically: editor up → send to nvim, editor down → normal
+opener. (4) Symmetric lifecycle with the second yazi: quitting nvim (`:qa`)
+collapses the pane (unlinking the socket) rather than respawning — ⌘I re-adds
+it. Respawn-on-exit was rejected: it makes the editor un-quittable.
 
 ## 2026-07-22 — QLPreviewView comes back blank after being hidden
 

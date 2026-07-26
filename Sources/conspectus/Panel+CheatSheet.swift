@@ -46,6 +46,7 @@ let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
     ("Misc", [("w", "task manager"), (",", "sort menu"), ("~", "yazi help"), ("q", "quit")]),
     ("conspectus", [("⌘D", "toggle split pane"), ("⌘E", "toggle preview pane"),
                     ("⌘P", "pin preview to file (hold it while you edit; yellow border)"),
+                    ("⌘I", "toggle nvim editor pane (IDE: yazi | nvim | preview)"),
                     ("⌘J", "terminal panel (opens in yazi's dir)"),
                     ("⌘W", "close terminal panel"),
                     ("⌘/", "toggle shortcut bar"), ("⌘K", "this cheat sheet"),

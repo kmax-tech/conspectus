@@ -300,6 +300,7 @@ extension Panel {
     //   ⌘D  toggle split pane (kitty muscle memory)
     //   ⌘E  toggle preview pane
     //   ⌘P  pin/unpin the preview to the current file
+    //   ⌘I  toggle the middle nvim editor pane (IDE mode)
     //   ⌘J  toggle bottom terminal (VS Code muscle memory)
     //   ⌘/  toggle shortcut bar
     //   ⌥←/→/↑/↓  pane focus (kitty/WezTerm/smart-splits habit; ⌘⌥ = alias)
@@ -325,6 +326,9 @@ extension Panel {
         pinToggle.target = self
         viewMenu.addItem(pinToggle)
         pinMenuItem = pinToggle
+        let ideToggle = NSMenuItem(title: "Toggle Editor Pane (nvim)", action: #selector(toggleEditorPane), keyEquivalent: "i")
+        ideToggle.target = self
+        viewMenu.addItem(ideToggle)
         let termToggle = NSMenuItem(title: "Toggle Terminal Panel", action: #selector(toggleBottomTerminal), keyEquivalent: "j")
         termToggle.target = self
         viewMenu.addItem(termToggle)
@@ -397,7 +401,8 @@ extension Panel {
         evenOutPanes()
         // Same FIFO as the left pane: only the pane being navigated emits
         // hover events, so the preview follows the active instance for free.
-        launch(t2, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "R"])
+        launch(t2, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "R",
+                              "CONSPECTUS_NVIM": nvimSocketPath])
         window.makeFirstResponder(t2)
         splitButton?.state = .on
         updateTitle()
@@ -427,19 +432,26 @@ extension Panel {
         updateTitle()
     }
 
-    /// The editor is a fixture of ide mode, so if nvim exits (`:qa`) bring it
-    /// back with a fresh instance in place — the layout never loses its editor.
-    func respawnEditor() {
-        guard let old = editorPane else { return }
-        unlink(nvimSocketPath)
-        let e = makeTerm()
-        editorTerm = e
-        let pane = makeTermPane(e)
-        editorPane = pane
-        split.replaceSubview(old, with: pane)        // same slot, same order
-        setEditorPaneRatios()
-        launch(e, extraEnv: [:], run: "nvim --listen \"\(nvimSocketPath)\"")
-        window.makeFirstResponder(e)
+    @objc func toggleEditorPane() { editorTerm == nil ? addEditorPane() : removeEditorPane() }
+
+    /// Remove the middle editor pane and stop its nvim. Mirrors
+    /// `removeSecondPane`: if this would leave a lone terminal (no preview,
+    /// no second yazi), bring the preview back. Side effects: kills nvim,
+    /// unlinks the socket so yazi's `open` falls back to the normal opener.
+    func removeEditorPane() {
+        guard let e = editorTerm else { return }
+        editorTerm = nil
+        editorPane?.removeFromSuperview()
+        editorPane = nil
+        e.terminate()
+        unlink(nvimSocketPath)          // socket gone -> yazi `open` reverts to the opener
+        if previewAttached || term2 != nil {
+            evenOutPanes()
+        } else {
+            attachPreview()             // a lone terminal defeats the app's purpose
+        }
+        window.makeFirstResponder(term)
+        updateTitle()
     }
 
     /// yazi | nvim | preview widths: the editor gets the most room, yazi the

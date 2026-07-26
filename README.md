@@ -113,6 +113,10 @@ Toggling the second pane off with the preview hidden brings the preview back
 Three columns — **yazi | nvim | preview** — turn conspectus into a small IDE:
 pick files on the left, edit in the middle, watch them render on the right.
 
+Start it with `conspectus ide`, or toggle the editor pane on/off at any time
+with **⌘I** (from a plain `conspectus` — no restart needed to try it). Quitting
+nvim (`:qa`) collapses the pane; ⌘I brings it back.
+
 The middle pane runs **one** nvim as an RPC server (`nvim --listen <socket>`).
 Each yazi pane is handed that socket as `$CONSPECTUS_NVIM`, so **`o` / `Enter`
 on a file sends it to that nvim** (`nvim --server … --remote`) as a buffer
