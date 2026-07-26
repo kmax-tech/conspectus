@@ -45,6 +45,7 @@ let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
     ("Tabs", [("t", "new tab"), ("1…9", "switch tab"), ("[ / ]", "previous / next tab")]),
     ("Misc", [("w", "task manager"), (",", "sort menu"), ("~", "yazi help"), ("q", "quit")]),
     ("conspectus", [("⌘D", "toggle split pane"), ("⌘E", "toggle preview pane"),
+                    ("⌘P", "pin preview to file (hold it while you edit; yellow border)"),
                     ("⌘J", "terminal panel (opens in yazi's dir)"),
                     ("⌘W", "close terminal panel"),
                     ("⌘/", "toggle shortcut bar"), ("⌘K", "this cheat sheet"),

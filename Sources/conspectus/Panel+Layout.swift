@@ -299,6 +299,7 @@ extension Panel {
     // performKeyEquivalent), so nothing is intercepted inside yazi itself.
     //   ⌘D  toggle split pane (kitty muscle memory)
     //   ⌘E  toggle preview pane
+    //   ⌘P  pin/unpin the preview to the current file
     //   ⌘J  toggle bottom terminal (VS Code muscle memory)
     //   ⌘/  toggle shortcut bar
     //   ⌥←/→/↑/↓  pane focus (kitty/WezTerm/smart-splits habit; ⌘⌥ = alias)
@@ -320,6 +321,10 @@ extension Panel {
         let previewToggle = NSMenuItem(title: "Toggle Preview Pane", action: #selector(togglePreviewPane), keyEquivalent: "e")
         previewToggle.target = self
         viewMenu.addItem(previewToggle)
+        let pinToggle = NSMenuItem(title: "Pin Preview to File", action: #selector(togglePreviewPin), keyEquivalent: "p")
+        pinToggle.target = self
+        viewMenu.addItem(pinToggle)
+        pinMenuItem = pinToggle
         let termToggle = NSMenuItem(title: "Toggle Terminal Panel", action: #selector(toggleBottomTerminal), keyEquivalent: "j")
         termToggle.target = self
         viewMenu.addItem(termToggle)
@@ -421,6 +426,7 @@ extension Panel {
     func detachPreview() {
         guard previewAttached else { return }
         stopWatchingPreviewFile()   // nothing visible to keep fresh
+        if previewPinned { previewPinned = false; pinMenuItem?.state = .off }  // pin is meaningless with no pane
         rightContainer.removeFromSuperview()
         evenOutPanes()
         previewButton?.state = .off

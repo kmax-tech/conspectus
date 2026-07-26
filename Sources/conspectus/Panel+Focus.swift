@@ -303,10 +303,19 @@ extension Panel {
         if let bt = bottomTerm, let pane = bottomPane { targets.append((pane, fr === bt)) }
         let show = targets.count > 1
         let color = nsColor(activePalette().fg).withAlphaComponent(0.25).cgColor
+        let pinColor = NSColor.systemYellow.withAlphaComponent(0.9).cgColor
         for (view, focused) in targets {
             view.wantsLayer = true
-            view.layer?.borderWidth = (show && focused) ? 2 : 0
-            view.layer?.borderColor = color
+            // A pinned preview always wears a distinct (yellow) border — it
+            // overrides the subtle focus gray so the pinned state reads at a
+            // glance, focused or not.
+            if view === previewFocusRing && previewPinned {
+                view.layer?.borderWidth = 2
+                view.layer?.borderColor = pinColor
+            } else {
+                view.layer?.borderWidth = (show && focused) ? 2 : 0
+                view.layer?.borderColor = color
+            }
         }
     }
 

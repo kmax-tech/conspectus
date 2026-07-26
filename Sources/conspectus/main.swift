@@ -69,6 +69,13 @@ let focusPreviewSentinel = "@FOCUS_PREVIEW"
 /// (browsing), not only when the preview itself is focused.
 let toggleMarkdownSentinel = "@TOGGLE_MD"
 
+/// FIFO control message asking conspectus to pin/unpin the preview to the
+/// current file. Also reachable as ⌘P (app chrome). Pinned, hover events are
+/// ignored so the preview stays on the file you are editing (e.g. in Neovide)
+/// even when the other yazi pane is navigated. A yazi binding can write this;
+/// like the others it is not a path, so it never collides with a hovered file.
+let togglePinSentinel = "@TOGGLE_PIN"
+
 /// Quick Look fallback toggle (CONSPECTUS_QUICKLOOK): "on" (default) previews
 /// the long tail — video, audio, office, fonts, anything not text/image/PDF —
 /// through Quick Look. "off" disables it entirely; those files show a short

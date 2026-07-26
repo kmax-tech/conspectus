@@ -19,6 +19,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var rightContainer: NSView!
     var splitButton: NSButton!
     var previewButton: NSButton!
+    /// ⌘P menu item; its checkmark mirrors `previewPinned`.
+    weak var pinMenuItem: NSMenuItem?
     var term: LocalProcessTerminalView!
     var term2: LocalProcessTerminalView?
     // Padded containers around the terminals: light padding between pane
@@ -61,6 +63,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var cheatPanel: NSPanel?
     var cheatText: NSTextView?
     var lastPath: String?
+    /// Preview pinned to `lastPath`: hover events are ignored (update() drops a
+    /// different path) so the preview stays on the file being edited while the
+    /// yazi pane(s) navigate elsewhere. Toggled by ⌘P / the @TOGGLE_PIN sentinel.
+    var previewPinned = false
     /// Path currently shown in the native text preview — dedup for showTextPreview.
     var lastTextPath: String?
     /// Live-refresh: poll the previewed file's mtime while a file preview is

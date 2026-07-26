@@ -194,6 +194,12 @@ the active instance automatically — no focus tracking involved. Note that
   producing a PDF — where the file briefly vanishes and an inode-bound watch
   would be lost. Gated to an active file preview, so it stops when browsing
   dirs / idle. `CONSPECTUS_WATCH=off` disables it.
+- Pin the preview (**⌘P**): holds the current file in the preview and ignores
+  hover events, so it stays on the file you are editing while the yazi pane(s)
+  navigate elsewhere — pin it, open it in Neovide/nvim, and watch it re-render
+  on every save (esp. useful in `triple` mode, where the preview otherwise
+  follows whichever yazi pane you last moved in). A yellow border marks the
+  pinned state; ⌘P again unpins. Only a file can be pinned (not a directory).
 - Event diagnosis (off by default): `CONSPECTUS_EVENT_LOG=<path>` appends a line
   per preview request and per scroll event reaching the Quick Look view — for
   debugging a preview that stops reacting.

@@ -54,6 +54,8 @@ extension Panel {
                         DispatchQueue.main.async { self?.focusPreview() }
                     } else if s == toggleMarkdownSentinel {
                         DispatchQueue.main.async { self?.toggleMarkdownMode() }
+                    } else if s == togglePinSentinel {
+                        DispatchQueue.main.async { self?.togglePreviewPin() }
                     } else if !s.isEmpty {
                         self?.update(s)
                     }
@@ -160,6 +162,10 @@ extension Panel {
     }
 
     func update(_ path: String) {
+        // Pinned: ignore a hover onto a different file — the preview stays on the
+        // pinned one. Same-path re-renders (attach, palette change) still pass,
+        // and the mtime watch keeps refreshing the pinned file on save/rebuild.
+        if previewPinned, let p = lastPath, path != p { return }
         var d: ObjCBool = false
         // The hovered path can already be gone (fast navigation, deletion in
         // another pane). Deliberate policy: keep showing the previous preview
@@ -401,6 +407,33 @@ extension Panel {
     /// Triggered by yazi's `M` (via the FIFO sentinel) or `M` in the focused
     /// text preview. Main thread only.
     func toggleMarkdownMode() { setMarkdownRender(!markdownRender) }
+
+    /// Pin/unpin the preview to the current file. Pinned, hover events are
+    /// ignored (see `update`), so the preview holds the file you are editing
+    /// while a yazi pane navigates elsewhere — pin it, open it in Neovide/nvim,
+    /// and watch it re-render on every save. Only a real file can be pinned; a
+    /// directory or empty preview beeps and stays unpinned. Triggered by ⌘P or
+    /// the @TOGGLE_PIN FIFO sentinel. Side effects: sets `previewPinned`, redraws
+    /// the pin border, syncs the menu item. Main thread only.
+    @objc func togglePreviewPin() {
+        if previewPinned {
+            previewPinned = false
+            logEvent("preview unpinned")
+        } else {
+            var isDir: ObjCBool = false
+            guard let p = lastPath,
+                  FileManager.default.fileExists(atPath: p, isDirectory: &isDir),
+                  !isDir.boolValue else {
+                warn("conspectus: nothing to pin — hover a file first")
+                NSSound.beep()
+                return
+            }
+            previewPinned = true
+            logEvent("preview pinned \(p)")
+        }
+        pinMenuItem?.state = previewPinned ? .on : .off
+        updateFocusBorders()   // the pin border lives on the preview focus ring
+    }
 
     /// Set the markdown mode (true = rendered, false = source), sync the toolbar
     /// segment, and re-render the current file if it's markdown. Shared by `M`,
