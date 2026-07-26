@@ -108,6 +108,8 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// area in the outer split) — window resizes and divider drags must not
     /// collapse a pane.
     let minPane: CGFloat = 300
+    /// How far ⌘⌃←/→ move a divider per keystroke (points).
+    let paneResizeStep: CGFloat = 60
     /// Bottom terminal panel: initial and minimum height.
     let termPanelHeight: CGFloat = 240
     let minTermHeight: CGFloat = 120

@@ -305,6 +305,7 @@ extension Panel {
     //   ⌘J  toggle bottom terminal (VS Code muscle memory)
     //   ⌘/  toggle shortcut bar
     //   ⌥←/→/↑/↓  pane focus (kitty/WezTerm/smart-splits habit; ⌘⌥ = alias)
+    //   ⌘⌃←/→  narrow / widen the focused pane (WezTerm-style resize)
     func buildMenu() {
         let main = NSMenu()
 
@@ -374,6 +375,11 @@ extension Panel {
         // keys needed. Same actions as ⌥←/→; both stay live.
         addFocusKeyItem(viewMenu, "Focus Left Pane (⌥[)", "[", #selector(focusLeftPane))
         addFocusKeyItem(viewMenu, "Focus Right Pane (⌥])", "]", #selector(focusRightPane))
+        // WezTerm-style keyboard resize: ⌘⌃→ widens the focused pane, ⌘⌃←
+        // narrows it (neighbours absorb; the delegate clamps to minPane). ⌘⌃
+        // (not ⌥, which is focus) keeps the two gestures distinct.
+        addResizeItem(viewMenu, "Grow Focused Pane", NSRightArrowFunctionKey, #selector(growFocusedPane))
+        addResizeItem(viewMenu, "Shrink Focused Pane", NSLeftArrowFunctionKey, #selector(shrinkFocusedPane))
         viewItem.submenu = viewMenu
 
         NSApp.mainMenu = main
@@ -396,6 +402,13 @@ extension Panel {
     func addFocusKeyItem(_ menu: NSMenu, _ title: String, _ key: String, _ action: Selector) {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.keyEquivalentModifierMask = [.option]; item.target = self
+        menu.addItem(item)
+    }
+
+    /// Add a pane-resize menu item bound to ⌘⌃+arrow.
+    func addResizeItem(_ menu: NSMenu, _ title: String, _ arrow: Int, _ action: Selector) {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: String(UnicodeScalar(arrow)!))
+        item.keyEquivalentModifierMask = [.command, .control]; item.target = self
         menu.addItem(item)
     }
 
@@ -530,6 +543,38 @@ extension Panel {
             split.setPosition(split.frame.width * CGFloat(i + 1) / CGFloat(n), ofDividerAt: i)
         }
     }
+
+    /// Which `split` pane holds the keyboard focus — maps the first responder
+    /// to its container among `split.subviews`. nil if focus isn't in the row.
+    func focusedSplitPaneIndex() -> Int? {
+        let fr = window.firstResponder
+        let target: NSView?
+        if previewHasFocus(fr)                 { target = rightContainer }
+        else if fr === term                    { target = termPane }
+        else if let t2 = term2, fr === t2      { target = term2Pane }
+        else if let e = editorTerm, fr === e   { target = editorPane }
+        else                                   { target = nil }
+        guard let t = target else { return nil }
+        return split.subviews.firstIndex(of: t)
+    }
+
+    /// Grow (delta > 0) or shrink (delta < 0) the focused pane's width by moving
+    /// the divider on its right edge — or, for the rightmost pane, the one on
+    /// its left. The split delegate clamps to `minPane`, so nothing collapses.
+    /// WezTerm-style keyboard resize; the divider stays draggable too. No-op if
+    /// focus isn't on a pane, or there's only one pane.
+    func resizeFocusedPane(by delta: CGFloat) {
+        let n = split.subviews.count
+        guard n > 1, let idx = focusedSplitPaneIndex() else { return }
+        if idx < n - 1 {
+            split.setPosition(split.subviews[idx].frame.maxX + delta, ofDividerAt: idx)
+        } else {
+            split.setPosition(split.subviews[idx - 1].frame.maxX - delta, ofDividerAt: idx - 1)
+        }
+    }
+
+    @objc func growFocusedPane()   { resizeFocusedPane(by:  paneResizeStep) }
+    @objc func shrinkFocusedPane() { resizeFocusedPane(by: -paneResizeStep) }
 
     func updateTitle() {
         switch (term2 != nil, previewAttached) {

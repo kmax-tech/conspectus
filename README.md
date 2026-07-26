@@ -141,7 +141,9 @@ dotfiles (`keybindings.md`); ⌘⌥-arrows remain as silent aliases. Trade-off
 (same as kitty): ⌥-arrows no longer reach the shell as word jumps —
 `M-b`/`M-f` and `C-a`/`C-e` still do. **Clicking** a pane focuses it too.
 A focused pane shows a subtle gray border (only when more than one
-focusable pane exists). The preview is **focus-by-intent**: a
+focusable pane exists). **⌘⌃→ / ⌘⌃←** widen / narrow the focused pane
+(WezTerm-style keyboard resize, 60 pt/step; the divider stays draggable and
+no pane can collapse below its minimum). The preview is **focus-by-intent**: a
 focused Quick Look scrolls with the arrow keys / PgUp / PgDn and pages PDFs
 (or plays videos) with Space — but clicks and app switches can never move
 the keyboard into it, so hjkl in yazi always keep working; coming back from
