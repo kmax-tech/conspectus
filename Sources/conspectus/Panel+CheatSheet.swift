@@ -53,6 +53,7 @@ let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
                     ("⌥← → / ⌥[ ]", "cycle pane focus (→ into preview: arrows page/scroll)"),
                     ("l / →", "on a file: focus the preview (h / ← there returns to yazi)"),
                     ("click", "focus the clicked pane (border follows)"),
+                    ("drag + ⌘C", "select & copy text in the focused preview (PDF or text/markdown); ⌘A all"),
                     ("", "PDF preview focused: J/] next  K/[ prev  +/- zoom  s single↔continuous"),
                     ("M", "toggle markdown render↔source (any yazi pane or the preview)"),
                     ("", "text preview focused: j/k scroll"),

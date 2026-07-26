@@ -83,6 +83,7 @@ extension Panel {
         textScroll.autoresizingMask = [.width, .height]
         textView = IntentFocusTextView(frame: textScroll.bounds)
         textView.isEditable = false
+        textView.isSelectable = true      // markable + copyable (⌘C via the Edit menu)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
@@ -313,6 +314,22 @@ extension Panel {
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Quit Conspectus", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appItem.submenu = appMenu
+
+        // Edit menu: standard first-responder actions (target nil), so ⌘C
+        // copies the selected text in whatever preview is focused — the PDFView
+        // and the text/markdown NSTextView both implement copy:/selectAll:, and
+        // ⌘A selects all. Without this menu ⌘C never reaches the first responder
+        // (a key equivalent needs a menu item), so selection couldn't be copied.
+        // Cut/Paste are included for completeness — AppKit auto-disables them on
+        // the read-only previews and enables ⌘V paste in the terminal panes.
+        let editItem = NSMenuItem(); main.addItem(editItem)
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(NSMenuItem(title: "Cut",   action: #selector(NSText.cut(_:)),   keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: "Copy",  action: #selector(NSText.copy(_:)),  keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        editItem.submenu = editMenu
 
         let viewItem = NSMenuItem(); main.addItem(viewItem)
         let viewMenu = NSMenu(title: "View")

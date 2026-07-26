@@ -147,6 +147,10 @@ focused Quick Look scrolls with the arrow keys / PgUp / PgDn and pages PDFs
 the keyboard into it, so hjkl in yazi always keep working; coming back from
 an editor launched out of yazi restores focus to the last terminal.
 
+**Selecting text:** click into the preview to focus it, then drag to select
+and **⌘C** to copy — in the PDF view and in the text/markdown preview alike
+(**⌘A** selects all). ⌘C / ⌘V also copy/paste in the terminal panes.
+
 ## Bottom terminal (⌘J)
 
 **⌘J** toggles a terminal panel below the panes: a fresh interactive login
