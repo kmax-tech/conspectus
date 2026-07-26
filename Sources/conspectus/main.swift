@@ -121,6 +121,22 @@ let previewMaxBytes: Int = {
     return mb * 1_048_576
 }()
 
+/// Split ratio (CONSPECTUS_SPLIT): the terminal pane's share of the window
+/// width at startup, as a fraction — the rest goes to the preview. Default
+/// 0.5 (equal): the preview is the app's whole point and documents/PDFs need
+/// width to read comfortably, so it gets at least half. Lower it (e.g. 0.45)
+/// to favour the preview further, raise it to favour yazi. Clamped to
+/// 0.25…0.75 so neither pane collapses. The ratio then scales with window
+/// resizes; the divider is still draggable. Invalid values fail loud.
+let terminalSplitFraction: CGFloat = {
+    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_SPLIT"] ?? "0.5"
+    guard let f = Double(raw) else {
+        warn("conspectus: CONSPECTUS_SPLIT must be a fraction like 0.5 (got '\(raw)') — using 0.5")
+        return 0.5
+    }
+    return CGFloat(min(0.75, max(0.25, f)))
+}()
+
 /// Event diagnosis, off by default: CONSPECTUS_EVENT_LOG=<path> appends one
 /// timestamped line per instrumented event (scrolls reaching the Quick Look
 /// view, preview requests). Used to tell "events never arrive" (routing bug)

@@ -144,7 +144,9 @@ extension Panel {
         termPane = makeTermPane(term)
         split.addSubview(termPane)
         split.addSubview(rightContainer)
-        split.setPosition(760, ofDividerAt: 0)
+        // Divider from the configured terminal share of the current width; the
+        // delegate scales this ratio when the window (or restored frame) resizes.
+        split.setPosition((split.frame.width * terminalSplitFraction).rounded(), ofDividerAt: 0)
     }
 
     /// Build the outer vertical stack: the pane split on top, optionally the

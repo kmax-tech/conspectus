@@ -182,6 +182,11 @@ the active instance automatically — no focus tracking involved. Note that
   yazi's default) is kept.
 - Font: JetBrainsMono Nerd Font Mono by default; override with `CONSPECTUS_FONT` /
   `CONSPECTUS_FONT_SIZE`.
+- Split ratio: terminal and preview share the width 50/50 by default — the
+  preview is the point, and documents/PDFs need width to read. `CONSPECTUS_SPLIT`
+  is the terminal's share as a fraction (e.g. `CONSPECTUS_SPLIT=0.45` gives the
+  preview more room, `0.6` favours yazi); clamped to 0.25…0.75. The divider is
+  still draggable, and the ratio scales when you resize the window.
 - Live refresh: the previewed file's mtime is polled (~0.7 s) while a file
   preview is showing, so editing a note in `nvim` (left pane, `E t`) and saving
   updates the preview (right) on the fly. Polling (not an fd watch) on purpose:
