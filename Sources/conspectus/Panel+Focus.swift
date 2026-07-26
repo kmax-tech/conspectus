@@ -330,7 +330,45 @@ extension Panel {
         if let fr = window?.firstResponder as? LocalProcessTerminalView, fr !== bottomTerm {
             lastTopTerm = fr
         }
+        // Focusing the editor pane: show whatever file nvim currently has open,
+        // so the preview follows the editor (not yazi's hover) while you edit.
+        if window?.firstResponder === editorTerm { previewEditorCurrentFile() }
         updateFocusBorders()
+    }
+
+    /// Ask the editor's nvim (over its RPC socket) which file is open and
+    /// preview it — the focus-in trigger for "preview follows the editor". The
+    /// in-nvim buffer-switch trigger is the `@EDITOR_FILE:` push (see the FIFO
+    /// reader). No-op without nvim, or on an empty/no-name buffer. Side effects:
+    /// spawns the nvim client off-thread; updates the preview on main.
+    func previewEditorCurrentFile() {
+        guard let nvim = nvimPath else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: nvim)
+            p.arguments = ["--server", nvimSocketPath, "--remote-expr", "expand('%:p')"]
+            let out = Pipe(); p.standardOutput = out; p.standardError = Pipe()
+            var path = ""
+            do {
+                try p.run()
+                let d = out.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                path = (String(data: d, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch { return }
+            guard !path.isEmpty else { return }   // empty buffer: leave the preview as-is
+            DispatchQueue.main.async {
+                guard self?.window.firstResponder === self?.editorTerm else { return }  // still editing
+                self?.update(path)
+            }
+        }
+    }
+
+    /// A file became active in the editor's nvim (BufEnter push over the FIFO).
+    /// Honour it only while the editor is focused — otherwise yazi's hover owns
+    /// the preview. Goes through `update`, so pin and the mtime watch still apply.
+    func editorFileHover(_ path: String) {
+        guard window.firstResponder === editorTerm else { return }
+        update(path)
     }
 
     /// Subtle gray border on the focused pane — shown only while more than

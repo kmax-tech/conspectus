@@ -464,7 +464,10 @@ extension Panel {
             split.addSubview(pane)
         }
         setEditorPaneRatios()
-        launch(e, extraEnv: [:], run: "nvim --listen \"\(nvimSocketPath)\"")
+        // CONSPECTUS_FIFO lets nvim push its active file so the preview can
+        // follow the editor (BufEnter → @EDITOR_FILE: path); the same FIFO yazi
+        // uses for hovers, one line per message.
+        launch(e, extraEnv: ["CONSPECTUS_FIFO": fifoPath], run: "nvim --listen \"\(nvimSocketPath)\"")
         window.makeFirstResponder(e)
         updateTitle()
     }

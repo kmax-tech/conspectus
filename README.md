@@ -126,10 +126,15 @@ ever one editor. (`l` / `→` still peeks at a file in the preview; `o` / `Enter
 edits it.) The mechanism mirrors the preview FIFO: conspectus owns the channel
 and hands its address to yazi.
 
-Pairs with **⌘P** (pin): pin the preview to the file you're editing and every
-save re-renders it live (mtime poll — survives even a `latexmk` rebuild).
-Quitting nvim (`:qa`) collapses the editor pane; **⌘I** re-adds it. Needs `nvim`
-(0.7+ for `--remote`) on the login-shell PATH.
+**The preview follows the editor** while the nvim pane is focused: focusing it
+(or switching buffers inside nvim) shows the file nvim currently has open, and
+saving re-renders it live (mtime poll — survives even a `latexmk` rebuild). Move
+focus back to yazi and the preview follows yazi's hover again. (conspectus asks
+nvim over its RPC socket on focus-in, and nvim pushes its active file on
+`BufEnter` via the same opt-in helper — see the dotfiles
+`plugins/smart-splits.lua`.) **⌘P** still pins a file explicitly, overriding the
+follow. Quitting nvim (`:qa`) collapses the editor pane; **⌘I** re-adds it. Needs
+`nvim` (0.7+ for `--remote`) on the login-shell PATH.
 
 **Split handoff (smart-splits):** ⌥←/→/↑/↓ inside the editor move between
 **nvim's own splits** first; only at nvim's edge do they hand off to the

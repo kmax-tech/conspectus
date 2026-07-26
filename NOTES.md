@@ -19,6 +19,18 @@ channel, exports its address, yazi writes into it.
 
 The editor toggles at runtime too (**⌘I**), not just via `conspectus ide`.
 
+**Preview follows the editor:** while the nvim pane is focused the preview
+shows nvim's active file, not yazi's hover. Two triggers, both reusing `update`
+(so pin + the mtime watch still apply): focus-in RPC-queries `expand('%:p')`
+(`previewEditorCurrentFile`); an in-nvim buffer switch pushes `@EDITOR_FILE:<path>`
+to the FIFO on `BufEnter` (`editorFileHover`). Both are gated on
+`firstResponder === editorTerm`, so leaving the editor hands the preview back to
+yazi. The push needs the editor nvim to know the FIFO — hence `CONSPECTUS_FIFO`
+in its launch env, and the opt-in autocmd in dotfiles `smart-splits.lua`. Safe
+because conspectus holds the FIFO open O_RDWR for its whole life, so nvim's
+`io.open(fifo,"a")` never blocks (and the editor can't outlive conspectus — it's
+a child).
+
 **Split handoff (⌥-arrows):** inside the editor, ⌥-arrows should navigate
 nvim's OWN splits first and only hand off to the neighbouring conspectus pane at
 nvim's edge (smart-splits, as across WezTerm/kitty). conspectus **drives** this

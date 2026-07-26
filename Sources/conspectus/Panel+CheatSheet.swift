@@ -60,6 +60,7 @@ let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
                     ("", "text preview focused: j/k scroll"),
                     ("o / Enter", "ide mode: send file(s) to the middle nvim (l/→ = peek in preview)"),
                     ("⌥arrows in nvim", "move nvim's own splits first, hand off to the neighbour pane at the edge"),
+                    ("", "editor focused: the preview follows nvim's active file (⌘P still pins)"),
                     ("⌥↑ ↓", "pane area ⇄ terminal panel"),
                     ("=", "sync cd to other pane")]),
 ]

@@ -77,6 +77,12 @@ let toggleMarkdownSentinel = "@TOGGLE_MD"
 /// like the others it is not a path, so it never collides with a hovered file.
 let togglePinSentinel = "@TOGGLE_PIN"
 
+/// FIFO message prefix the ide editor's nvim writes on BufEnter — followed by
+/// the active file's absolute path (`@EDITOR_FILE:/abs/path`). conspectus
+/// previews it only while the editor pane is focused, so the preview follows
+/// the editor. Prefixed (not a bare path) so it's distinct from a yazi hover.
+let editorFilePrefix = "@EDITOR_FILE:"
+
 /// Quick Look fallback toggle (CONSPECTUS_QUICKLOOK): "on" (default) previews
 /// the long tail — video, audio, office, fonts, anything not text/image/PDF —
 /// through Quick Look. "off" disables it entirely; those files show a short
