@@ -3,6 +3,29 @@
 Solved hard problems — the *why* the code can't show. Keep entries short:
 problem, solution, gotcha.
 
+## 2026-07-27 — Washed-out colours after a dark↔light switch (stale appearance)
+
+**Problem:** Toggling macOS dark↔light while conspectus ran left the panel
+low-contrast — e.g. yazi's directories in Mocha's pale blue (`#89b4fa`) on
+Latte's light background — and it stayed wrong until the app was relaunched.
+
+**Solution:** `systemIsDark()` read `UserDefaults AppleInterfaceStyle`, which is
+frequently still stale when `AppleInterfaceThemeChangedNotification` fires. So on
+a switch `applyTheme` installed the OLD palette and set the terminal's
+`nativeBackgroundColor` to the old appearance. yazi picks its Latte/Mocha flavor
+from that background (it queries it over OSC 11), so it latched onto the wrong
+flavor — truecolor, so the wrong blue was baked in — and since nothing corrected
+the background afterwards it persisted until relaunch. Fix: read the live
+`NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])`, which is current
+at notification time.
+
+**Gotcha:** the directory colour is truecolor from the flavor (`*/ = #1e66f5`),
+not an ANSI index, so it's driven by *which flavor yazi chose*, i.e. by the
+background we advertise — not by the ANSI palette we install. The whole
+theme's coherence hangs on advertising the correct bg. If a switch still washes
+out after this, the remaining half is yazi not re-querying OSC 11 live (only at
+startup) — then it needs a redraw/re-detect nudge, not just a correct bg.
+
 ## 2026-07-26 — IDE mode: send files to one nvim instead of spawning editors
 
 **Problem:** `conspectus ide` is yazi | nvim | preview. Opening a file from

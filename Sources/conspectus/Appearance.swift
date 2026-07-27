@@ -8,7 +8,14 @@ import SwiftTerm
 // (SwiftTerm answers), so the whole panel stays one coherent theme.
 
 func systemIsDark() -> Bool {
-    UserDefaults.standard.string(forKey: "AppleInterfaceStyle")?.lowercased() == "dark"
+    // Read the LIVE effective appearance, not the AppleInterfaceStyle user
+    // default: that default is frequently still stale when
+    // AppleInterfaceThemeChangedNotification fires, so reading it there installed
+    // the OLD palette on a dark<->light switch — and, because we advertise that
+    // background to yazi over OSC 11, yazi then picked the wrong flavor too,
+    // leaving a washed-out mismatch (e.g. Mocha's pale blue on Latte's light bg)
+    // until the next relaunch. effectiveAppearance is current at that moment.
+    NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
 }
 
 func activePalette() -> Palette { systemIsDark() ? mocha : latte }
