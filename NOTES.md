@@ -3,6 +3,24 @@
 Solved hard problems — the *why* the code can't show. Keep entries short:
 problem, solution, gotcha.
 
+## 2026-07-27 — `l` jumped to the preview instead of entering a folder
+
+**Problem:** With files selected (for copy/cut), pressing `l` on a *folder*
+focused the preview pane instead of entering the folder.
+
+**Solution:** The `l`/`<Right>` keymap decided dir-vs-file with a shell
+`[ -d "$1" ]`, but in yazi `"$1"` (like `"$@"`) is the first **selected** file,
+or the hovered one only when nothing is selected. So a pending selection made
+`[ -d ]` test a *file* → the binding fell through to `@FOCUS_PREVIEW`. Moved the
+decision into the bundled plugin (`ya emit plugin conspectus`), which reads
+`cx.active.current.hovered.cha.is_dir` — the item under the cursor, never the
+selection. Same root cause as the earlier "Enter opens the selected PDF, not the
+hovered file": navigation/preview must key off the HOVERED item.
+
+**Gotcha:** the plugin lives only in conspectus's overlay, so the keymap guards
+`ya emit plugin conspectus` behind `[ -n "$QLPEEK_FIFO" ]` — a plain terminal
+yazi (no plugin) keeps the simple shell path.
+
 ## 2026-07-27 — Washed-out colours after a dark↔light switch (stale appearance)
 
 **Problem:** Toggling macOS dark↔light while conspectus ran left the panel

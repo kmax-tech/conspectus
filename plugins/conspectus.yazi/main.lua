@@ -21,6 +21,14 @@ local get_hovered = ya.sync(function()
 	return h and tostring(h.url) or nil
 end)
 
+-- Whether the item UNDER THE CURSOR is a directory — read from yazi's real
+-- state, so it's correct even with files selected (unlike a shell `[ -d "$1" ]`
+-- test, where "$1" is the first SELECTED file, not the hovered one).
+local hovered_is_dir = ya.sync(function()
+	local h = cx.active.current.hovered
+	return h ~= nil and h.cha.is_dir
+end)
+
 function M:setup()
 	-- pcall-guarded env reads in case the yazi sandbox withholds os.getenv.
 	local ok, fifo = pcall(function() return os.getenv("QLPEEK_FIFO") end)
@@ -52,6 +60,29 @@ function M:setup()
 				emit("reveal", { body })
 			end
 		end)
+	end
+end
+
+-- `l` / `→` inside conspectus: enter the hovered directory, or — on a file,
+-- where there's nothing to enter — move keyboard focus into the preview pane
+-- (the `@FOCUS_PREVIEW` sentinel; `h`/`←` there returns to yazi). Decided from
+-- the HOVERED item, never the selection, so a pending copy/cut can't hijack
+-- navigation. Invoked as `ya emit plugin conspectus` from the keymap.
+function M:entry(job)
+	local emit = ya.emit or ya.mgr_emit
+	if hovered_is_dir() then
+		emit("enter", {})
+		return
+	end
+	local ok, fifo = pcall(function() return os.getenv("QLPEEK_FIFO") end)
+	if ok and fifo and #fifo > 0 then
+		local f = io.open(fifo, "a")
+		if f then
+			f:write("@FOCUS_PREVIEW\n")
+			f:close()
+		end
+	else
+		emit("open", {})
 	end
 end
 
