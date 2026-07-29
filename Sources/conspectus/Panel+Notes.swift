@@ -54,45 +54,16 @@ extension Panel {
         autoNoteBuffers.insert(note)
         // `while`: a stale auto-push dies as soon as a newer note took over —
         // during nvim's boot several retry chains overlap, and without the
-        // guard an OLD note could land last and hijack the window.
-        openInEditor(note, focus: false,
-                     while: { [weak self] in self?.lastEditorNotePush == note },
-                     then: { [weak self] in self?.sweepAutoNoteBuffers() })
+        // guard an OLD note could land last and hijack the window. The GC of
+        // older auto-notes rides INSIDE the same delivery transaction
+        // (sweepStale), so no interleaving can leave one behind.
+        openInEditor(note, focus: false, sweepStale: true,
+                     while: { [weak self] in self?.lastEditorNotePush == note })
     }
 
-    /// Close every auto-followed note buffer except the current one — pinned,
-    /// modified, and visible buffers survive (cleanupNoteBuffer's guards). A
-    /// sweep over ALL auto-pushed notes, not just the previous one, so a push
-    /// that landed out of order (nvim boot race) is collected on the next
-    /// cycle instead of sticking forever.
-    func sweepAutoNoteBuffers() {
-        for path in autoNoteBuffers
-        where path != lastEditorNotePush && !pinnedNoteBuffers.contains(path) {
-            cleanupNoteBuffer(path)
-        }
-    }
-
-    /// Delete the nvim buffer for `path` iff it is unmodified and not visible
-    /// in any window — the auto-follow buffer GC. Best-effort by design: a
-    /// failed delete only leaves a clean buffer in the list (deliberate, no
-    /// retry/warn). Side effects: spawns an nvim client off-thread.
-    func cleanupNoteBuffer(_ path: String) {
-        guard editorTerm != nil, let nvim = nvimPath else { return }
-        let q = path.replacingOccurrences(of: "'", with: "''")   // vimscript '…' escaping
-        // Exact name comparison (==#), not bufnr('<path>') — bufnr falls back
-        // to PARTIAL name matching and could delete an unrelated buffer.
-        let expr = "execute(join(map(filter(getbufinfo(), "
-                 + "{_, b -> b.name ==# '\(q)' && b.changed == 0 && empty(b.windows)}), "
-                 + "{_, b -> 'silent! bdelete ' . b.bufnr}), '|'))"
-        DispatchQueue.global(qos: .utility).async {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: nvim)
-            p.arguments = ["--server", nvimSocketPath, "--remote-expr", expr]
-            p.standardOutput = Pipe(); p.standardError = Pipe()
-            try? p.run()   // deliberate: GC is cosmetic, failure is harmless
-            p.waitUntilExit()
-            logEvent("note buffer GC \(path) (exit \(p.terminationStatus))")
-        }
+    /// Vimscript single-quoted string literal for `s`.
+    private func vimQuote(_ s: String) -> String {
+        "'" + s.replacingOccurrences(of: "'", with: "''") + "'"
     }
 
     /// Toolbar button / `n` on the focused PDF pane / ⌘N from anywhere: open
@@ -114,69 +85,87 @@ extension Panel {
         // lastEditorNotePush to this very note, which would mask the fresh open.
         let alreadyShown = editorTerm != nil && target == lastEditorNotePush
         if editorTerm == nil { addEditorPane() }
-        openInEditor(target, focus: !alreadyShown)
+        openInEditor(target, focus: !alreadyShown, sweepStale: true)   // pinned, so the sweep spares it
     }
 
-    /// Open `path` as a buffer in the ide editor's nvim (`--remote` = drop).
-    /// Retries: the pane may have been added just now — nvim still starting,
-    /// its socket not yet listening, `nvimPath` still resolving. Gives up loud
-    /// after ~12s. Side effects: spawns nvim client processes off-thread;
-    /// `focus: true` moves the keyboard to the editor on success; `then` runs
-    /// on main after a successful open (used by the buffer GC); `while`
-    /// (checked on main before every attempt) aborts the chain silently when
-    /// it returns false — how a superseded auto-push dies.
-    func openInEditor(_ path: String, focus: Bool, attempt: Int = 0,
-                      while stillWanted: (() -> Bool)? = nil, then: (() -> Void)? = nil) {
+    /// Open `path` as a buffer in the ide editor's nvim — VERIFIED and atomic:
+    /// one `--remote-expr` `:drop`s the file, garbage-collects stale
+    /// auto-followed note buffers in the SAME transaction (`sweepStale` — no
+    /// separate client call that overlapping chains could race against), and
+    /// answers with the buffer nvim actually shows afterwards. Only a matching
+    /// answer counts as delivered; anything else (E-errors, swap prompt, dead
+    /// server) is logged to the event log and retried — the pane may have been
+    /// added just now (nvim booting, socket not listening, `nvimPath`
+    /// resolving). Gives up loud after ~12s.
+    /// Side effects: spawns nvim client processes off-thread; `focus: true`
+    /// moves the keyboard to the editor on success; `while` (checked on main
+    /// before every attempt) aborts the chain silently when it returns false —
+    /// how a superseded auto-push dies.
+    func openInEditor(_ path: String, focus: Bool, attempt: Int = 0, sweepStale: Bool = false,
+                      while stillWanted: (() -> Bool)? = nil) {
         guard let editor = editorTerm else { return }   // pane closed while retrying
         if stillWanted?() == false { return }           // superseded — a newer push owns the editor
         guard let nvim = nvimPath else {                // resolution still in flight
-            retryOpenInEditor(path, focus: focus, attempt: attempt, while: stillWanted, then: then)
+            retryOpenInEditor(path, focus: focus, attempt: attempt,
+                              sweepStale: sweepStale, while: stillWanted)
             return
         }
-        // Delivery is VERIFIED, not fire-and-forget: the expr `:drop`s the file
-        // and answers with the buffer nvim actually shows afterwards — only a
-        // matching answer counts as delivered. Errors (E37, swap prompts, a
-        // dead server) surface in stderr and go to the event log instead of
-        // being swallowed; that is what made failures diagnosable.
-        let esc = path.replacingOccurrences(of: "'", with: "''")
-        let expr = "[execute('drop ' . fnameescape('\(esc)')), expand('%:p')][1]"
+        // Stale = every auto-pushed note except this one and the pinned ones,
+        // deleted only if unmodified AND hidden — never discards work. Exact
+        // name comparison (index over getbufinfo names), NOT bufnr(): bufnr
+        // falls back to partial matching and could hit an unrelated buffer.
+        let stale = sweepStale
+            ? autoNoteBuffers.subtracting(pinnedNoteBuffers).subtracting([path]).sorted()
+            : []
+        let staleList = "[" + stale.map(vimQuote).joined(separator: ",") + "]"
+        let sweep = stale.isEmpty ? "''"
+            : "execute(join(map(filter(getbufinfo(), "
+              + "{_, b -> index(\(staleList), b.name) >= 0 && b.changed == 0 && empty(b.windows)}), "
+              + "{_, b -> 'silent! bdelete ' . b.bufnr}), '|'))"
+        let expr = "[execute('drop ' . fnameescape(\(vimQuote(path)))), \(sweep), expand('%:p')][2]"
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: nvim)
-            p.arguments = ["--server", nvimSocketPath, "--remote-expr", expr]
-            let outPipe = Pipe(); let errPipe = Pipe()
-            p.standardOutput = outPipe; p.standardError = errPipe
-            var answer = ""; var errOut = ""
-            do {
-                try p.run()
-                let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                p.waitUntilExit()
-                answer = (String(data: outData, encoding: .utf8) ?? "")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                errOut = (String(data: errData, encoding: .utf8) ?? "")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-            } catch { errOut = error.localizedDescription }
-            let delivered = p.terminationStatus == 0 && answer == path
+            let (status, answer, errOut) = runNvimExpr(nvim, expr)
+            let delivered = status == 0 && answer == path
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 if delivered {
-                    logEvent("openInEditor delivered \(path)")
+                    logEvent("openInEditor delivered \(path)"
+                             + (stale.isEmpty ? "" : " (sweep over \(stale.count) stale)"))
                     if focus, self.editorTerm === editor { self.window.makeFirstResponder(editor) }
-                    then?()
+                    if !stale.isEmpty { self.reportSweepSurvivors(stale, nvim: nvim) }
                 } else {
                     if !errOut.isEmpty || !answer.isEmpty {
                         logEvent("openInEditor attempt \(attempt) failed for \(path): "
                                  + "answer='\(answer)' err='\(errOut)'")
                     }
-                    self.retryOpenInEditor(path, focus: focus, attempt: attempt, while: stillWanted, then: then)
+                    self.retryOpenInEditor(path, focus: focus, attempt: attempt,
+                                           sweepStale: sweepStale, while: stillWanted)
                 }
             }
         }
     }
 
+    /// Diagnostics only: after a sweep, ask nvim which of the stale note
+    /// buffers are STILL there and why (changed? visible?) and event-log the
+    /// answer — a buffer that "won't close" now explains itself (e.g. a plugin
+    /// marking buffers modified on load) instead of leaving us guessing.
+    /// Nothing is deleted or retried here. Side effects: one nvim client
+    /// off-thread.
+    private func reportSweepSurvivors(_ stale: [String], nvim: String) {
+        let list = "[" + stale.map(vimQuote).joined(separator: ",") + "]"
+        // b.listed: a bdelete'd buffer lingers unlisted in getbufinfo() —
+        // without the filter every successfully swept note would false-alarm.
+        let expr = "join(map(filter(getbufinfo(), {_, b -> b.listed && index(\(list), b.name) >= 0}), "
+                 + "{_, b -> fnamemodify(b.name, ':t') . '[changed=' . b.changed"
+                 + " . ' visible=' . len(b.windows) . ']'}), '  ')"
+        DispatchQueue.global(qos: .utility).async {
+            let (status, answer, _) = runNvimExpr(nvim, expr)
+            if status == 0, !answer.isEmpty { logEvent("note buffers kept: \(answer)") }
+        }
+    }
+
     private func retryOpenInEditor(_ path: String, focus: Bool, attempt: Int,
-                                   while stillWanted: (() -> Bool)?, then: (() -> Void)?) {
+                                   sweepStale: Bool, while stillWanted: (() -> Bool)?) {
         // Generous: a FRESH pane pays a login shell (oh-my-zsh …) + nvim
         // startup before the socket listens — 3s proved too short in the
         // field. Retries stop on the first success; only a truly dead nvim
@@ -187,7 +176,32 @@ extension Panel {
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.openInEditor(path, focus: focus, attempt: attempt + 1, while: stillWanted, then: then)
+            self?.openInEditor(path, focus: focus, attempt: attempt + 1,
+                               sweepStale: sweepStale, while: stillWanted)
         }
+    }
+}
+
+/// Run `nvim --server <ide socket> --remote-expr <expr>` synchronously and
+/// return (exit status, stdout, stderr), both trimmed. Blocking — call
+/// off the main thread.
+private func runNvimExpr(_ nvim: String, _ expr: String) -> (Int32, String, String) {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: nvim)
+    p.arguments = ["--server", nvimSocketPath, "--remote-expr", expr]
+    let outPipe = Pipe(); let errPipe = Pipe()
+    p.standardOutput = outPipe; p.standardError = errPipe
+    do {
+        try p.run()
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        let out = (String(data: outData, encoding: .utf8) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let err = (String(data: errData, encoding: .utf8) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (p.terminationStatus, out, err)
+    } catch {
+        return (-1, "", error.localizedDescription)
     }
 }
