@@ -152,7 +152,9 @@ window, and not pinned; unsaved changes always keep their buffer. A
 deliberate open — 📝 toolbar button, `n` on the focused PDF pane, or **⌘N**
 from anywhere — **pins** the note's buffer, so collecting notes is just
 cycling + ⌘N on every keeper: each pinned note stays in the buffer list
-while the rest clean up after themselves. The pin lives **in nvim** as
+while the rest clean up after themselves. On an already-pinned note the
+same button/key **unpins** (a toggle, like ⌘P on the preview) — so the
+click that bootstraps the first note doesn't pin it forever. The pin lives **in nvim** as
 `b:conspectus_pinned` (single source of truth): `:ConspectusPin` /
 `:ConspectusUnpin` toggle it from inside nvim (`:bd` also releases it), the
 PDF bar shows a pin icon for the hovered PDF's note, and a bufferline can

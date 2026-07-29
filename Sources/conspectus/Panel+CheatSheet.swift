@@ -56,7 +56,7 @@ let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
                     ("click", "focus the clicked pane (border follows)"),
                     ("drag + ⌘C", "select & copy text in the focused preview (PDF or text/markdown); ⌘A all"),
                     ("", "PDF preview focused: J/] next  K/[ prev  +/- zoom  s single↔continuous  n note"),
-                    ("n / 📝 / ⌘N", "open + PIN the PDF's note in nvim — created next to the PDF if missing"),
+                    ("n / 📝 / ⌘N", "open + PIN the PDF's note in nvim (toggle: unpins if already pinned)"),
                     ("", "ide mode: hovering a PDF auto-opens its existing note in nvim;"),
                     ("", "  cycling on closes it again unless pinned / edited / visible"),
                     ("", "  pinned notes: ★ in the bufferline, pin icon in the PDF bar;"),

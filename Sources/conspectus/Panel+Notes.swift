@@ -47,7 +47,7 @@ extension Panel {
     func updateNoteButton() {
         guard let b = noteButton else { return }
         let (symbol, tip): (String, String) = activeNotePinned
-            ? ("pin.fill", "Note gepinnt — n öffnet sie; :ConspectusUnpin in nvim löst den Pin")
+            ? ("pin.fill", "Note gepinnt — n/Klick löst den Pin (auch: :ConspectusUnpin in nvim)")
             : (activeNote != nil
                 ? ("note.text", "Note im Editor öffnen + pinnen (n)")
                 : ("note.text.badge.plus", "Note anlegen (n) — <name>.md neben dem PDF"))
@@ -90,6 +90,14 @@ extension Panel {
     @objc func openPDFNote() {
         guard let pdf = pdfView.document?.documentURL?.path else { NSSound.beep(); return }
         let target = activeNote?.note ?? defaultNotePath(for: pdf)
+        // TOGGLE, not one-way: the button is also how the FIRST note gets
+        // opened (it bootstraps the editor pane), so without the unpin arm
+        // that bootstrap click would silently pin note #1 forever — the
+        // "first buffer sticks" trap. Mirrors ⌘P on the preview.
+        if activeNotePinned {
+            unpinNoteBuffer(target)
+            return
+        }
         activeNotePinned = true   // optimistic — the delivery sets b:conspectus_pinned
         updateNoteButton()
         logEvent("note pinned \(target)")
@@ -166,6 +174,23 @@ extension Panel {
                                            markPinned: markPinned, while: stillWanted)
                 }
             }
+        }
+    }
+
+    /// Release the pin on `path`'s buffer (b:conspectus_pinned → 0) — the
+    /// unpin arm of the note-button toggle. Exact-name matched; refreshes the
+    /// bufferline star. Best-effort: if the buffer is already gone there is
+    /// nothing to unpin. Side effects: one nvim client off-thread; toolbar
+    /// icon update on main.
+    func unpinNoteBuffer(_ path: String) {
+        activeNotePinned = false
+        updateNoteButton()
+        logEvent("note unpinned \(path)")
+        guard editorTerm != nil, let nvim = nvimPath else { return }
+        let expr = "[map(filter(getbufinfo(), {_, b -> b.name ==# \(vimQuote(path))}), "
+                 + "{_, b -> setbufvar(b.bufnr, 'conspectus_pinned', 0)}), execute('redrawtabline')][1]"
+        DispatchQueue.global(qos: .utility).async {
+            _ = runNvimExpr(nvim, expr)
         }
     }
 
