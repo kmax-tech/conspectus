@@ -10,17 +10,29 @@ import ConspectusCore
 
 extension Panel {
     /// Resolve the previewed PDF's note off the main thread; on main — if this
-    /// is still the newest hover — publish it: `activeNote`, the toolbar icon,
-    /// and the ide auto-follow. Side effects: filesystem walk off-thread,
+    /// is still the newest hover — publish it: `activeNote`, the toolbar icon
+    /// (including the pin state asked from nvim), and the ide auto-follow.
+    /// Side effects: filesystem walk + optional nvim query off-thread,
     /// state + UI updates and a possible nvim push on main.
     func resolveNoteAsync(for path: String, generation gen: Int) {
+        let nvim = editorTerm != nil ? nvimPath : nil   // capture on main
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let note = resolveNote(for: path, notesDirs: notesDirs)
             guard self.isCurrentListing(gen) else { return }
+            // Pin state lives in nvim (b:conspectus_pinned) — mirror it for
+            // the toolbar icon. No editor pane → no buffers → nothing pinned.
+            var pinned = false
+            if let note = note, let nvim = nvim {
+                let q = "get(map(filter(getbufinfo(), {_, b -> b.name ==# \(vimQuote(note))}), "
+                      + "{_, b -> get(b.variables, 'conspectus_pinned', 0)}), 0, 0)"
+                pinned = runNvimExpr(nvim, q).1 == "1"
+            }
+            guard self.isCurrentListing(gen) else { return }
             DispatchQueue.main.async {
                 guard self.isCurrentListing(gen) else { return }
                 self.activeNote = note.map { (pdf: path, note: $0) }
+                self.activeNotePinned = pinned
                 self.updateNoteButton()
                 self.pushNoteToEditor()
                 if let n = note { logEvent("note resolved \(path) -> \(n)") }
@@ -28,15 +40,18 @@ extension Panel {
         }
     }
 
-    /// Mirror `activeNote` in the PDF toolbar: existing note → plain note
-    /// icon, none → badge-plus (clicking creates one next to the PDF).
+    /// Mirror the note state in the PDF toolbar: existing note → plain note
+    /// icon, none → badge-plus (clicking creates one next to the PDF),
+    /// pinned → pin icon (the buffer survives cycling; :ConspectusUnpin or
+    /// :bd in nvim releases it).
     func updateNoteButton() {
         guard let b = noteButton else { return }
-        let tip = activeNote != nil
-            ? "Note im Editor öffnen (n)"
-            : "Note anlegen (n) — <name>.md neben dem PDF"
-        b.image = NSImage(systemSymbolName: activeNote != nil ? "note.text" : "note.text.badge.plus",
-                          accessibilityDescription: tip) ?? b.image
+        let (symbol, tip): (String, String) = activeNotePinned
+            ? ("pin.fill", "Note gepinnt — n öffnet sie; :ConspectusUnpin in nvim löst den Pin")
+            : (activeNote != nil
+                ? ("note.text", "Note im Editor öffnen + pinnen (n)")
+                : ("note.text.badge.plus", "Note anlegen (n) — <name>.md neben dem PDF"))
+        b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip) ?? b.image
         b.toolTip = tip
     }
 
@@ -75,7 +90,8 @@ extension Panel {
     @objc func openPDFNote() {
         guard let pdf = pdfView.document?.documentURL?.path else { NSSound.beep(); return }
         let target = activeNote?.note ?? defaultNotePath(for: pdf)
-        pinnedNoteBuffers.insert(target)
+        activeNotePinned = true   // optimistic — the delivery sets b:conspectus_pinned
+        updateNoteButton()
         logEvent("note pinned \(target)")
         // Auto-follow already has this note on screen → a pure pin: keep the
         // keyboard where it is (collecting notes must not break the cycling).
@@ -85,7 +101,7 @@ extension Panel {
         // lastEditorNotePush to this very note, which would mask the fresh open.
         let alreadyShown = editorTerm != nil && target == lastEditorNotePush
         if editorTerm == nil { addEditorPane() }
-        openInEditor(target, focus: !alreadyShown, sweepStale: true)   // pinned, so the sweep spares it
+        openInEditor(target, focus: !alreadyShown, sweepStale: true, markPinned: true)
     }
 
     /// Open `path` as a buffer in the ide editor's nvim — VERIFIED and atomic:
@@ -102,27 +118,35 @@ extension Panel {
     /// before every attempt) aborts the chain silently when it returns false —
     /// how a superseded auto-push dies.
     func openInEditor(_ path: String, focus: Bool, attempt: Int = 0, sweepStale: Bool = false,
-                      while stillWanted: (() -> Bool)? = nil) {
+                      markPinned: Bool = false, while stillWanted: (() -> Bool)? = nil) {
         guard let editor = editorTerm else { return }   // pane closed while retrying
         if stillWanted?() == false { return }           // superseded — a newer push owns the editor
         guard let nvim = nvimPath else {                // resolution still in flight
-            retryOpenInEditor(path, focus: focus, attempt: attempt,
-                              sweepStale: sweepStale, while: stillWanted)
+            retryOpenInEditor(path, focus: focus, attempt: attempt, sweepStale: sweepStale,
+                              markPinned: markPinned, while: stillWanted)
             return
         }
-        // Stale = every auto-pushed note except this one and the pinned ones,
-        // deleted only if unmodified AND hidden — never discards work. Exact
+        // Stale = every auto-pushed note except this one. Deleted only if
+        // unmodified AND hidden AND not pinned (b:conspectus_pinned — set by
+        // ⌘N or :ConspectusPin, cleared by :ConspectusUnpin/:bd; nvim is the
+        // single source of truth for the pin) — never discards work. Exact
         // name comparison (index over getbufinfo names), NOT bufnr(): bufnr
         // falls back to partial matching and could hit an unrelated buffer.
-        let stale = sweepStale
-            ? autoNoteBuffers.subtracting(pinnedNoteBuffers).subtracting([path]).sorted()
-            : []
+        let stale = sweepStale ? autoNoteBuffers.subtracting([path]).sorted() : []
         let staleList = "[" + stale.map(vimQuote).joined(separator: ",") + "]"
         let sweep = stale.isEmpty ? "''"
             : "execute(join(map(filter(getbufinfo(), "
-              + "{_, b -> index(\(staleList), b.name) >= 0 && b.changed == 0 && empty(b.windows)}), "
+              + "{_, b -> index(\(staleList), b.name) >= 0 && b.changed == 0 && empty(b.windows)"
+              + " && !get(b.variables, 'conspectus_pinned', 0)}), "
               + "{_, b -> 'silent! bdelete ' . b.bufnr}), '|'))"
-        let expr = "[execute('drop ' . fnameescape(\(vimQuote(path)))), \(sweep), expand('%:p')][2]"
+        // Pin plumbing, piggybacked on every delivery (idempotent): the user
+        // commands exist as soon as the editor saw one note, and a ⌘N
+        // delivery stamps its buffer. redrawtabline → the bufferline star
+        // updates immediately, not on the next buffer switch.
+        let cmds = "execute('command! ConspectusPin let b:conspectus_pinned = 1 <bar> redrawtabline')"
+                 + " . execute('command! ConspectusUnpin unlet! b:conspectus_pinned <bar> redrawtabline')"
+        let mark = markPinned ? "execute('let b:conspectus_pinned = 1 | redrawtabline')" : "''"
+        let expr = "[execute('drop ' . fnameescape(\(vimQuote(path)))), \(sweep), \(cmds), \(mark), expand('%:p')][4]"
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let (status, answer, errOut) = runNvimExpr(nvim, expr)
             let delivered = status == 0 && answer == path
@@ -138,8 +162,8 @@ extension Panel {
                         logEvent("openInEditor attempt \(attempt) failed for \(path): "
                                  + "answer='\(answer)' err='\(errOut)'")
                     }
-                    self.retryOpenInEditor(path, focus: focus, attempt: attempt,
-                                           sweepStale: sweepStale, while: stillWanted)
+                    self.retryOpenInEditor(path, focus: focus, attempt: attempt, sweepStale: sweepStale,
+                                           markPinned: markPinned, while: stillWanted)
                 }
             }
         }
@@ -157,15 +181,16 @@ extension Panel {
         // without the filter every successfully swept note would false-alarm.
         let expr = "join(map(filter(getbufinfo(), {_, b -> b.listed && index(\(list), b.name) >= 0}), "
                  + "{_, b -> fnamemodify(b.name, ':t') . '[changed=' . b.changed"
-                 + " . ' visible=' . len(b.windows) . ']'}), '  ')"
+                 + " . ' visible=' . len(b.windows)"
+                 + " . ' pinned=' . get(b.variables, 'conspectus_pinned', 0) . ']'}), '  ')"
         DispatchQueue.global(qos: .utility).async {
             let (status, answer, _) = runNvimExpr(nvim, expr)
             if status == 0, !answer.isEmpty { logEvent("note buffers kept: \(answer)") }
         }
     }
 
-    private func retryOpenInEditor(_ path: String, focus: Bool, attempt: Int,
-                                   sweepStale: Bool, while stillWanted: (() -> Bool)?) {
+    private func retryOpenInEditor(_ path: String, focus: Bool, attempt: Int, sweepStale: Bool,
+                                   markPinned: Bool, while stillWanted: (() -> Bool)?) {
         // Generous: a FRESH pane pays a login shell (oh-my-zsh …) + nvim
         // startup before the socket listens — 3s proved too short in the
         // field. Retries stop on the first success; only a truly dead nvim
@@ -176,8 +201,8 @@ extension Panel {
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.openInEditor(path, focus: focus, attempt: attempt + 1,
-                               sweepStale: sweepStale, while: stillWanted)
+            self?.openInEditor(path, focus: focus, attempt: attempt + 1, sweepStale: sweepStale,
+                               markPinned: markPinned, while: stillWanted)
         }
     }
 }

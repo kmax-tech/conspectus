@@ -150,11 +150,16 @@ hovered PDF, the previously auto-followed note buffer is **closed again**
 once the next one opens — but only if it is unmodified, not visible in a
 window, and not pinned; unsaved changes always keep their buffer. A
 deliberate open — 📝 toolbar button, `n` on the focused PDF pane, or **⌘N**
-from anywhere — **pins** the note's buffer for the session (`:bd` in nvim
-unpins), so collecting notes is just cycling + ⌘N on every keeper: each
-pinned note stays in the buffer list while the rest clean up after
-themselves. (⌘N on an auto-followed note keeps the keyboard where it is;
-opening/creating a note not yet in nvim focuses the editor.) The 📝 **toolbar button** (or **`n`** with
+from anywhere — **pins** the note's buffer, so collecting notes is just
+cycling + ⌘N on every keeper: each pinned note stays in the buffer list
+while the rest clean up after themselves. The pin lives **in nvim** as
+`b:conspectus_pinned` (single source of truth): `:ConspectusPin` /
+`:ConspectusUnpin` toggle it from inside nvim (`:bd` also releases it), the
+PDF bar shows a pin icon for the hovered PDF's note, and a bufferline can
+render pinned notes with a ★ via the buffer variable (see the dotfiles
+`plugins/bufferline.lua` for the three-line `name_formatter`). (⌘N on an
+auto-followed note keeps the keyboard where it is; opening/creating a note
+not yet in nvim focuses the editor.) The 📝 **toolbar button** (or **`n`** with
 the PDF pane focused) opens the note explicitly, creating it as `<stem>.md`
 **next to the PDF** if none exists (never in the central library; the file
 materializes on nvim's first save) — the editor pane is added automatically

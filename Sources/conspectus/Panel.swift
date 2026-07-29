@@ -58,11 +58,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// Note the ide editor was last asked to open — dedup so re-hovers of the
     /// same PDF don't spam nvim with --remote calls. Main thread only.
     var lastEditorNotePush: String?
-    /// Notes opened DELIBERATELY (n / 📝 / ⌘N) — pinned: the auto-follow
-    /// buffer GC never closes these, so `n` while cycling collects notes in
-    /// the buffer list. Unpin = close the buffer in nvim (`:bd`); stale paths
-    /// in the set are harmless. Session-scoped. Main thread only.
-    var pinnedNoteBuffers: Set<String> = []
+    /// Whether the active note's buffer is pinned (b:conspectus_pinned in
+    /// nvim — THE source of truth, so :ConspectusUnpin works there without a
+    /// second state to drift). This mirror only drives the toolbar icon;
+    /// refreshed on every PDF hover, set optimistically on ⌘N. Main thread only.
+    var activeNotePinned = false
     /// Every note the auto-follow ever pushed — the GC sweeps THIS set (minus
     /// current/pinned), not just the immediately previous note: while a fresh
     /// nvim boots, delivery retries race and a push can land out of order,
