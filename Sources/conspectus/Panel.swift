@@ -63,6 +63,12 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// the buffer list. Unpin = close the buffer in nvim (`:bd`); stale paths
     /// in the set are harmless. Session-scoped. Main thread only.
     var pinnedNoteBuffers: Set<String> = []
+    /// Every note the auto-follow ever pushed — the GC sweeps THIS set (minus
+    /// current/pinned), not just the immediately previous note: while a fresh
+    /// nvim boots, delivery retries race and a push can land out of order,
+    /// which would otherwise leave the first note stuck in the buffer list
+    /// forever. Paths only, tiny; stale entries are no-ops. Main thread only.
+    var autoNoteBuffers: Set<String> = []
     /// Toolbar button in the PDF bar: opens the note (or a fresh sibling note)
     /// in the ide editor; its icon mirrors whether a note exists.
     var noteButton: NSButton!

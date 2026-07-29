@@ -50,12 +50,25 @@ extension Panel {
     /// anything with unsaved changes are never touched.
     func pushNoteToEditor() {
         guard editorTerm != nil, let note = activeNote?.note, note != lastEditorNotePush else { return }
-        let previous = lastEditorNotePush
         lastEditorNotePush = note
-        openInEditor(note, focus: false) { [weak self] in
-            guard let self = self, let prev = previous,
-                  !self.pinnedNoteBuffers.contains(prev) else { return }   // pinned = keep
-            self.cleanupNoteBuffer(prev)
+        autoNoteBuffers.insert(note)
+        // `while`: a stale auto-push dies as soon as a newer note took over —
+        // during nvim's boot several retry chains overlap, and without the
+        // guard an OLD note could land last and hijack the window.
+        openInEditor(note, focus: false,
+                     while: { [weak self] in self?.lastEditorNotePush == note },
+                     then: { [weak self] in self?.sweepAutoNoteBuffers() })
+    }
+
+    /// Close every auto-followed note buffer except the current one — pinned,
+    /// modified, and visible buffers survive (cleanupNoteBuffer's guards). A
+    /// sweep over ALL auto-pushed notes, not just the previous one, so a push
+    /// that landed out of order (nvim boot race) is collected on the next
+    /// cycle instead of sticking forever.
+    func sweepAutoNoteBuffers() {
+        for path in autoNoteBuffers
+        where path != lastEditorNotePush && !pinnedNoteBuffers.contains(path) {
+            cleanupNoteBuffer(path)
         }
     }
 
@@ -102,15 +115,19 @@ extension Panel {
     }
 
     /// Open `path` as a buffer in the ide editor's nvim (`--remote` = drop).
-    /// Retries briefly: the pane may have been added just now — nvim still
-    /// starting, its socket not yet listening, `nvimPath` still resolving.
-    /// Gives up loud after ~3s. Side effects: spawns nvim client processes
-    /// off-thread; `focus: true` moves the keyboard to the editor on success;
-    /// `then` runs on main after a successful open (used by the buffer GC).
-    func openInEditor(_ path: String, focus: Bool, attempt: Int = 0, then: (() -> Void)? = nil) {
+    /// Retries: the pane may have been added just now — nvim still starting,
+    /// its socket not yet listening, `nvimPath` still resolving. Gives up loud
+    /// after ~12s. Side effects: spawns nvim client processes off-thread;
+    /// `focus: true` moves the keyboard to the editor on success; `then` runs
+    /// on main after a successful open (used by the buffer GC); `while`
+    /// (checked on main before every attempt) aborts the chain silently when
+    /// it returns false — how a superseded auto-push dies.
+    func openInEditor(_ path: String, focus: Bool, attempt: Int = 0,
+                      while stillWanted: (() -> Bool)? = nil, then: (() -> Void)? = nil) {
         guard let editor = editorTerm else { return }   // pane closed while retrying
+        if stillWanted?() == false { return }           // superseded — a newer push owns the editor
         guard let nvim = nvimPath else {                // resolution still in flight
-            retryOpenInEditor(path, focus: focus, attempt: attempt, then: then)
+            retryOpenInEditor(path, focus: focus, attempt: attempt, while: stillWanted, then: then)
             return
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -127,13 +144,14 @@ extension Panel {
                     if focus, self.editorTerm === editor { self.window.makeFirstResponder(editor) }
                     then?()
                 } else {
-                    self.retryOpenInEditor(path, focus: focus, attempt: attempt, then: then)
+                    self.retryOpenInEditor(path, focus: focus, attempt: attempt, while: stillWanted, then: then)
                 }
             }
         }
     }
 
-    private func retryOpenInEditor(_ path: String, focus: Bool, attempt: Int, then: (() -> Void)?) {
+    private func retryOpenInEditor(_ path: String, focus: Bool, attempt: Int,
+                                   while stillWanted: (() -> Bool)?, then: (() -> Void)?) {
         // Generous: a FRESH pane pays a login shell (oh-my-zsh …) + nvim
         // startup before the socket listens — 3s proved too short in the
         // field. Retries stop on the first success; only a truly dead nvim
@@ -144,7 +162,7 @@ extension Panel {
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.openInEditor(path, focus: focus, attempt: attempt + 1, then: then)
+            self?.openInEditor(path, focus: focus, attempt: attempt + 1, while: stillWanted, then: then)
         }
     }
 }
