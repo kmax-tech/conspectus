@@ -79,8 +79,11 @@ extension Panel {
     func cleanupNoteBuffer(_ path: String) {
         guard editorTerm != nil, let nvim = nvimPath else { return }
         let q = path.replacingOccurrences(of: "'", with: "''")   // vimscript '…' escaping
-        let expr = "execute(bufnr('\(q)') > 0 && getbufvar(bufnr('\(q)'), '&modified') == 0"
-                 + " && empty(win_findbuf(bufnr('\(q)'))) ? 'silent! bdelete '.bufnr('\(q)') : '')"
+        // Exact name comparison (==#), not bufnr('<path>') — bufnr falls back
+        // to PARTIAL name matching and could delete an unrelated buffer.
+        let expr = "execute(join(map(filter(getbufinfo(), "
+                 + "{_, b -> b.name ==# '\(q)' && b.changed == 0 && empty(b.windows)}), "
+                 + "{_, b -> 'silent! bdelete ' . b.bufnr}), '|'))"
         DispatchQueue.global(qos: .utility).async {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: nvim)
@@ -130,20 +133,42 @@ extension Panel {
             retryOpenInEditor(path, focus: focus, attempt: attempt, while: stillWanted, then: then)
             return
         }
+        // Delivery is VERIFIED, not fire-and-forget: the expr `:drop`s the file
+        // and answers with the buffer nvim actually shows afterwards — only a
+        // matching answer counts as delivered. Errors (E37, swap prompts, a
+        // dead server) surface in stderr and go to the event log instead of
+        // being swallowed; that is what made failures diagnosable.
+        let esc = path.replacingOccurrences(of: "'", with: "''")
+        let expr = "[execute('drop ' . fnameescape('\(esc)')), expand('%:p')][1]"
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: nvim)
-            p.arguments = ["--server", nvimSocketPath, "--remote", path]
-            p.standardOutput = Pipe(); p.standardError = Pipe()
-            var ok = false
-            do { try p.run(); p.waitUntilExit(); ok = p.terminationStatus == 0 } catch { ok = false }
+            p.arguments = ["--server", nvimSocketPath, "--remote-expr", expr]
+            let outPipe = Pipe(); let errPipe = Pipe()
+            p.standardOutput = outPipe; p.standardError = errPipe
+            var answer = ""; var errOut = ""
+            do {
+                try p.run()
+                let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                answer = (String(data: outData, encoding: .utf8) ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                errOut = (String(data: errData, encoding: .utf8) ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch { errOut = error.localizedDescription }
+            let delivered = p.terminationStatus == 0 && answer == path
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                if ok {
-                    logEvent("openInEditor \(path)")
+                if delivered {
+                    logEvent("openInEditor delivered \(path)")
                     if focus, self.editorTerm === editor { self.window.makeFirstResponder(editor) }
                     then?()
                 } else {
+                    if !errOut.isEmpty || !answer.isEmpty {
+                        logEvent("openInEditor attempt \(attempt) failed for \(path): "
+                                 + "answer='\(answer)' err='\(errOut)'")
+                    }
                     self.retryOpenInEditor(path, focus: focus, attempt: attempt, while: stillWanted, then: then)
                 }
             }
