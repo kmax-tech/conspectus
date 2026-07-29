@@ -278,6 +278,12 @@ extension Panel {
 
     func requestFilePreview(_ path: String, generation gen: Int) {
         watchPreviewFile(path)   // live-refresh this file if it's edited on disk
+        // A different file replaces the previewed PDF → its note is no longer
+        // the active one (the PDF branch below re-resolves for a new PDF).
+        if activeNote != nil, activeNote?.pdf != path {
+            activeNote = nil
+            updateNoteButton()
+        }
         // Size cap: don't hand any renderer a file big enough to wedge it
         // (hundreds of MB of JSON, a giant log) — show a note instead.
         if previewMaxBytes > 0,
@@ -310,6 +316,7 @@ extension Panel {
                 if let first = pdfView.document?.page(at: 0) { pdfView.go(to: first) }
             }
             updatePDFBar()
+            resolveNoteAsync(for: path, generation: gen)   // companion note → toolbar + ide follow
             hideAllCovers()
             pdfPane.isHidden = false
             return

@@ -136,6 +136,30 @@ nvim over its RPC socket on focus-in, and nvim pushes its active file on
 follow. Quitting nvim (`:qa`) collapses the editor pane; **⌘I** re-adds it. Needs
 `nvim` (0.7+ for `--remote`) on the login-shell PATH.
 
+**PDF notes (perlege's lookup, integrated):** when a PDF previews, conspectus
+resolves its companion note `<stem>.md` — first next to the PDF, then in
+subfolders below it (3 levels deep, hidden dirs skipped), then at the symlink
+target's real location, finally flat in the central notes dirs
+(`CONSPECTUS_NOTES_DIRS`, comma-separated, default `~/work/library/notes` —
+the same order perlege uses, so both tools always find the same note). With
+the editor pane open, an **existing note opens in nvim automatically** as you
+cycle through PDFs: PDF right, note in the middle, no keystroke needed — and
+while you edit the note, the preview deliberately keeps showing the PDF
+instead of following the editor. So the buffer list doesn't grow by one per
+hovered PDF, the previously auto-followed note buffer is **closed again**
+once the next one opens — but only if it is unmodified, not visible in a
+window, and not pinned; unsaved changes always keep their buffer. A
+deliberate open — 📝 toolbar button, `n` on the focused PDF pane, or **⌘N**
+from anywhere — **pins** the note's buffer for the session (`:bd` in nvim
+unpins), so collecting notes is just cycling + ⌘N on every keeper: each
+pinned note stays in the buffer list while the rest clean up after
+themselves. (⌘N on an auto-followed note keeps the keyboard where it is;
+opening/creating a note not yet in nvim focuses the editor.) The 📝 **toolbar button** (or **`n`** with
+the PDF pane focused) opens the note explicitly, creating it as `<stem>.md`
+**next to the PDF** if none exists (never in the central library; the file
+materializes on nvim's first save) — the editor pane is added automatically
+if it isn't open.
+
 **Split handoff (smart-splits):** ⌥←/→/↑/↓ inside the editor move between
 **nvim's own splits** first; only at nvim's edge do they hand off to the
 neighbouring conspectus pane (yazi / preview / terminal) — one set of keys for

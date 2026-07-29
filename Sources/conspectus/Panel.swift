@@ -48,6 +48,24 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var pdfPageLabel: NSTextField!
     var pdfZoomLabel: NSTextField!
     var pdfRecolored = false
+    /// The companion note of the currently previewed PDF (perlege's lookup):
+    /// set async by `resolveNoteAsync` when a PDF previews, cleared when the
+    /// preview moves to anything else. Drives the note toolbar button and the
+    /// ide auto-follow (hover a PDF → its note opens in nvim), and is the echo
+    /// guard: nvim re-announcing this note must not steal the preview off the
+    /// PDF. Main thread only.
+    var activeNote: (pdf: String, note: String)?
+    /// Note the ide editor was last asked to open — dedup so re-hovers of the
+    /// same PDF don't spam nvim with --remote calls. Main thread only.
+    var lastEditorNotePush: String?
+    /// Notes opened DELIBERATELY (n / 📝 / ⌘N) — pinned: the auto-follow
+    /// buffer GC never closes these, so `n` while cycling collects notes in
+    /// the buffer list. Unpin = close the buffer in nvim (`:bd`); stale paths
+    /// in the set are harmless. Session-scoped. Main thread only.
+    var pinnedNoteBuffers: Set<String> = []
+    /// Toolbar button in the PDF bar: opens the note (or a fresh sibling note)
+    /// in the ide editor; its icon mirrors whether a note exists.
+    var noteButton: NSButton!
     var previewFocusRing: PassthroughBorderView!
     var focusObservation: NSKeyValueObservation?
     var folderScroll: NSScrollView!

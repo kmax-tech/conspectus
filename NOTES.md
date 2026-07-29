@@ -3,6 +3,27 @@
 Solved hard problems — the *why* the code can't show. Keep entries short:
 problem, solution, gotcha.
 
+## 2026-07-29 — PDF note auto-follow vs. "preview follows the editor"
+
+**Problem:** ide notes mode (hover a PDF → its `<stem>.md` opens in nvim)
+feeds the feature that goes the *other* way: nvim announces every buffer
+switch (`@EDITOR_FILE:` on BufEnter / the focus-in RPC query), and the preview
+follows it. Naively combined they fight — the auto-follow push triggers a
+BufEnter, nvim announces the note, and the preview would swap the PDF for its
+own note's markdown (or, mid-cycle, yank the preview off whatever yazi hovers
+next, because the echo arrives ~100–300 ms late).
+
+**Solution:** two guards, both existing-state-based, no new channel. (1) The
+late echo dies at the focus guard that was already there: editor announcements
+are only honoured while the editor pane is focused, and during yazi-driven
+cycling it never is. (2) While the editor IS focused and announces exactly
+`activeNote.note`, show `activeNote.pdf` instead — editing a note keeps its
+PDF on the right (also covers `:b`-switching back to the note).
+
+**Gotcha:** guard (2) must compare against the *resolved* note path, not
+`defaultNotePath` — the note may live in `notes/` or the central library, and
+a path-prefix or stem comparison would misfire on same-named files elsewhere.
+
 ## 2026-07-27 — `l` jumped to the preview instead of entering a folder
 
 **Problem:** With files selected (for copy/cut), pressing `l` on a *folder*

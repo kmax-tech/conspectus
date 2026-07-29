@@ -122,6 +122,21 @@ let pdfPreviewMode: String = {
     return raw
 }()
 
+/// Central note libraries (CONSPECTUS_NOTES_DIRS): comma-separated dirs
+/// searched flat for `<stem>.md` when a previewed PDF has no local note
+/// (sibling / subdirs / symlink target — perlege's lookup, see
+/// ConspectusCore/NoteResolver.swift). Default: ~/work/library/notes.
+/// A set-but-empty value fails loud and uses the default.
+let notesDirs: [String] = {
+    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_NOTES_DIRS"]
+    let dirs = parseNotesDirs(raw)
+    if raw != nil, dirs.isEmpty {
+        warn("conspectus: CONSPECTUS_NOTES_DIRS is set but contains no directories — using \(defaultNotesDir)")
+        return parseNotesDirs(nil)
+    }
+    return dirs
+}()
+
 /// Preview size cap: files larger than CONSPECTUS_PREVIEW_MAX_MB (default 50)
 /// are not previewed — a several-hundred-MB JSON would wedge Quick Look and
 /// spike memory. The pane shows a short "too large" note instead. 0 = no cap.

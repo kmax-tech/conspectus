@@ -29,6 +29,7 @@ extension Panel {
         pdfView.autoScales = true
         pdfView.displayMode = pdfPreviewMode == "continuous" ? .singlePageContinuous : .singlePage
         pdfView.onFocusLeft = { [weak self] in self?.focusLeftPane() }
+        pdfView.onOpenNote = { [weak self] in self?.openPDFNote() }
 
         pdfPane.addSubview(pdfView)
         pdfPane.addSubview(pdfBar)
@@ -64,6 +65,7 @@ extension Panel {
     private func buildPDFBarControls() {
         pdfPageLabel = barLabel()
         pdfZoomLabel = barLabel()
+        noteButton = barButton("note.text", "Note im Editor öffnen (n)", #selector(openPDFNote))
         let controls: [NSView] = [
             barButton("chevron.left", "Vorherige Seite (K)", #selector(pdfPrevPage)),
             pdfPageLabel,
@@ -74,6 +76,7 @@ extension Panel {
             barButton("arrow.up.left.and.arrow.down.right", "Einpassen (f)", #selector(pdfZoomFit)),
             barButton("doc.plaintext", "Single ↔ Continuous (s)", #selector(pdfToggleMode)),
             barButton("sun.max", "Recolor hell ↔ dunkel", #selector(pdfToggleRecolor)),
+            noteButton,
         ]
         let stack = NSStackView(views: controls)
         stack.orientation = .horizontal

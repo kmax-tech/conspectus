@@ -344,6 +344,12 @@ extension Panel {
         pinToggle.target = self
         viewMenu.addItem(pinToggle)
         pinMenuItem = pinToggle
+        // ⌘N: the PDF's companion note into the editor — and a deliberate open
+        // pins its buffer (the auto-follow GC keeps hands off). Works from any
+        // pane, so collecting notes never needs the PDF pane focused.
+        let noteOpen = NSMenuItem(title: "Open PDF Note in Editor (pin)", action: #selector(openPDFNote), keyEquivalent: "n")
+        noteOpen.target = self
+        viewMenu.addItem(noteOpen)
         let ideToggle = NSMenuItem(title: "Toggle Editor Pane (nvim)", action: #selector(toggleEditorPane), keyEquivalent: "i")
         ideToggle.target = self
         viewMenu.addItem(ideToggle)
@@ -470,6 +476,10 @@ extension Panel {
         launch(e, extraEnv: ["CONSPECTUS_FIFO": fifoPath], run: "nvim --listen \"\(nvimSocketPath)\"")
         window.makeFirstResponder(e)
         updateTitle()
+        // A previewed PDF may already carry a resolved note — bring it into
+        // the fresh editor (openInEditor retries while nvim is still starting).
+        lastEditorNotePush = nil
+        pushNoteToEditor()
     }
 
     @objc func toggleEditorPane() { editorTerm == nil ? addEditorPane() : removeEditorPane() }

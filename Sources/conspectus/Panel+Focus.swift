@@ -82,6 +82,9 @@ final class IntentFocusPDFView: PDFView {
     /// Return to the yazi pane — set by the Panel; `h`/← invoke it so h/l
     /// pane navigation is symmetric (yazi `l`→preview, preview `h`→yazi).
     var onFocusLeft: (() -> Void)?
+    /// `n` — open (or create) the PDF's companion note in the ide editor;
+    /// set by the Panel, same action as the toolbar's note button.
+    var onOpenNote: (() -> Void)?
     override var acceptsFirstResponder: Bool { allowFocus }
 
     // PDFView redirects first-responder status to an internal document view,
@@ -114,6 +117,7 @@ final class IntentFocusPDFView: PDFView {
         case "-":                zoomOut(nil)
         case "f":                autoScales = true
         case "s":                toggleDisplayMode()
+        case "n":                onOpenNote?()                // companion note → editor
         case "h":                onFocusLeft?()               // back to yazi (h/l nav)
         default:
             if event.keyCode == 123 { onFocusLeft?() }        // ← also returns
@@ -357,8 +361,14 @@ extension Panel {
             } catch { return }
             guard !path.isEmpty else { return }   // empty buffer: leave the preview as-is
             DispatchQueue.main.async {
-                guard self?.window.firstResponder === self?.editorTerm else { return }  // still editing
-                self?.update(path)
+                guard let self = self,
+                      self.window.firstResponder === self.editorTerm else { return }  // still editing
+                // Editing the previewed PDF's own note: keep (or restore) the
+                // PDF on the right — mirroring the note the editor already
+                // shows would be pointless, and this is what stops the
+                // note-follow and editor-follow features fighting each other.
+                if let a = self.activeNote, path == a.note { self.update(a.pdf); return }
+                self.update(path)
             }
         }
     }
@@ -368,6 +378,11 @@ extension Panel {
     /// the preview. Goes through `update`, so pin and the mtime watch still apply.
     func editorFileHover(_ path: String) {
         guard window.firstResponder === editorTerm else { return }
+        // Switching (back) to the previewed PDF's note keeps the PDF on the
+        // right — same guard as in previewEditorCurrentFile. Note that the
+        // auto-follow push itself echoes here too (nvim's BufEnter fires on
+        // --remote), but dies at the focus guard above: yazi is focused then.
+        if let a = activeNote, path == a.note { update(a.pdf); return }
         update(path)
     }
 
