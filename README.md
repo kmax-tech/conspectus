@@ -320,6 +320,12 @@ the active instance automatically — no focus tracking involved. Note that
   (cwd preserved, preview/nvim untouched) to re-flavor. Graceful by design:
   the bundled plugin refuses the restart while file tasks (copy/move) are
   running and says so in yazi — press ⌘R again when they're done.
+- Tab session: the yazi **tabs survive** ⌘R *and* a full app restart — the
+  bundled plugin snapshots every tab's dir plus the active tab on each `cd`
+  (`~/.cache/conspectus/tabs-L|R`, per pane side) and reopens them on the
+  next bare start. Starting with an explicit `[path]` deliberately does NOT
+  restore (begin *here*, clean); the snapshot keeps being written, so the
+  tabs come back on the next bare start.
 - The preview hook for yazi ships **inside this repo**
   (`plugins/conspectus.yazi`) — no external plugin or binary needed. lf/nnn/
   xplr work as terminals; wire their selection hook to `$QLPEEK_FIFO` to get

@@ -87,7 +87,11 @@ extension Panel {
             : currentYaziDir()
         launch(fresh, extraEnv: ["QLPEEK_FIFO": fifoPath,
                                  "CONSPECTUS_PEER": left ? "L" : "R",
-                                 "CONSPECTUS_NVIM": nvimSocketPath],
+                                 "CONSPECTUS_NVIM": nvimSocketPath,
+                                 "CONSPECTUS_TABS_FILE": left ? tabsFileL : tabsFileR,
+                                 // a ⌘R relaunch ALWAYS restores — the plugin
+                                 // snapshotted the tabs right before quitting
+                                 "CONSPECTUS_TABS_RESTORE": "1"],
                rememberCwd: left, startIn: dir)
         window.makeFirstResponder(fresh)
         logEvent("yazi pane relaunched (\(left ? "L" : "R")) in \(dir)")

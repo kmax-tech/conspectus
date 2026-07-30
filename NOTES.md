@@ -3,6 +3,22 @@
 Solved hard problems — the *why* the code can't show. Keep entries short:
 problem, solution, gotcha.
 
+## 2026-07-30 — Tab session: yazi 26 ignores tab_create's positional path
+
+**Problem:** Restoring saved tabs via `emit("tab_create", { dir })` silently
+created every tab in the ACTIVE tab's dir — the path argument is ignored in
+yazi 26.5.6 (it works in keymap strings, not via the Lua emit table).
+
+**Solution:** create-then-cd: `tab_create { current = true }` followed by
+`cd { dir }` — commands apply in emit order, and the cd always hits the
+just-created (now active) tab. Restore = cd tab 1, then create+cd per saved
+tab, then `tab_switch` (0-based) to the saved active index.
+
+**Gotcha:** a "restore worked" test is only conclusive if the state file
+CHANGES: the post-restore re-snapshot (cd events fire during restore, incl.
+per tab_create) can be byte-identical to the crafted input. Verify against
+real state — e.g. ⌘R's pre-quit snapshot, which reads `cx.tabs` directly.
+
 ## 2026-07-29 — PDF note auto-follow vs. "preview follows the editor"
 
 **Problem:** ide notes mode (hover a PDF → its `<stem>.md` opens in nvim)

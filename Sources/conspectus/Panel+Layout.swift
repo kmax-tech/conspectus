@@ -444,7 +444,9 @@ extension Panel {
         // Same FIFO as the left pane: only the pane being navigated emits
         // hover events, so the preview follows the active instance for free.
         launch(t2, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "R",
-                              "CONSPECTUS_NVIM": nvimSocketPath])
+                              "CONSPECTUS_NVIM": nvimSocketPath,
+                              "CONSPECTUS_TABS_FILE": tabsFileR,
+                              "CONSPECTUS_TABS_RESTORE": tabsRestoreDefault ? "1" : "0"])
         window.makeFirstResponder(t2)
         splitButton?.state = .on
         updateTitle()

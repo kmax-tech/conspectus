@@ -221,6 +221,14 @@ let lastCwdPath = (cacheDir as NSString).appendingPathComponent("last-cwd")
 // editor. Per-pid like the FIFO, so concurrent instances never collide.
 let nvimSocketPath = (cacheDir as NSString).appendingPathComponent("nvim-\(getpid()).sock")
 
+// Tab-session state, one file per yazi pane side — deliberately SHARED across
+// app runs (that is the point: tabs survive a restart), not per-pid. The
+// bundled plugin snapshots every cd into it and restores at startup when
+// CONSPECTUS_TABS_RESTORE is "1" (concurrent instances would overwrite each
+// other's snapshots — last quit wins, acceptable for a single-user tool).
+let tabsFileL = (cacheDir as NSString).appendingPathComponent("tabs-L")
+let tabsFileR = (cacheDir as NSString).appendingPathComponent("tabs-R")
+
 let cliArgs    = Array(CommandLine.arguments.dropFirst())
 let splitMode  = cliArgs.first == "split" || cliArgs.first == "-s"
 let tripleMode = cliArgs.first == "triple" || cliArgs.first == "-3"
@@ -233,6 +241,10 @@ let command   = ProcessInfo.processInfo.environment["CONSPECTUS_CMD"] ?? "yazi"
 // An explicit [path] that isn't a directory falls back to $HOME — say so
 // instead of silently starting somewhere the user didn't ask for.
 if let w = start.warning { warn(w) }
+
+// Reopen the saved tabs only on a bare start — an explicit [path] means
+// "begin HERE, clean". ⌘R relaunches always restore (see relaunchYaziPane).
+let tabsRestoreDefault = rest.first(where: { !$0.hasPrefix("-") }) == nil
 
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)

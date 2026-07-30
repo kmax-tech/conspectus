@@ -47,6 +47,66 @@ function M:setup()
 	local ok2, peer = pcall(function() return os.getenv("CONSPECTUS_PEER") end)
 	if ok2 and peer and #peer > 0 then
 		local emit = ya.emit or ya.mgr_emit
+
+		-- Tab session: this pane's tab dirs + active index live in the state
+		-- file the app hands us (per pane side, shared across app runs), so a
+		-- ⌘R theme-restart AND the next app start reopen the same tabs.
+		-- Snapshot on every cd — covers navigation and created tabs; a tab
+		-- closed after the last cd lingers one round (harmless). Snapshot
+		-- failure (API drift) skips the save and never breaks navigation.
+		local okf, tabs_file = pcall(function() return os.getenv("CONSPECTUS_TABS_FILE") end)
+		if not okf or not tabs_file or #tabs_file == 0 then tabs_file = nil end
+		local function save_tabs()
+			if not tabs_file then return end
+			local ok, lines = pcall(function()
+				local t = cx.tabs
+				local acc = { tostring(t.idx) }   -- line 1 = active tab (1-based)
+				for i = 1, #t do acc[#acc + 1] = tostring(t[i].current.cwd) end
+				return acc
+			end)
+			if not ok then return end
+			local f = io.open(tabs_file, "w")
+			if f then
+				f:write(table.concat(lines, "\n") .. "\n")
+				f:close()
+			end
+		end
+		if tabs_file then
+			ps.sub("cd", save_tabs)
+		end
+
+		-- Restore: the APP decides (CONSPECTUS_TABS_RESTORE) — a start with an
+		-- explicit [path] stays clean, a bare start and every ⌘R relaunch
+		-- reopen the saved tabs. Tab 1 is cd'd in place, the rest created in
+		-- order (tab_create appends after the active tab, so sequential
+		-- creation preserves order); tab_switch is 0-based.
+		local okr, restore = pcall(function() return os.getenv("CONSPECTUS_TABS_RESTORE") end)
+		if tabs_file and okr and restore == "1" then
+			local f = io.open(tabs_file, "r")
+			if f then
+				local idx = tonumber(f:read("l") or "")
+				local dirs = {}
+				for line in f:lines() do
+					if #line > 0 then dirs[#dirs + 1] = line end
+				end
+				f:close()
+				if #dirs > 1 then   -- a single tab is just the normal cwd resume
+					-- create-then-cd, NOT tab_create with a path: yazi 26
+					-- ignores the positional path (the new tab inherits the
+					-- active tab's dir — verified), while a cd right after
+					-- always hits the just-created, now-active tab. Commands
+					-- apply in emit order.
+					emit("cd", { dirs[1] })
+					for i = 2, #dirs do
+						emit("tab_create", { current = true })
+						emit("cd", { dirs[i] })
+					end
+					if idx and idx >= 1 and idx <= #dirs then
+						emit("tab_switch", { idx - 1 })
+					end
+				end
+			end
+		end
 		-- panesync-cd: enter a directory (folder-row click, `=` key).
 		ps.sub_remote("panesync-cd", function(body)
 			if type(body) == "string" and #body > 0 then
@@ -91,6 +151,7 @@ function M:setup()
 					content = "theme reload postponed — file tasks running (⌘R again when idle)" })
 				return
 			end
+			save_tabs()   -- final snapshot: catch tab ops since the last cd
 			emit("quit", {})
 		end)
 	end

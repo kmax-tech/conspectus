@@ -241,7 +241,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // while the editor pane runs, and yazi's `open` guards on it existing,
         // so ⌘I can add the editor at runtime and routing follows automatically.
         launch(term, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "L",
-                                "CONSPECTUS_NVIM": nvimSocketPath], rememberCwd: true)
+                                "CONSPECTUS_NVIM": nvimSocketPath,
+                                "CONSPECTUS_TABS_FILE": tabsFileL,
+                                "CONSPECTUS_TABS_RESTORE": tabsRestoreDefault ? "1" : "0"],
+               rememberCwd: true)
         startFifoReader()
         // Resolve external CLIs once (no per-use login shell): `ya` for clicks,
         // `bat` for text-preview syntax highlighting.
