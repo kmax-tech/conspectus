@@ -314,7 +314,12 @@ the active instance automatically — no focus tracking involved. Note that
   conspectus; yazi picks the matching flavor by querying our background (OSC 11)
   via the overlay `theme.toml` (`dark = catppuccin-mocha`, `light =
   catppuccin-latte`). Needs both flavors installed
-  (`ya pkg add yazi-rs/flavors:catppuccin-mocha`).
+  (`ya pkg add yazi-rs/flavors:catppuccin-mocha`). One caveat: yazi queries
+  the background **only at startup**, so a live light↔dark switch leaves a
+  running yazi in the old flavor — **⌘R** restarts the yazi pane(s) in place
+  (cwd preserved, preview/nvim untouched) to re-flavor. Graceful by design:
+  the bundled plugin refuses the restart while file tasks (copy/move) are
+  running and says so in yazi — press ⌘R again when they're done.
 - The preview hook for yazi ships **inside this repo**
   (`plugins/conspectus.yazi`) — no external plugin or binary needed. lf/nnn/
   xplr work as terminals; wire their selection hook to `$QLPEEK_FIFO` to get

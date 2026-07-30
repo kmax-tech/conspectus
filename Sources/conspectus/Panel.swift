@@ -131,6 +131,12 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var nvimPath: String?
     weak var lastFocusedTerm: LocalProcessTerminalView?
     weak var lastTopTerm: LocalProcessTerminalView?   // ⌥↑ returns here from the terminal panel
+    /// While `Date()` is before this, a yazi pane quitting is a REQUESTED
+    /// theme-reload restart (⌘R) — relaunch it in place instead of the normal
+    /// quit handling (left pane: close app). A short window, so a restart
+    /// refused by the plugin (busy tasks) simply expires and a later manual
+    /// `q` quits normally. Main thread only.
+    var yaziRestartArmedUntil = Date.distantPast
 
     /// Minimum pane extent (width in the horizontal split, height of the pane
     /// area in the outer split) — window resizes and divider drags must not
@@ -177,9 +183,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
 
     // Login shell so PATH/config load, then exec the file manager. YAZI_ID/LEVEL
     // stripped so each pane is a fresh, separate yazi instance (they discover
-    // each other via the DDS for cross-instance yank/paste).
+    // each other via the DDS for cross-instance yank/paste). `startIn`
+    // overrides the app start dir (theme-reload restarts resume where the
+    // pane was, not where the app began).
     func launch(_ t: LocalProcessTerminalView, extraEnv: [String: String],
-                rememberCwd: Bool = false, run: String? = nil) {
+                rememberCwd: Bool = false, run: String? = nil, startIn: String? = nil) {
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
         env["YAZI_ID"] = nil; env["YAZI_LEVEL"] = nil
@@ -189,7 +197,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         // Left/yazi pane records its cwd on exit so the next bare launch resumes there.
         let cwdFlag = (rememberCwd && cmd == "yazi") ? " --cwd-file \"\(lastCwdPath)\"" : ""
         t.startProcess(executable: "/bin/zsh",
-                       args: ["-l", "-c", "cd \"\(startPath)\" && exec \(cmd)\(cwdFlag)"],
+                       args: ["-l", "-c", "cd \"\(startIn ?? startPath)\" && exec \(cmd)\(cwdFlag)"],
                        environment: env.map { "\($0.key)=\($0.value)" })
     }
 

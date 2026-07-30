@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftTerm
+import ConspectusCore
 
 // Bottom terminal panel (⌘J) — a plain zsh in the dir yazi is visiting.
 // Deliberately no live cd-follow (typing `cd` into a running interactive
@@ -54,13 +55,54 @@ extension Panel {
         window.makeFirstResponder(term)
     }
 
+    /// ⌘R — theme reload: ask every yazi pane (DDS broadcast) to quit so it
+    /// can be relaunched with the CURRENT theme. yazi picks its Catppuccin
+    /// flavor only at startup (OSC 11), so a live light↔dark switch leaves a
+    /// running yazi in the old flavor — this is the graceful nudge. The
+    /// bundled plugin refuses while file tasks run (quitting would abort
+    /// them) and says so in yazi; then nothing restarts and the arm window
+    /// below just expires. Side effects: broadcasts over the DDS, arms the
+    /// restart window.
+    @objc func reloadYaziPanes() {
+        yaziRestartArmedUntil = Date().addingTimeInterval(4)   // idle quits arrive well within this
+        sendToYazi("-", action: "restart")                     // body unused by the subscriber
+        logEvent("yazi theme reload requested")
+    }
+
+    /// Replace a quit yazi with a fresh instance in the SAME pane (the armed
+    /// theme-reload path). cwd restore: the left pane's yazi wrote its cwd on
+    /// quit (--cwd-file), the second pane has no such file — both fall back
+    /// to the last hovered dir. Side effects: swaps the terminal view in the
+    /// pane container, spawns a new yazi, moves focus into it.
+    func relaunchYaziPane(left: Bool) {
+        guard let pane = left ? termPane : term2Pane else { return }
+        let fresh = makeTerm()
+        (left ? term : term2)?.removeFromSuperview()
+        fresh.frame = pane.bounds.insetBy(dx: termPadding, dy: termPadding)
+        fresh.autoresizingMask = [.width, .height]
+        pane.addSubview(fresh)
+        if left { term = fresh } else { term2 = fresh }
+        let dir = left
+            ? resolveStart(nil, lastCwdFile: lastCwdPath, home: currentYaziDir()).path
+            : currentYaziDir()
+        launch(fresh, extraEnv: ["QLPEEK_FIFO": fifoPath,
+                                 "CONSPECTUS_PEER": left ? "L" : "R",
+                                 "CONSPECTUS_NVIM": nvimSocketPath],
+               rememberCwd: left, startIn: dir)
+        window.makeFirstResponder(fresh)
+        logEvent("yazi pane relaunched (\(left ? "L" : "R")) in \(dir)")
+    }
+
     // MARK: LocalProcessTerminalViewDelegate
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         DispatchQueue.main.async {
+            let restarting = Date() < self.yaziRestartArmedUntil
             if source === self.term {
+                if restarting { self.relaunchYaziPane(left: true); return }
                 unlink(fifoPath); unlink(nvimSocketPath)   // clean up both channels
                 NSApp.terminate(nil)                       // left pane quit -> close app
             } else if source === self.term2 {
+                if restarting { self.relaunchYaziPane(left: false); return }
                 self.removeSecondPane()                  // second pane's yazi quit -> collapse
             } else if source === self.editorTerm {
                 self.removeEditorPane()                  // nvim quit (:qa) -> collapse the editor (⌘I re-adds)

@@ -48,6 +48,7 @@ let cheatSheetGroups: [(title: String, entries: [(String, String)])] = [
                     ("⌘P", "pin preview to file (hold it while you edit; yellow border)"),
                     ("⌘I", "toggle nvim editor pane (IDE: yazi | nvim | preview)"),
                     ("⌘J", "terminal panel (opens in yazi's dir)"),
+                    ("⌘R", "reload yazi panes — re-theme after light↔dark (refused while tasks run)"),
                     ("⌘W", "close terminal panel"),
                     ("⌘/", "toggle shortcut bar"), ("⌘K", "this cheat sheet"),
                     ("⌥← → / ⌥[ ]", "cycle pane focus (→ into preview: arrows page/scroll)"),

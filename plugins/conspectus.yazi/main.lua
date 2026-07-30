@@ -60,6 +60,39 @@ function M:setup()
 				emit("reveal", { body })
 			end
 		end)
+		-- panesync-restart (⌘R): quit so the app can relaunch this pane with
+		-- the fresh theme — yazi picks its Catppuccin flavor only at startup,
+		-- so a live light↔dark switch needs a restart to re-flavor. Graceful
+		-- by contract: NEVER with file tasks running (quitting would abort
+		-- copies/moves) — then just say so and stay alive; the app's restart
+		-- window simply expires. If the tasks API ever drifts, fail SAFE:
+		-- report and don't quit.
+		ps.sub_remote("panesync-restart", function(_)
+			-- Busy = tasks announced but not yet finished. Field names drifted
+			-- across yazi versions (26.x: summary/success/failed, 25.x:
+			-- progress/succ/fail) — try both before giving up.
+			local ok3, busy = pcall(function()
+				local s = cx.tasks.summary
+				return s.total > s.success + s.failed
+			end)
+			if not ok3 then
+				ok3, busy = pcall(function()
+					local p = cx.tasks.progress
+					return p.total > p.succ + p.fail
+				end)
+			end
+			if not ok3 then
+				ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+					content = "theme reload: cannot read task state — not restarting" })
+				return
+			end
+			if busy then
+				ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+					content = "theme reload postponed — file tasks running (⌘R again when idle)" })
+				return
+			end
+			emit("quit", {})
+		end)
 	end
 end
 

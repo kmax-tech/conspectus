@@ -61,9 +61,15 @@ at notification time.
 **Gotcha:** the directory colour is truecolor from the flavor (`*/ = #1e66f5`),
 not an ANSI index, so it's driven by *which flavor yazi chose*, i.e. by the
 background we advertise — not by the ANSI palette we install. The whole
-theme's coherence hangs on advertising the correct bg. If a switch still washes
-out after this, the remaining half is yazi not re-querying OSC 11 live (only at
-startup) — then it needs a redraw/re-detect nudge, not just a correct bg.
+theme's coherence hangs on advertising the correct bg. The remaining half —
+yazi re-queries OSC 11 only at startup, so a LIVE switch leaves a running yazi
+in the old flavor — is solved by ⌘R (2026-07-30): a DDS `panesync-restart`
+asks each yazi to quit-if-idle (the plugin refuses while file tasks run —
+quitting would abort copies), and an armed window in `processTerminated` turns
+that quit into an in-place relaunch (cwd from --cwd-file / last hover) instead
+of the normal left-pane-quit-closes-app path. Deliberately manual, not
+automatic on the appearance notification: only the user knows whether NOW is a
+good moment to bounce the panes.
 
 ## 2026-07-26 — IDE mode: send files to one nvim instead of spawning editors
 

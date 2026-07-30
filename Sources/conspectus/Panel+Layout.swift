@@ -356,6 +356,12 @@ extension Panel {
         let termToggle = NSMenuItem(title: "Toggle Terminal Panel", action: #selector(toggleBottomTerminal), keyEquivalent: "j")
         termToggle.target = self
         viewMenu.addItem(termToggle)
+        // ⌘R: restart the yazi pane(s) in place — re-theme after a light↔dark
+        // switch (yazi picks its flavor only at startup). The plugin refuses
+        // while file tasks run, so nothing is ever aborted.
+        let reload = NSMenuItem(title: "Reload File Panes (re-theme yazi)", action: #selector(reloadYaziPanes), keyEquivalent: "r")
+        reload.target = self
+        viewMenu.addItem(reload)
         // ⌘W = "close tab" muscle memory: closes the terminal panel when it is
         // open and deliberately does nothing otherwise — it must never take
         // the whole window down.
