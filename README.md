@@ -16,6 +16,30 @@ leaves everything about *navigation* to yazi.
 This is the "integrated window" sibling of [`qlpeek`](../qlpeek), which docks a
 Quick Look panel next to your existing terminal instead of embedding one.
 
+## conspectus and perlege
+
+Reading in an IDE means a second *tab*, and a tab is a workspace slot competing
+with your code — it gets overlaid the moment you open anything else, and PDFs
+never fit it at all. Both conspectus and [perlege](../pdf-highlighter) exist to
+give a document a fixed place instead of a slot. They split by **where what you
+read stays**:
+
+- **conspectus keeps nothing in the document, everything in the note.** Cycle
+  files in yazi, each one previews instantly, and in [IDE mode](#ide-mode-conspectus-ide)
+  nvim sits between the two: PDF right, its note in the middle, ⌘N pins the
+  keepers. Because there is no document state to maintain, a file you discard
+  costs nothing — that is what makes the loop fast.
+- **perlege keeps things in the document**: highlights, reading position and the
+  SyncTeX mapping, anchored to the content hash so they survive renames, copies
+  and library symlinks.
+
+Rule of thumb: as long as the result of your reading lands in the *note*, stay
+here; the moment it should stay in the *document* — highlight it, find it again,
+keep the position — hand it over with **`E p`**. Both resolve a PDF's companion
+note the same way, so they always agree on which `<stem>.md` belongs to it.
+Deliberately not built here: reading position, highlights, in-document search —
+every piece of document state slows down the loop this app is for.
+
 ## How it works
 
 Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
