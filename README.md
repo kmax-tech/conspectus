@@ -297,6 +297,15 @@ the active instance automatically — no focus tracking involved. Note that
   **eye / `</>` toggle** flips it (like the Claude viewer); so does **`M`**
   from any yazi pane or the focused preview. `CONSPECTUS_MD_MODE=render|source`
   sets the default. All in-process, no WebKit.
+- The rendered view is typeset, not just styled: the **measure is capped**
+  (`CONSPECTUS_MD_MEASURE`, default 68 characters, `0` = off) and the column
+  centred, prose **hyphenates in the document's own language** (detected per
+  file, so German notes don't break by English patterns) with proportional
+  line height, and plain text gets **real typography** — „…“ / “…” by
+  language, – and — for dashes, … for ellipses. Code spans, links and source
+  view stay verbatim. Tables honour the column alignment (`|---:|`) and set
+  figures in tabular (fixed-width) digits. Everything scales off
+  `CONSPECTUS_MD_FONT_SIZE` (default 16), including the spacing.
 - Images (`.png`, `.jpg`, `.gif`, `.heic`, …) preview in a native
   `NSImageView`, fit-to-pane, letterboxed in the theme background.
 - Only the long tail (video, audio, office, fonts, …) still uses Quick Look —

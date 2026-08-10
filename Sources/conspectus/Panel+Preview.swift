@@ -405,6 +405,9 @@ extension Panel {
             guard self.isCurrentListing(gen) else { return }
             DispatchQueue.main.async {
                 guard self.isCurrentListing(gen), !self.textPane.isHidden else { return }
+                // Cap the measure for rendered prose only — source keeps the
+                // file's own line breaks and must not be squeezed.
+                self.textView.maxMeasure = renderMd ? mdMeasurePoints : 0
                 self.textView.textStorage?.setAttributedString(attr)
                 self.textView.scroll(NSPoint.zero)
             }

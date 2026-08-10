@@ -173,6 +173,38 @@ let terminalSplitFraction: CGFloat = {
 /// (reserve the preview's width first, split the rest among the terminals).
 let previewSplitFraction: CGFloat = 1 - terminalSplitFraction
 
+/// Body size of the rendered markdown view (CONSPECTUS_MD_FONT_SIZE, default
+/// 16). Headings and every vertical rhythm in MarkdownRender.swift scale off
+/// it, so the layout holds at any size. Invalid values fail loud.
+let mdFontSize: CGFloat = {
+    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_MD_FONT_SIZE"] ?? "16"
+    guard let s = Double(raw), s >= 6, s <= 48 else {
+        warn("conspectus: CONSPECTUS_MD_FONT_SIZE must be a size between 6 and 48 (got '\(raw)') — using 16")
+        return 16
+    }
+    return CGFloat(s)
+}()
+
+/// Measure cap for rendered markdown (CONSPECTUS_MD_MEASURE): the maximum line
+/// length in characters, default 68 — the classic 60–75 range where the eye
+/// finds the next line without effort. A wide preview pane otherwise sets
+/// 150-character lines, which reads far worse than any font choice can repair.
+/// The text column is centred and the surplus becomes margin; 0 disables the
+/// cap. Only the *rendered* view is capped, never source/`bat` output, where
+/// the line length is the file's own. Invalid values fail loud.
+let mdMeasureChars: CGFloat = {
+    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_MD_MEASURE"] ?? "68"
+    guard let n = Double(raw), n == 0 || (n >= 30 && n <= 200) else {
+        warn("conspectus: CONSPECTUS_MD_MEASURE must be 0 or 30…200 characters (got '\(raw)') — using 68")
+        return 68
+    }
+    return CGFloat(n)
+}()
+
+/// The measure cap in points. A serif face averages ≈ 0.5 em per character, so
+/// characters × half the body size is the width that holds them.
+let mdMeasurePoints: CGFloat = mdMeasureChars * mdFontSize * 0.5
+
 /// Event diagnosis, off by default: CONSPECTUS_EVENT_LOG=<path> appends one
 /// timestamped line per instrumented event (scrolls reaching the Quick Look
 /// view, preview requests). Used to tell "events never arrive" (routing bug)

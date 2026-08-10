@@ -141,6 +141,30 @@ final class IntentFocusTextView: NSTextView {
     var onToggleMarkdown: (() -> Void)?
     override var acceptsFirstResponder: Bool { allowFocus }
 
+    /// Maximum measure (line length) in points for the text column, 0 = none.
+    /// Set for rendered markdown, cleared for source: prose past ~75 characters
+    /// per line loses the reader between lines, while a source listing must keep
+    /// the file's own line breaks. Side effect: changing it re-lays out the text.
+    var maxMeasure: CGFloat = 0 {
+        didSet { if maxMeasure != oldValue { applyMeasureCap() } }
+    }
+    /// Padding when the text is narrower than the pane (the uncapped default).
+    private let minInset: CGFloat = 12
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        applyMeasureCap()
+    }
+
+    /// Centre the text column by growing the horizontal inset: the container
+    /// tracks the view width, so the surplus over `maxMeasure` becomes margin
+    /// on both sides. No-op (beyond the base padding) when uncapped.
+    private func applyMeasureCap() {
+        let wanted = maxMeasure > 0 ? max(minInset, (bounds.width - maxMeasure) / 2) : minInset
+        guard abs(textContainerInset.width - wanted) > 0.5 else { return }
+        textContainerInset = NSSize(width: wanted, height: textContainerInset.height)
+    }
+
     override func keyDown(with event: NSEvent) {
         switch event.charactersIgnoringModifiers {
         case "j": scrollLineDown(nil)

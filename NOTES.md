@@ -582,3 +582,38 @@ mapping, listing order) moved to the `ConspectusCore` library target;
 **Notes:** New pure logic belongs in the core, not in `main.swift` — otherwise
 it's untestable again. Fallbacks are returned as data (`StartDir.warning`),
 not printed, so the logic stays pure and the app decides how to surface them.
+
+## 2026-08-10 — Typesetting the markdown preview (TextKit, not CSS)
+
+**Problem:** The rendered markdown view was *styled* (serif, sizes, colors) but
+not *typeset*: fixed 2pt line spacing that tightened as the font grew, a
+thematic break made of 60 `─` characters that wrapped onto a second line in a
+narrow pane, blockquotes dimmed to 55% alpha (poor contrast for long quotes),
+straight quotes/`--`/`...` as typed, table column alignments ignored, and an
+unbounded measure — in a wide pane the lines ran past 150 characters.
+
+**Solution:** All vertical measures became multiples of `base`
+(`CONSPECTUS_MD_FONT_SIZE`), with `lineHeightMultiple` instead of `lineSpacing`.
+Hyphenation is on with `.languageIdentifier` set from
+`NLLanguageRecognizer.dominantLanguage` per file — without it macOS hyphenates
+German notes by English patterns. The measure is capped in
+`IntentFocusTextView.maxMeasure`: the container tracks the view width, so
+growing `textContainerInset.width` centres the column and turns the surplus
+into margin (rendered markdown only — source keeps the file's own lines).
+Smart punctuation lives in `ConspectusCore/Typography.swift` and is applied
+*only* in the `Markdown.Text` case of the AST walk, so code spans and link
+destinations can't be mangled — the usual failure of regex-based approaches.
+
+**Gotcha:** TextKit has no "border on a paragraph" attribute. Both the rule and
+the blockquote bar are `NSTextTableBlock`s with a single edge drawn — `.minY`
+for the rule (carrier line in a 1pt font, so only the border shows), `.minX`
+plus left padding for the quote bar. Measured offscreen with `NSLayoutManager`:
+the rule row lays out 1.0pt high, the quoted text indents to x=15 and keeps its
+line height. Blockquote also *amends* the inner paragraph styles (enumerate,
+copy, add `textBlocks`) instead of replacing them — replacing flattens the
+spacing and hyphenation of the quoted blocks.
+
+**Deliberately not done:** justified text (at a ~68-character measure it opens
+rivers; ragged right is correct for a column), and hanging punctuation / widow
++ orphan control — TextKit has no equivalent, and the preview scrolls
+continuously, so there are no pages to break.
