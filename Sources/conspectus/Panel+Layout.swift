@@ -440,7 +440,7 @@ extension Panel {
         } else {
             split.addSubview(pane)
         }
-        evenOutPanes()
+        redistributePanes()
         // Same FIFO as the left pane: only the pane being navigated emits
         // hover events, so the preview follows the active instance for free.
         launch(t2, extraEnv: ["QLPEEK_FIFO": fifoPath, "CONSPECTUS_PEER": "R",
@@ -504,7 +504,7 @@ extension Panel {
         e.terminate()
         unlink(nvimSocketPath)          // socket gone -> yazi `open` reverts to the opener
         if previewAttached || term2 != nil {
-            evenOutPanes()
+            redistributePanes()
         } else {
             attachPreview()             // a lone terminal defeats the app's purpose
         }
@@ -513,12 +513,13 @@ extension Panel {
     }
 
     /// yazi | nvim | preview widths: the editor gets the most room, yazi the
-    /// least. Falls back to equal panes if the layout isn't the expected three.
+    /// least, and the preview the same share as everywhere else. Falls back to
+    /// the standard distribution if the layout isn't the expected three panes.
     func setEditorPaneRatios() {
-        guard split.subviews.count == 3 else { evenOutPanes(); return }
+        guard split.subviews.count == 3 else { redistributePanes(); return }
         let w = split.frame.width
         split.setPosition((w * 0.25).rounded(), ofDividerAt: 0)   // yazi | editor
-        split.setPosition((w * 0.70).rounded(), ofDividerAt: 1)   // editor | preview
+        split.setPosition((w * terminalSplitFraction).rounded(), ofDividerAt: 1)  // editor | preview
     }
 
     func removeSecondPane() {
@@ -528,7 +529,7 @@ extension Panel {
         term2Pane = nil
         t2.terminate()
         if previewAttached {
-            evenOutPanes()      // preview never left the window — no rebuild needed
+            redistributePanes()      // preview never left the window — no rebuild needed
         } else {
             attachPreview()     // a lone terminal defeats the app's purpose
         }
@@ -546,7 +547,7 @@ extension Panel {
         stopWatchingPreviewFile()   // nothing visible to keep fresh
         if previewPinned { previewPinned = false; pinMenuItem?.state = .off }  // pin is meaningless with no pane
         rightContainer.removeFromSuperview()
-        evenOutPanes()
+        redistributePanes()
         previewButton?.state = .off
         updateTitle()
     }
@@ -557,18 +558,27 @@ extension Panel {
         guard !previewAttached else { return }
         split.addSubview(rightContainer)
         rebuildPreview()
-        evenOutPanes()
+        redistributePanes()
         if let p = lastPath { update(p) }
         previewButton?.state = .on
         updateTitle()
     }
 
-    /// Distribute the pane widths evenly after a pane was added or removed.
-    func evenOutPanes() {
+    /// Re-distribute the pane widths after a pane was added or removed: the
+    /// preview (always rightmost) keeps `previewSplitFraction` of the width and
+    /// the terminal panes share the rest equally — so toggling ⌘D/⌘E never
+    /// silently resizes the preview. With no preview attached there is nothing
+    /// to reserve and the terminals divide the full width evenly.
+    func redistributePanes() {
         let n = split.subviews.count
         guard n > 1 else { return }
+        let w = split.frame.width
+        let termCount = previewAttached ? n - 1 : n
+        let termWidth = (w - (previewAttached ? w * previewSplitFraction : 0)) / CGFloat(termCount)
+        // setPosition takes the divider's x — the running sum of the panes left
+        // of it. Only the terminal dividers are set; the preview gets the rest.
         for i in 0..<(n - 1) {
-            split.setPosition(split.frame.width * CGFloat(i + 1) / CGFloat(n), ofDividerAt: i)
+            split.setPosition((termWidth * CGFloat(i + 1)).rounded(), ofDividerAt: i)
         }
     }
 

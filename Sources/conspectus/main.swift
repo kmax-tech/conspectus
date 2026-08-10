@@ -150,21 +150,28 @@ let previewMaxBytes: Int = {
     return mb * 1_048_576
 }()
 
-/// Split ratio (CONSPECTUS_SPLIT): the terminal pane's share of the window
-/// width at startup, as a fraction — the rest goes to the preview. Default
-/// 0.5 (equal): the preview is the app's whole point and documents/PDFs need
-/// width to read comfortably, so it gets at least half. Lower it (e.g. 0.45)
-/// to favour the preview further, raise it to favour yazi. Clamped to
-/// 0.25…0.75 so neither pane collapses. The ratio then scales with window
-/// resizes; the divider is still draggable. Invalid values fail loud.
+/// Split ratio (CONSPECTUS_SPLIT): the terminal panes' *combined* share of the
+/// window width, as a fraction — the preview keeps the rest. Applies at every
+/// pane count, not just at startup: the preview holds its share when panes are
+/// added or removed (⌘D, ⌘E), and the terminal panes divide what is left among
+/// themselves. Default 0.667, i.e. a third for the preview: enough for a
+/// readable document column while yazi keeps room for long filenames. Lower it
+/// (e.g. 0.5 for equal panes) to favour the preview, raise it to favour yazi.
+/// Clamped to 0.25…0.75 so neither side collapses. The ratio then scales with
+/// window resizes; dividers stay draggable. Invalid values fail loud.
 let terminalSplitFraction: CGFloat = {
-    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_SPLIT"] ?? "0.5"
+    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_SPLIT"] ?? "0.667"
     guard let f = Double(raw) else {
-        warn("conspectus: CONSPECTUS_SPLIT must be a fraction like 0.5 (got '\(raw)') — using 0.5")
-        return 0.5
+        warn("conspectus: CONSPECTUS_SPLIT must be a fraction like 0.667 (got '\(raw)') — using 0.667")
+        return 0.667
     }
     return CGFloat(min(0.75, max(0.25, f)))
 }()
+
+/// The preview pane's share of the window width — the complement of the
+/// terminal share, named because the layout distributes from the preview side
+/// (reserve the preview's width first, split the rest among the terminals).
+let previewSplitFraction: CGFloat = 1 - terminalSplitFraction
 
 /// Event diagnosis, off by default: CONSPECTUS_EVENT_LOG=<path> appends one
 /// timestamped line per instrumented event (scrolls reaching the Quick Look
