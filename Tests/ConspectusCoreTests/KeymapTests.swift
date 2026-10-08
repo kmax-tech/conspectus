@@ -30,6 +30,20 @@ final class KeymapTests: XCTestCase {
         XCTAssertEqual(b[3].keys, ["="])
     }
 
+    /// A comma is itself a key in yazi (the sort prefix), so `on = [",", "t"]`
+    /// puts the array separator inside a string — the one place a naive
+    /// comma-split parser would break.
+    func testCommaAsAKeyIsNotAnArraySeparator() throws {
+        let toml = """
+        [mgr]
+        prepend_keymap = [
+        \t{ on = [",", "t"], run = "sort mtime --reverse --dir-first=no", desc = "Timeline" },
+        ]
+        """
+        let b = try parseYaziKeymap(toml)
+        XCTAssertEqual(b, [KeymapBinding(keys: [",", "t"], desc: "Timeline")])
+    }
+
     func testParsesArrayOfTablesStyle() throws {
         let toml = """
         [[mgr.prepend_keymap]]

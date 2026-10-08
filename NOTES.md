@@ -285,8 +285,17 @@ first-responder change.
 on a folder-listing row focused its NSTextView, and the ⌘K cheat panel
 took key-window status; both left yazi deaf with the app looking healthy.
 Rule: anything display-only (listing, reference panels) must refuse first
-responder / key status (`NonFocusableTextView`, `KeylessPanel`) — links,
-scrolling, and close buttons all work without the keyboard.
+responder / key status (`NonFocusableTextView`) — links, scrolling, and
+close buttons all work without the keyboard.
+
+2026-08-24: the cheat sheet grew a filter field, which needs the keyboard.
+Refusing key status wholesale would have made that impossible; typing keys
+away from yazi unconditionally would bring the old bug back. `NSPanel`'s
+`becomesKeyOnlyIfNeeded` (utility windows only) splits it exactly right:
+the panel goes key when a click lands on a control that needs text input,
+and stays out of the way for clicks on the list or the scroller. The
+keyboard is handed back explicitly — Esc in the field and closing the sheet
+both call `window.makeKeyAndOrderFront`, so yazi is never left deaf.
 
 ## 2026-07-22 — FIFO per instance; reader opens O_RDWR (wedged-open bug)
 
@@ -551,7 +560,11 @@ a fresh instance with an auto-generated id. `CONSPECTUS_PEER` is only a flag
 (arms the `=` cd-sync keymap, broadcast via `ya pub-to 0`), not an id.
 
 **Notes:** Cross-pane copy (`y`/`p`) relies on DDS auto-discovery; anything
-that fixes ids will silently break it. Bonus finding: `ya pub-to 0
+that fixes ids will silently break it. Discovery alone is NOT enough, though
+(2026-08-25): yank state only crosses instances with the built-in `session`
+plugin armed — `bin/conspectus` writes `require("session"):setup
+{ sync_yanked = true }` into the overlay `init.lua`. Without it, `p` works
+across tabs (same instance) but silently does nothing in the other pane. Bonus finding: `ya pub-to 0
 panesync-cd --str <dir>` also works from OUTSIDE yazi, without any YAZI_ID —
 conspectus uses this for click-to-cd on folder rows in the preview listing.
 

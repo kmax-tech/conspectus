@@ -204,14 +204,6 @@ final class NonFocusableTextView: NSTextView {
     override var acceptsFirstResponder: Bool { false }
 }
 
-/// Cheat-sheet panel that never becomes the key window: it is a reference
-/// card — taking the keyboard would silently disconnect yazi while it is
-/// open (scrolling and the close button work without key status; ⌘K toggles
-/// via the app menu regardless).
-final class KeylessPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
-}
-
 extension Panel {
     // ⌥←/→ cycle horizontally: left terminal ⇄ second terminal ⇄ preview.
     // The preview is a real focus target (focus-by-intent) — a focused Quick

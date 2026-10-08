@@ -1,6 +1,7 @@
 import Cocoa
 import Quartz
 import SwiftTerm
+import ConspectusCore
 import ConspectusShield
 
 // Panel — the application delegate and owner of the whole window. This file
@@ -13,7 +14,7 @@ import ConspectusShield
 //   Panel+CheatSheet.swift  shortcut bar content and the ⌘K panel
 
 final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSSplitViewDelegate,
-                   NSTextViewDelegate {
+                   NSTextViewDelegate, NSSearchFieldDelegate {
     var window: NSWindow!
     var split: NSSplitView!
     var rightContainer: NSView!
@@ -95,6 +96,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var hintText: NSTextField!
     var cheatPanel: NSPanel?
     var cheatText: NSTextView?
+    /// Filter field on top of the cheat sheet; its content is the filter state
+    /// (no second copy to drift). The only control in the panel that takes the
+    /// keyboard — see `buildCheatSheet`.
+    var cheatSearch: NSSearchField?
     var lastPath: String?
     /// Session-live copy of CONSPECTUS_PREVIEW_SKIP_DIRS — ⌘⇧P toggles the
     /// folder being browsed (and thereby its whole subtree) in and out at
@@ -152,6 +157,12 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// refused by the plugin (busy tasks) simply expires and a later manual
     /// `q` quits normally. Main thread only.
     var yaziRestartArmedUntil = Date.distantPast
+    /// Yazi's yank buffer as last announced over the FIFO (`@YANK:`); nil when
+    /// empty. Shown in the shortcut bar in place of the tip of the day.
+    /// Cleared on pane relaunch — a fresh yazi starts with an empty buffer,
+    /// and if the session plugin restores one, its event refills this.
+    /// Main thread only.
+    var yankState: YankState?
 
     /// Minimum pane extent (width in the horizontal split, height of the pane
     /// area in the outer split) — window resizes and divider drags must not

@@ -58,6 +58,12 @@ extension Panel {
                         DispatchQueue.main.async { self?.togglePreviewPin() }
                     } else if s == activateSentinel {
                         DispatchQueue.main.async { self?.activateFromShell() }
+                    } else if s.hasPrefix(selectedPrefix) {
+                        let body = String(s.dropFirst(selectedPrefix.count))
+                        DispatchQueue.main.async { self?.showSelectedList(parseSelectedPaths(body)) }
+                    } else if s.hasPrefix(yankPrefix) {
+                        let body = String(s.dropFirst(yankPrefix.count))
+                        DispatchQueue.main.async { self?.yankChanged(body) }
                     } else if s.hasPrefix(editorFilePrefix) {
                         let path = String(s.dropFirst(editorFilePrefix.count))
                         DispatchQueue.main.async { self?.editorFileHover(path) }
@@ -626,6 +632,41 @@ extension Panel {
     /// removeObserver when its internal bindings are torn (seen in the wild),
     /// and a hidden view also auto-closes its remote extension (the blank-
     /// preview class of bugs). Covering sidesteps all of it.
+    /// ⌘L — ask yazi for its current selection. The selection lives inside
+    /// yazi and has no change event, so it can only be PULLED: this publishes
+    /// a `panesync-selected` DDS request naming the pane whose selection is
+    /// wanted (the focused one; anything that is not the right pane's yazi
+    /// asks the left). The plugin answers over the FIFO (`@SELECTED:`), which
+    /// lands in `showSelectedList`. Side effects: spawns `ya pub-to`.
+    @objc func requestSelectedList() {
+        let peer = window.firstResponder === term2 ? "R" : "L"
+        publishToYazi("panesync-selected", body: peer)
+    }
+
+    /// Show yazi's selection as a clickable list in the folder-listing pane
+    /// (the `@SELECTED:` answer to ⌘L). Same cover discipline as showFolder
+    /// (cover the Quick Look view, never hide it), same off-main rendering
+    /// (the renderer stats every path), same generation guard (a hover racing
+    /// in afterwards wins — the list is a peek, not a mode).
+    /// Side effects: swaps the visible preview cover.
+    func showSelectedList(_ paths: [String]) {
+        logEvent("showSelectedList (\(paths.count) selected)")
+        stopWatchingPreviewFile()   // no single file to watch, like a folder
+        hideAllCovers()
+        lastTextPath = nil
+        folderScroll.isHidden = false
+        let gen = bumpListingGeneration()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let listing = renderSelectedListing(paths)
+            DispatchQueue.main.async {
+                guard self.isCurrentListing(gen) else { return }
+                self.folderText.textStorage?.setAttributedString(listing)
+                self.folderText.scroll(NSPoint.zero)
+            }
+        }
+    }
+
     func showFolder(_ path: String, generation gen: Int) {
         logEvent("showFolder \(path)")
         stopWatchingPreviewFile()   // a directory has no single file to watch

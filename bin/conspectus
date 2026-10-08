@@ -41,9 +41,13 @@ fi
 ln -sfn "$REPO/plugins/conspectus.yazi" "$ov/plugins/conspectus.yazi"
 
 # init.lua: the user's init first (its require()s resolve against the overlay,
-# where the user's plugins are symlinked), then the bundled plugin.
+# where the user's plugins are symlinked), then the bundled plugin. The
+# session setup is what makes yank state cross INSTANCES (the dual-pane
+# y-in-one/p-in-the-other promise) — DDS alone only discovers peers, it does
+# not sync the yank without it.
 {
   [[ -f "$src/init.lua" ]] && echo "dofile(\"$src/init.lua\")"
+  echo 'require("session"):setup { sync_yanked = true }'
   echo 'require("conspectus"):setup()'
 } > "$ov/init.lua"
 

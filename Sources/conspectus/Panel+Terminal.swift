@@ -94,6 +94,10 @@ extension Panel {
                                  "CONSPECTUS_TABS_RESTORE": "1"],
                rememberCwd: left, startIn: dir)
         window.makeFirstResponder(fresh)
+        // A fresh yazi starts with an empty yank buffer — drop the bar's copy
+        // of the old one. If the session plugin restores the buffer, its yank
+        // event refills the bar; stale is the one state this must never show.
+        yankChanged("copy:")
         logEvent("yazi pane relaunched (\(left ? "L" : "R")) in \(dir)")
     }
 

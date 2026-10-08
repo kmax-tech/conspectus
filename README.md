@@ -260,24 +260,65 @@ min 300pt pane area).
 ## Shortcut bar
 
 A slim status bar at the bottom shows the most-used shortcuts until the muscle
-memory sits — yazi's defaults plus conspectus's own keys:
+memory sits — yazi's defaults plus conspectus's own keys, led by the tip of the
+day:
 
-    y→p copy   x→p move   d trash   r rename   a new   cc path   cf name
-    ␣ select   / find   ⌘D split   ⌘E preview   ⌘J terminal   ⌘K all keys   ⌘/ bar
+    💡 , s folder sizes   ·   y→p copy   x→p move   d trash   r rename   a new
+    cc path   cf name   ␣ select   / find   w tasks   ⌘L selected   ⌘D split
 
 `y→p` = yank then paste (copies across panes in split mode); `cc`/`cf`/`cn`
-copy the full path / filename / name without extension to the clipboard.
-Toggle the bar with **⌘/** (or View → Toggle Shortcut Bar) — the choice
-persists across launches.
+copy the full path / filename / name without extension to the clipboard;
+`w` opens yazi's task manager (background copies, deletions, size sums — and
+why ⌘R may refuse to reload). Toggle the bar with **⌘/** (or View → Toggle
+Shortcut Bar) — the choice persists across launches.
 
-**⌘K** opens the full cheat sheet: a native, scrollable panel with yazi's
+**Yank mirror.** While yazi's yank buffer is non-empty, the bar's front slot
+shows it instead of the tip — `⧉ 1 copied · main.lua — p paste · Y cancel` —
+green for copied, red for cut, matching yazi's own count badge. Yazi shows
+which files are yanked only inside their source directory; the bar keeps the
+answer visible wherever you navigate. The bundled plugin announces every
+change over the preview FIFO (`@YANK:` message); clearing the buffer (`Y`/`X`,
+or pasting after a cut) brings the tip back.
+
+**Selection list (⌘L).** Yazi's *selection* (Space / `v` marks, the yellow
+badge) has no such live mirror — yazi publishes no event for it, so it can
+only be pulled on demand: **⌘L** (View → Show Yazi Selection in Preview) asks
+the focused pane's plugin over the DDS (`panesync-selected`) and shows the
+answer in the preview pane as a clickable list in the folder-listing style —
+icon and name per row, the parent directory dimmed behind it, since a
+selection spans directories. Clicking a row reveals that file in yazi (a
+directory row cds there). The list is a peek, not a mode: the next hover
+replaces it.
+
+**Tip of the day** rotates through a curated pool of yazi and conspectus keys
+(`ConspectusCore/Tips.swift`), one per calendar day, deterministic — the same
+day always shows the same tip, and it flips at local midnight. It sits first in
+the bar because the bar truncates at the tail on narrow windows. A session left
+running past midnight keeps the old tip until the bar is re-rendered (⌘R, an
+appearance switch, or a relaunch); the ⌘K panel re-reads it on every open.
+
+**⌘K** opens the full cheat sheet — the day's tip in full at the top (the
+sentence the bar has no room for), then a native, scrollable panel with yazi's
 complete default keymap, grouped (navigate / select / files / clipboard /
-find / tabs) plus the conspectus keys — the readable version of yazi's `~`
+find / tabs / sort & inspect) plus the conspectus keys — the readable version of yazi's `~`
 help. Your own `keymap.toml` (`$YAZI_CONFIG_HOME`, else `~/.config/yazi`) is
 parsed on every open and shown as its own group on top, so config edits
-appear on the next ⌘K; parse problems are reported in the panel footer. The
-parser covers the keymap subset of TOML (inline-table arrays and
-`[[mgr.prepend_keymap]]` blocks) — no TOML dependency.
+appear on the next ⌘K; parse problems are reported in the panel footer. Your
+bindings win: a default line for a key you rebound drops out instead of
+contradicting your group (a line listing alternatives, `o / Enter`, goes only
+when you rebound all of them). The parser covers the keymap subset of TOML
+(inline-table arrays and `[[mgr.prepend_keymap]]` blocks) — no TOML
+dependency.
+
+A **filter field** sits on top of the sheet: type and the list shrinks to the
+matching lines, matches highlighted, the footer counting them (`3 of 240
+shortcuts match "indago"`). It matches keys and descriptions alike, ignoring
+case and accents; continuation lines stay with the entry they explain, and a
+matching group title (`clipboard`) keeps its whole block. The tip of the day
+steps aside while a filter is active. **Esc** clears the filter and hands the
+keyboard back to yazi with the sheet still open; ⌘K closes it. The field is
+the only part of the panel that takes the keyboard — clicking the list or
+scrolling leaves yazi in charge (`becomesKeyOnlyIfNeeded`).
 
 ### Triple mode: preview follows the active pane
 

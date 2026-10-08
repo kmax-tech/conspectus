@@ -3,16 +3,28 @@
 -- bin/conspectus; the user's own yazi config is never touched, and no
 -- external binaries are needed.
 --
--- Two jobs:
+-- Four jobs:
 --   1. Preview coupling: every hover writes the hovered path to the FIFO the
---      app hands us via $QLPEEK_FIFO. Written directly from Lua — the app
+--      app hands us via $QLPEEK_FIFO; every yank change writes the buffer as
+--      `@YANK:<copy|cut>:<paths>` (the app's shortcut bar mirrors it).
+--      Written directly from Lua — the app
 --      holds the FIFO open read-write for its whole lifetime, so opening it
 --      for append returns immediately (a FIFO open-for-write only blocks
 --      when no reader exists, and yazi dies with the app anyway).
---   2. panesync: follow `panesync-cd` DDS broadcasts with a cd — sent by the
---      app when a folder row in the preview listing is clicked, or by the
---      user's `=` key. Guarded by $CONSPECTUS_PEER, which only conspectus
---      sets, so a plain terminal yazi never follows.
+--   2. panesync: follow the app's DDS messages — `panesync-cd` / `-reveal`
+--      (a row clicked in the preview listing, or the user's `=` key),
+--      `panesync-history` (the mouse's back/forward buttons, ⌘[ / ⌘]),
+--      `panesync-restart` (⌘R re-theme), `panesync-selected` (⌘L asks for
+--      the selection, answered over the FIFO), plus `conspectus-open` from the
+--      shell. Guarded by $CONSPECTUS_PEER, which only conspectus sets, so a
+--      plain terminal yazi never follows.
+--   3. Tab session: snapshot this pane's tabs on every cd and restore them
+--      when the app asks, so tabs survive ⌘R and app restarts.
+--   4. Navigation that asks the HOVERED entry, not the selection: the `entry`
+--      below (`l`/`→` and `o`/`<Enter>`), and a left click on a folder row,
+--      which enters it instead of only moving the cursor there.
+--   5. A clickable path bar: the cwd in the pane's header is a breadcrumb, so
+--      the mouse can go UP as well as down (the columns only ever go down).
 
 local M = {}
 
@@ -143,6 +155,24 @@ function M:setup()
 			local f = io.open(fifo, "a")
 			if f then
 				f:write(path .. "\n")
+				f:close()
+			end
+		end)
+
+		-- Yank buffer → app: on every change, announce mode + paths so the
+		-- shortcut bar can show WHAT is copied/cut (yazi's own badge only
+		-- counts). Empty buffer (Y/X, paste-after-cut) announces too — that
+		-- clears the bar. In split mode both panes fire (sync_yanked), the
+		-- app receives the same state twice; harmless.
+		ps.sub("yank", function()
+			local mode = cx.yanked.is_cut and "cut" or "copy"
+			local paths = {}
+			for _, url in pairs(cx.yanked) do
+				paths[#paths + 1] = tostring(url)
+			end
+			local f = io.open(fifo, "a")
+			if f then
+				f:write("@YANK:" .. mode .. ":" .. table.concat(paths, "\t") .. "\n")
 				f:close()
 			end
 		end)
@@ -307,6 +337,25 @@ function M:setup()
 		ps.sub_remote("panesync-reveal", function(body)
 			if type(body) == "string" and #body > 0 then
 				emit("reveal", { body })
+			end
+		end)
+		-- panesync-selected (⌘L): answer the app's pull request for this
+		-- pane's selection with an @SELECTED FIFO message. Pull, not push —
+		-- yazi publishes no event for selection changes, so a live mirror
+		-- (like the yank one) is impossible; a snapshot on demand is not.
+		-- Body names the pane whose selection is wanted ("L"/"R"); the other
+		-- pane stays silent so the app gets exactly one answer.
+		ps.sub_remote("panesync-selected", function(body)
+			if body ~= peer then return end
+			if not (ok and fifo and #fifo > 0) then return end
+			local paths = {}
+			for _, url in pairs(cx.active.selected) do
+				paths[#paths + 1] = tostring(url)
+			end
+			local f = io.open(fifo, "a")
+			if f then
+				f:write("@SELECTED:" .. table.concat(paths, "\t") .. "\n")
+				f:close()
 			end
 		end)
 		-- panesync-restart (⌘R): quit so the app can relaunch this pane with

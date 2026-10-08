@@ -129,3 +129,38 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
     }
     return out
 }
+
+/// Render yazi's selection (⌘L) as a clickable list in the folder-listing
+/// style: icon + name per row, the parent directory dimmed behind it (the
+/// selection spans directories, so the name alone would not say WHERE the file
+/// is). Rows carry the same .link contract as the folder listing — clicking a
+/// directory cds yazi there, clicking a file reveals it. Paths keep yazi's
+/// selection order. Does filesystem stats (isDirectory per path) — call off
+/// the main thread like `renderListing`'s loader.
+func renderSelectedListing(_ paths: [String]) -> NSAttributedString {
+    let pal = activePalette()
+    let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
+    let font = terminalFont()
+    if paths.isEmpty {
+        return NSAttributedString(string: "  (nothing selected — Space or v marks files in yazi)",
+                                  attributes: [.font: font, .foregroundColor: fg])
+    }
+    let out = NSMutableAttributedString()
+    out.append(NSAttributedString(string: "  \(paths.count) selected\n\n",
+                                  attributes: [.font: font,
+                                               .foregroundColor: nsColor(pal.ansi[3])]))
+    for path in paths {
+        let ns = path as NSString
+        let name = ns.lastPathComponent
+        let isDir = isDirectory(path)
+        let icon = isDir ? FileIcon(glyph: "\u{f07b}", color: blue) : fileIcon(name, pal)
+        let url = URL(fileURLWithPath: path, isDirectory: isDir)
+        out.append(NSAttributedString(string: icon.glyph + "  " + name + (isDir ? "/" : ""),
+                                      attributes: [.font: font, .foregroundColor: icon.color,
+                                                   .link: url]))
+        out.append(NSAttributedString(string: "   " + ns.deletingLastPathComponent + "\n",
+                                      attributes: [.font: font,
+                                                   .foregroundColor: fg.withAlphaComponent(0.45)]))
+    }
+    return out
+}

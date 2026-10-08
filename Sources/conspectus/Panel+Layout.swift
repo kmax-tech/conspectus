@@ -205,6 +205,23 @@ extension Panel {
         let keyColor = nsColor(pal.ansi[3])                          // yellow accent
         let labelColor = nsColor(pal.fg).withAlphaComponent(0.8)
         let s = NSMutableAttributedString()
+        // Front slot: yank buffer while one exists, tip of the day otherwise —
+        // the bar truncates at the tail on narrow windows, and the one line
+        // that changes is the one worth keeping visible. The yank line mirrors
+        // yazi's badge colors (green = copied, red = cut) and says WHAT is in
+        // the buffer, which yazi itself no longer shows once you navigate away.
+        if let yank = yankState, let summary = yankHintSummary(yank) {
+            let modeColor = nsColor(pal.ansi[yank.isCut ? 1 : 2])
+            s.append(NSAttributedString(string: "⧉ " + summary,
+                                        attributes: [.font: font, .foregroundColor: modeColor]))
+            s.append(NSAttributedString(string: " — p paste · Y cancel   ·   ",
+                                        attributes: [.font: font, .foregroundColor: labelColor]))
+        } else if let tip = tipOfTheDay(on: Date()) {
+            s.append(NSAttributedString(string: "💡 " + tip.keys + " ",
+                                        attributes: [.font: font, .foregroundColor: keyColor]))
+            s.append(NSAttributedString(string: tip.short + "   ·   ",
+                                        attributes: [.font: font, .foregroundColor: labelColor]))
+        }
         for (i, hint) in shortcutHints.enumerated() {
             if i > 0 { s.append(NSAttributedString(string: "   ", attributes: [.font: font])) }
             s.append(NSAttributedString(string: hint.key + " ",
@@ -217,6 +234,18 @@ extension Panel {
         hintText.frame = NSRect(x: 8, y: (hintBarHeight - hintText.frame.height) / 2,
                                 width: hintBar.bounds.width - 16, height: hintText.frame.height)
         hintText.autoresizingMask = [.width]
+    }
+
+    /// FIFO handler: yazi's yank buffer changed (`@YANK:` message body).
+    /// Side effects: updates the stored yank state, re-renders the shortcut
+    /// bar. A malformed body is warned about and ignored — never guessed at.
+    func yankChanged(_ body: String) {
+        guard let state = parseYankMessage(body) else {
+            warn("conspectus: malformed @YANK FIFO message '\(body)' — ignored")
+            return
+        }
+        yankState = state.paths.isEmpty ? nil : state
+        styleHintBar()
     }
 
     /// Show/hide the shortcut bar per the persisted preference and lay the
@@ -370,6 +399,13 @@ extension Panel {
         let noteOpen = NSMenuItem(title: "Open PDF Note in Editor (pin)", action: #selector(openPDFNote), keyEquivalent: "n")
         noteOpen.target = self
         viewMenu.addItem(noteOpen)
+        // ⌘L: yazi's selection as a clickable list in the preview — the only
+        // cross-directory view of it (yazi highlights marks only inside their
+        // source directory; the yellow badge just counts).
+        let selectedList = NSMenuItem(title: "Show Yazi Selection in Preview",
+                                      action: #selector(requestSelectedList), keyEquivalent: "l")
+        selectedList.target = self
+        viewMenu.addItem(selectedList)
         let ideToggle = NSMenuItem(title: "Toggle Editor Pane (nvim)", action: #selector(toggleEditorPane), keyEquivalent: "i")
         ideToggle.target = self
         viewMenu.addItem(ideToggle)

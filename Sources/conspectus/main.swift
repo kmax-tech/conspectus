@@ -102,6 +102,20 @@ let togglePinSentinel = "@TOGGLE_PIN"
 /// also surfaces the window. Not a path, so it never collides with a hover.
 let activateSentinel = "@ACTIVATE"
 
+/// FIFO message prefix for yazi's yank buffer — written by the bundled plugin
+/// on every `yank` DDS event as `@YANK:<copy|cut>:<path>\t<path>…` (empty list
+/// = buffer cleared). The shortcut bar mirrors it, so WHAT is copied stays
+/// visible after navigating away. Prefixed, so it never collides with a hover.
+let yankPrefix = "@YANK:"
+
+/// FIFO message prefix for yazi's SELECTION (Space/v marks) — the plugin's
+/// answer to the app's `panesync-selected` DDS request (⌘L), as
+/// `@SELECTED:<path>\t<path>…` (empty = nothing selected). Request/answer, not
+/// an event stream: yazi publishes no event for selection changes, so the
+/// selection can only be pulled on demand, never mirrored live like the yank
+/// buffer. Prefixed, so it never collides with a hover.
+let selectedPrefix = "@SELECTED:"
+
 /// FIFO message prefix the ide editor's nvim writes on BufEnter — followed by
 /// the active file's absolute path (`@EDITOR_FILE:/abs/path`). conspectus
 /// previews it only while the editor pane is focused, so the preview follows
