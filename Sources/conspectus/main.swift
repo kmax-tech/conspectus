@@ -291,9 +291,13 @@ let ideMode    = cliArgs.first == "ide"
 let rest       = (splitMode || tripleMode || ideMode) ? Array(cliArgs.dropFirst()) : cliArgs
 let start     = resolveStart(rest.first(where: { !$0.hasPrefix("-") }), lastCwdFile: lastCwdPath)
 let startPath = start.path
+// A FILE argument (e.g. from indago's "open in conspectus"): start in its
+// parent and hand the file to yazi as the entry, so the cursor lands on it
+// and the Quick Look pane previews it immediately.
+let startRevealFile = start.revealFile
 let command   = ProcessInfo.processInfo.environment["CONSPECTUS_CMD"] ?? "yazi"
 
-// An explicit [path] that isn't a directory falls back to $HOME — say so
+// An explicit [path] that doesn't exist falls back to $HOME — say so
 // instead of silently starting somewhere the user didn't ask for.
 if let w = start.warning { warn(w) }
 

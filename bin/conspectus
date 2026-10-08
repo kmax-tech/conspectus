@@ -1,6 +1,8 @@
 #!/bin/bash
 # conspectus launcher — yazi + live Quick Look preview.
-#   conspectus [path]         # start dir = path or $HOME
+#   conspectus [path]         # start dir = path or $HOME; a FILE path starts
+#                             # in its parent with the cursor on the file
+#                             # (used by indago's M-o "open in conspectus")
 #   conspectus split [path]   # two yazi panes (dual-pane copy via cross-yank)
 #   conspectus triple [path]  # two yazi panes + preview following the active one
 set -euo pipefail

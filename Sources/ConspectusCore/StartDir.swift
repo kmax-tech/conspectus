@@ -14,12 +14,19 @@ public func isDirectory(_ path: String) -> Bool {
 /// instead of happening silently.
 public struct StartDir: Equatable {
     public let path: String
-    /// Set when the user gave a path that is not a directory and we fell back.
+    /// Set when the user gave a path that does not exist and we fell back.
     public let warning: String?
+    /// Set when the explicit argument was an existing FILE: `path` is its
+    /// parent directory, and this file should be revealed (handed to yazi as
+    /// the entry, which puts the cursor on it and previews it). This is what
+    /// lets external tools (indago's "open in conspectus") point conspectus
+    /// at a file, not just a directory.
+    public let revealFile: String?
 
-    public init(path: String, warning: String? = nil) {
+    public init(path: String, warning: String? = nil, revealFile: String? = nil) {
         self.path = path
         self.warning = warning
+        self.revealFile = revealFile
     }
 }
 
@@ -33,8 +40,9 @@ public struct StartDir: Equatable {
 ///   - lastCwdFile: File holding the last cwd (absent on first run — that is
 ///     the normal case, not an error, hence the deliberate `try?`).
 ///   - home: Final fallback, normally `$HOME`.
-/// - Returns: The start directory; `warning` is non-nil iff an explicit `raw`
-///   was given but is not an existing directory.
+/// - Returns: The start directory. An existing directory is used as-is; an
+///   existing file resolves to its parent with `revealFile` set; `warning` is
+///   non-nil iff an explicit `raw` was given but does not exist at all.
 public func resolveStart(_ raw: String?, lastCwdFile: String,
                          home: String = NSHomeDirectory()) -> StartDir {
     guard let raw = raw, !raw.isEmpty else {
@@ -50,6 +58,9 @@ public func resolveStart(_ raw: String?, lastCwdFile: String,
     }
     p = (p as NSString).standardizingPath
     if isDirectory(p) { return StartDir(path: p) }
+    if FileManager.default.fileExists(atPath: p) {
+        return StartDir(path: (p as NSString).deletingLastPathComponent, revealFile: p)
+    }
     return StartDir(path: home,
-                    warning: "conspectus: '\(raw)' is not a directory — starting in \(home)")
+                    warning: "conspectus: '\(raw)' does not exist — starting in \(home)")
 }

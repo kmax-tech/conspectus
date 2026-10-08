@@ -21,12 +21,18 @@ final class StartDirTests: XCTestCase {
         XCTAssertNil(r.warning)
     }
 
-    func testExplicitNonDirectoryFallsBackWithWarning() throws {
+    func testExplicitFileResolvesToParentWithReveal() throws {
         let file = tmp + "/a-file"
         try "x".write(toFile: file, atomically: true, encoding: .utf8)
         let r = resolveStart(file, lastCwdFile: tmp + "/absent", home: "/HOME")
-        XCTAssertEqual(r.path, "/HOME")
-        XCTAssertNotNil(r.warning, "a discarded explicit path must produce a visible warning")
+        XCTAssertEqual(r.path, tmp, "a file argument starts in the file's parent directory")
+        XCTAssertEqual(r.revealFile, file, "the file is handed to yazi as the entry to reveal")
+        XCTAssertNil(r.warning, "a file argument is valid input, not a fallback")
+    }
+
+    func testExplicitDirectoryHasNoReveal() {
+        let r = resolveStart(tmp, lastCwdFile: tmp + "/absent", home: "/HOME")
+        XCTAssertNil(r.revealFile)
     }
 
     func testExplicitMissingPathFallsBackWithWarning() {

@@ -200,9 +200,12 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     // stripped so each pane is a fresh, separate yazi instance (they discover
     // each other via the DDS for cross-instance yank/paste). `startIn`
     // overrides the app start dir (theme-reload restarts resume where the
-    // pane was, not where the app began).
+    // pane was, not where the app began). `reveal` hands a file to yazi as
+    // its entry argument (cursor on the file, preview follows) — only the
+    // initial left pane passes it, and only when the CLI arg was a file.
     func launch(_ t: LocalProcessTerminalView, extraEnv: [String: String],
-                rememberCwd: Bool = false, run: String? = nil, startIn: String? = nil) {
+                rememberCwd: Bool = false, run: String? = nil, startIn: String? = nil,
+                reveal: String? = nil) {
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
         env["YAZI_ID"] = nil; env["YAZI_LEVEL"] = nil
@@ -211,8 +214,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let cmd = run ?? command
         // Left/yazi pane records its cwd on exit so the next bare launch resumes there.
         let cwdFlag = (rememberCwd && cmd == "yazi") ? " --cwd-file \"\(lastCwdPath)\"" : ""
+        let revealArg = (reveal != nil && cmd == "yazi") ? " \"\(reveal!)\"" : ""
         t.startProcess(executable: "/bin/zsh",
-                       args: ["-l", "-c", "cd \"\(startIn ?? startPath)\" && exec \(cmd)\(cwdFlag)"],
+                       args: ["-l", "-c", "cd \"\(startIn ?? startPath)\" && exec \(cmd)\(cwdFlag)\(revealArg)"],
                        environment: env.map { "\($0.key)=\($0.value)" })
     }
 
@@ -259,7 +263,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                                 "CONSPECTUS_NVIM": nvimSocketPath,
                                 "CONSPECTUS_TABS_FILE": tabsFileL,
                                 "CONSPECTUS_TABS_RESTORE": tabsRestoreDefault ? "1" : "0"],
-               rememberCwd: true)
+               rememberCwd: true, reveal: startRevealFile)
         startFifoReader()
         // Resolve external CLIs once (no per-use login shell): `ya` for clicks,
         // `bat` for text-preview syntax highlighting.

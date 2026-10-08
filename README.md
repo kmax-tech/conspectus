@@ -97,6 +97,7 @@ Swift toolchain to build.
 swift test             # unit tests for the pure helpers (ConspectusCore)
 conspectus             # yazi + Quick Look preview, starting at $HOME
 conspectus ~/work      # start at a given directory (tilde/relative resolved)
+conspectus ~/work/paper.pdf   # a FILE: start in its dir, cursor on the file
 conspectus split       # two yazi panes side by side (dual-pane copy)
 conspectus split ~/work
 conspectus triple      # two yazi panes + Quick Look preview (3 panes)
@@ -104,8 +105,11 @@ conspectus ide         # yazi | nvim | preview — a small IDE (see below)
 ./install-app.sh       # assemble /Applications/Conspectus.app (Finder/Dock icon)
 ```
 
-Start dir is `$HOME` unless a `[path]` is given. The TUI is yazi; override with
-the `CONSPECTUS_CMD` env var (e.g. `CONSPECTUS_CMD=lf conspectus`).
+Start dir is `$HOME` unless a `[path]` is given. A `[path]` that is a *file*
+starts in the file's directory with the cursor on it, so the Quick Look pane
+previews it immediately — this is what indago's `M-o` ("open in conspectus")
+uses. The TUI is yazi; override with the `CONSPECTUS_CMD` env var (e.g.
+`CONSPECTUS_CMD=lf conspectus`).
 
 **yazi columns:** preview modes run yazi at 2 columns by default (its own
 preview column hidden — the Quick Look pane is the preview).
