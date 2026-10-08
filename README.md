@@ -164,7 +164,8 @@ nvim (`:qa`) collapses the pane; ⌘I brings it back.
 The middle pane runs **one** nvim as an RPC server (`nvim --listen <socket>`).
 Each yazi pane is handed that socket as `$CONSPECTUS_NVIM`, so **`o` / `Enter`
 on a file sends it to that nvim** (`nvim --server … --remote`) as a buffer
-instead of launching a new editor. Select several files and they all pile up in
+instead of launching a new editor. Binary files (PDF, images) are not sent
+there but go to yazi's normal opener. Select several files and they all pile up in
 the same nvim; in a split you can drive it from either yazi pane — there is only
 ever one editor. (`l` / `→` still peeks at a file in the preview; `o` / `Enter`
 edits it.) The mechanism mirrors the preview FIFO: conspectus owns the channel

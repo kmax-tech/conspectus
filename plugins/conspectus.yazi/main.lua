@@ -403,7 +403,7 @@ end
 --   (no arg)  `l` / `→`: nothing to "enter", so move keyboard focus into the
 --             preview pane (`@FOCUS_PREVIEW`; `h`/`←` there returns to yazi).
 --   "open"    `o` / `<Enter>`: in IDE mode ($CONSPECTUS_NVIM = the middle
---             nvim's --listen socket) send the selected/hovered file(s) there
+--             nvim's --listen socket) send the selected/hovered text file(s) there
 --             as buffers, so several files pile up in one editor; otherwise
 --             the normal opener.
 --
@@ -429,8 +429,11 @@ function M:entry(job)
 		local oks, sock = pcall(function() return os.getenv("CONSPECTUS_NVIM") end)
 		if oks and sock and #sock > 0 then
 			-- The socket may be stale (IDE pane closed since launch), so the
-			-- liveness test stays in the shell, next to the nvim call.
-			emit("shell", { 'if [ -S "$CONSPECTUS_NVIM" ]; then nvim --server "$CONSPECTUS_NVIM" --remote "$@"; else ya emit open; fi' })
+			-- liveness test stays in the shell, next to the nvim call. A binary
+			-- file (PDF, image) is never sent there — nvim would show raw bytes —
+			-- but goes to the normal opener. The test looks at "$1" only (first
+			-- selected, else hovered): a mixed selection follows its first file.
+			emit("shell", { 'if [ -S "$CONSPECTUS_NVIM" ] && [ "$(file -b --mime-encoding -- "$1")" != binary ]; then nvim --server "$CONSPECTUS_NVIM" --remote "$@"; else ya emit open; fi' })
 		else
 			emit("open", {})
 		end
