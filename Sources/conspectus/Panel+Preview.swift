@@ -421,8 +421,7 @@ extension Panel {
         // Markdown in render mode → native document render (swift-markdown →
         // themed NSAttributedString: serif, tables, code chips). Else → bat
         // (highlighted source, ANSI). Everything else → bat too.
-        let ext = ((path as NSString).lastPathComponent as NSString).pathExtension.lowercased()
-        let isMd = ext == "md" || ext == "markdown"
+        let isMd = isMarkdownFile(path)
         // Toolbar (rendered↔source toggle) only for markdown; give the scroll
         // view the freed strip back for other files.
         textBar.isHidden = !isMd
@@ -535,8 +534,7 @@ extension Panel {
         mdSegment?.selectedSegment = on ? 0 : 1
         logEvent("markdown mode -> \(on ? "render" : "source")")
         guard let path = lastTextPath, !textPane.isHidden else { return }
-        let ext = ((path as NSString).lastPathComponent as NSString).pathExtension.lowercased()
-        guard ext == "md" || ext == "markdown" else { return }
+        guard isMarkdownFile(path) else { return }
         lastTextPath = nil                                  // defeat the dedup
         showTextPreview(path, generation: bumpListingGeneration())
     }

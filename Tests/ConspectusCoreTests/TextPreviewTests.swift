@@ -36,6 +36,17 @@ final class TextPreviewTests: XCTestCase {
         }
     }
 
+    func testMarkdownFiles() {
+        for p in ["/a/notes.md", "/a/README.MD", "/a/doc.markdown"] {
+            XCTAssertTrue(isMarkdownFile(p), "\(p) is markdown (render↔source toggle, typeset print)")
+        }
+        // Text, but not the markdown branch: .qmd/.rmd keep their source, and
+        // an extension-less basename is never markdown.
+        for p in ["/a/note.qmd", "/a/analysis.rmd", "/a/README", "/a/main.swift", "/a/paper.pdf"] {
+            XCTAssertFalse(isMarkdownFile(p), "\(p) is not markdown")
+        }
+    }
+
     func testStripFrontmatter() {
         let withFm = "---\ntitle: Hi\ntags:\n  - a\n---\n\n# Heading\n\nBody."
         XCTAssertEqual(stripFrontmatter(withFm), "# Heading\n\nBody.")

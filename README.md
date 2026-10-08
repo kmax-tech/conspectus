@@ -337,6 +337,21 @@ the active instance automatically — no focus tracking involved. Note that
   on every save (esp. useful in `triple` mode, where the preview otherwise
   follows whichever yazi pane you last moved in). A yellow border marks the
   pinned state; ⌘P again unpins. Only a file can be pinned (not a directory).
+- Print the previewed file (**⌥⌘P**, File ▸ Print Previewed File…): opens the
+  normal macOS print dialog (printer, copies, page range, duplex, *Save as
+  PDF*) for whatever the preview is showing — the hovered file, or the pinned
+  one. It prints conspectus' *own* renderings, so what comes out matches the
+  pane: a **PDF** page-for-page (PDFKit, scaled down to fit if the page is
+  larger than the paper), an **image** fitted to one page, **text/source**
+  paginated as plain monospace, and a **markdown note** typeset exactly like
+  the rendered view when that mode is on (`M` / the eye toggle) — source when
+  it is off. Always in the light palette on white paper, regardless of the
+  system appearance, and without `bat`'s screen colors: a dark-theme page is
+  unreadable in print. Types with no native rendering (video, archives,
+  Office files) refuse with a sheet instead of printing something wrong —
+  print those from an app that knows the format. Works with the preview pane
+  closed (⌘E) too, since the hovered path is tracked either way. ⌥⌘P and not
+  ⌘P because ⌘P pins the preview and ⌘⇧P is the per-folder preview switch.
 - Event diagnosis (off by default): `CONSPECTUS_EVENT_LOG=<path>` appends a line
   per preview request and per scroll event reaching the Quick Look view — for
   debugging a preview that stops reacting.

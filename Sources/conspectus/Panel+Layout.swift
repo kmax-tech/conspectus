@@ -301,6 +301,7 @@ extension Panel {
     //   ⌘D  toggle split pane (kitty muscle memory)
     //   ⌘E  toggle preview pane
     //   ⌘P  pin/unpin the preview to the current file
+    //   ⌥⌘P print the previewed file (macOS print dialog)
     //   ⌘I  toggle the middle nvim editor pane (IDE mode)
     //   ⌘J  toggle bottom terminal (VS Code muscle memory)
     //   ⌘/  toggle shortcut bar
@@ -315,6 +316,18 @@ extension Panel {
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Quit Conspectus", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appItem.submenu = appMenu
+
+        // File menu: one item, but it belongs where macOS keeps printing.
+        // ⌥⌘P (not the standard ⌘P): ⌘P pins the preview and ⌘⇧P is the
+        // per-folder preview switch — both older, both in muscle memory.
+        let fileItem = NSMenuItem(); main.addItem(fileItem)
+        let fileMenu = NSMenu(title: "File")
+        let printItem = NSMenuItem(title: "Print Previewed File…", action: #selector(printPreviewFile),
+                                   keyEquivalent: "p")
+        printItem.keyEquivalentModifierMask = [.command, .option]
+        printItem.target = self
+        fileMenu.addItem(printItem)
+        fileItem.submenu = fileMenu
 
         // Edit menu: standard first-responder actions (target nil), so ⌘C
         // copies the selected text in whatever preview is focused — the PDFView

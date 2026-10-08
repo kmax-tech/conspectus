@@ -49,6 +49,15 @@ public func isTextPreviewable(_ path: String) -> Bool {
     return textPreviewBasenames.contains(name)
 }
 
+/// True if the file at `path` is markdown — the type that gets the
+/// rendered↔source toggle (toolbar, `M`) and prints typeset instead of as
+/// source. Deliberately narrow: `.qmd`/`.rmd` preview as text but keep their
+/// source, because their code chunks are the point. Pure.
+public func isMarkdownFile(_ path: String) -> Bool {
+    let ext = ((path as NSString).lastPathComponent as NSString).pathExtension.lowercased()
+    return ext == "md" || ext == "markdown"
+}
+
 /// Raster image extensions that preview in the native NSImageView (in-process)
 /// instead of Quick Look. SVG is NOT here — it's XML, handled as text above.
 public let imagePreviewExtensions: Set<String> = [
