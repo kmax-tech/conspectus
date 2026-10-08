@@ -169,6 +169,44 @@ extension Panel {
         // pinned one. Same-path re-renders (attach, palette change) still pass,
         // and the mtime watch keeps refreshing the pinned file on save/rebuild.
         if previewPinned, let p = lastPath, path != p { return }
+        // Location off-switch (CONSPECTUS_PREVIEW_SKIP_DIRS / ⌘⇧P): under
+        // these dirs no filesystem call may run here (FIFO reader thread —
+        // even the fileExists below can block for minutes on a stalled
+        // network mount and would freeze every further preview update) or on
+        // the main thread. The note shows immediately with zero I/O; the only
+        // filesystem touch is the dir probe below, confined to its own queue.
+        if pathIsUnder(path, anyOf: skipDirs) {
+            lastPath = path
+            let gen = bumpListingGeneration()
+            DispatchQueue.main.async {
+                guard self.isCurrentListing(gen), self.previewAttached else { return }
+                self.stopWatchingPreviewFile()
+                self.lastTextPath = nil
+                logEvent("preview skipped (skip dir): \(path)")
+                self.showPreviewMessage("""
+                    \((path as NSString).lastPathComponent)
+
+                    Preview is off for this location
+                    (CONSPECTUS_PREVIEW_SKIP_DIRS; ⌘⇧P to preview here anyway).
+                    """)
+            }
+            // Folders stay useful on a skipped mount — a listing is one capped
+            // readdir, loaded off-main anyway. Probe "is it a dir?" on the
+            // dedicated serial queue; a directory upgrades the note to the
+            // listing, a file keeps it, and on a hung mount the probe just
+            // never comes back while the note stays and the app keeps running.
+            skipProbeQueue.async { [weak self] in
+                guard let self = self, self.isCurrentListing(gen) else { return }
+                var isDir: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir),
+                      isDir.boolValue else { return }
+                DispatchQueue.main.async {
+                    guard self.isCurrentListing(gen), self.previewAttached else { return }
+                    self.showFolder(path, generation: gen)
+                }
+            }
+            return
+        }
         var d: ObjCBool = false
         // The hovered path can already be gone (fast navigation, deletion in
         // another pane). Deliberate policy: keep showing the previous preview
@@ -446,6 +484,37 @@ extension Panel {
         }
         pinMenuItem?.state = previewPinned ? .on : .off
         updateFocusBorders()   // the pin border lives on the preview focus ring
+    }
+
+    /// Thread-safe snapshot of the live preview skip list (see `skipDirsStore`
+    /// in Panel.swift) — the only way the list is read.
+    var skipDirs: [String] {
+        skipDirsLock.lock(); defer { skipDirsLock.unlock() }
+        return skipDirsStore
+    }
+
+    /// Toggle the preview skip list for the folder currently browsed — the
+    /// parent of the last hovered entry, which is the yazi cwd whether a file
+    /// or a subfolder is hovered. An entry always covers its whole subtree.
+    /// Covered → the covering entries are removed (previews come back); not
+    /// covered → the folder is added (previews off below it). Session-only;
+    /// CONSPECTUS_PREVIEW_SKIP_DIRS is the persistent seed. Re-enabling on a
+    /// truly hung mount will block exactly like before the skip — that is the
+    /// user's explicit call. Triggered by ⌘⇧P. Side effects: mutates
+    /// `skipDirsStore` (under the lock), re-renders the current preview.
+    @objc func togglePreviewSkipHere() {
+        guard let hovered = lastPath else {
+            warn("conspectus: nothing hovered yet — no folder to toggle")
+            NSSound.beep()
+            return
+        }
+        let dir = (hovered as NSString).deletingLastPathComponent
+        let toggled = toggleSkipDir(dir, in: skipDirs)
+        skipDirsLock.lock()
+        skipDirsStore = toggled.dirs
+        skipDirsLock.unlock()
+        logEvent("preview skip \(toggled.nowSkipped ? "ON" : "off") for \(dir)")
+        refreshCurrentPreview()
     }
 
     /// Set the markdown mode (true = rendered, false = source), sync the toolbar

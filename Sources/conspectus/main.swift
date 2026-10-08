@@ -150,6 +150,22 @@ let previewMaxBytes: Int = {
     return mb * 1_048_576
 }()
 
+/// Per-location preview off-switch (CONSPECTUS_PREVIEW_SKIP_DIRS): comma-
+/// separated directories under which hovering shows a short note and the
+/// preview touches the filesystem NOT AT ALL — no existence check, no size
+/// stat, no read, no mtime watch. For network mounts (CephFS behind SMB/NFS,
+/// sshfs) where a single blocking filesystem call on a stalled server can
+/// beachball the app. Default: unset — preview everywhere. A set-but-empty
+/// value fails loud (and previews stay on).
+let previewSkipDirs: [String] = {
+    guard let raw = ProcessInfo.processInfo.environment["CONSPECTUS_PREVIEW_SKIP_DIRS"] else { return [] }
+    let dirs = parseDirList(raw)
+    if dirs.isEmpty {
+        warn("conspectus: CONSPECTUS_PREVIEW_SKIP_DIRS is set but contains no directories — previews stay on")
+    }
+    return dirs
+}()
+
 /// Split ratio (CONSPECTUS_SPLIT): the terminal panes' *combined* share of the
 /// window width, as a fraction — the preview keeps the rest. Applies at every
 /// pane count, not just at startup: the preview holds its share when panes are

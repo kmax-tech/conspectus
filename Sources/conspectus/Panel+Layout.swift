@@ -344,6 +344,13 @@ extension Panel {
         pinToggle.target = self
         viewMenu.addItem(pinToggle)
         pinMenuItem = pinToggle
+        // ⌘⇧P: session toggle for the per-folder preview off-switch — previews
+        // off for the folder being browsed and its subtree (slow network
+        // mount), or back on where CONSPECTUS_PREVIEW_SKIP_DIRS turned them off.
+        let skipToggle = NSMenuItem(title: "Toggle Preview in This Folder",
+                                    action: #selector(togglePreviewSkipHere), keyEquivalent: "P")
+        skipToggle.target = self
+        viewMenu.addItem(skipToggle)
         // ⌘N: the PDF's companion note into the editor — and a deliberate open
         // pins its buffer (the auto-follow GC keeps hands off). Works from any
         // pane, so collecting notes never needs the PDF pane focused.

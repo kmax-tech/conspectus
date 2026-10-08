@@ -22,20 +22,10 @@ public let defaultNotesDir = "~/work/library/notes"
 /// How deep below the document's directory the local search descends.
 let noteSearchMaxDepth = 3
 
-/// Parse the CONSPECTUS_NOTES_DIRS value: comma-separated directories,
-/// whitespace trimmed, tilde expanded against `home`, empty entries dropped.
-/// nil (unset) yields the default library dir. Pure.
+/// Parse the CONSPECTUS_NOTES_DIRS value (see `parseDirList` for the list
+/// grammar). nil (unset) yields the default library dir. Pure.
 public func parseNotesDirs(_ raw: String?, home: String = NSHomeDirectory()) -> [String] {
-    let value = raw ?? defaultNotesDir
-    return value.split(separator: ",").compactMap { part in
-        let trimmed = part.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return nil }
-        if trimmed == "~" { return home }
-        if trimmed.hasPrefix("~/") {
-            return (home as NSString).appendingPathComponent(String(trimmed.dropFirst(2)))
-        }
-        return trimmed
-    }
+    return parseDirList(raw ?? defaultNotesDir, home: home)
 }
 
 /// The document's note stem: filename without its extension.

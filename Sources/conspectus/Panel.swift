@@ -96,6 +96,21 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var cheatPanel: NSPanel?
     var cheatText: NSTextView?
     var lastPath: String?
+    /// Session-live copy of CONSPECTUS_PREVIEW_SKIP_DIRS — ⌘⇧P toggles the
+    /// folder being browsed (and thereby its whole subtree) in and out at
+    /// runtime; the env var stays the persistent seed. Guarded by
+    /// `skipDirsLock`: the FIFO reader thread consults the list on every hover
+    /// (before any filesystem call), the main thread mutates it on toggle.
+    /// Access via the `skipDirs` snapshot in Panel+Preview.
+    var skipDirsStore: [String] = previewSkipDirs
+    let skipDirsLock = NSLock()
+    /// Serial queue for the one filesystem call a skipped location still gets:
+    /// the "is it a directory?" probe (folder listings stay useful on a slow
+    /// mount). Serial ON PURPOSE — on a hung mount the probe blocks, and this
+    /// queue confines that to a single thread while hovers keep queueing
+    /// cheaply; stale generations die on return. Never probe on the FIFO
+    /// reader thread or on main.
+    let skipProbeQueue = DispatchQueue(label: "conspectus.skip-probe", qos: .utility)
     /// Preview pinned to `lastPath`: hover events are ignored (update() drops a
     /// different path) so the preview stays on the file being edited while the
     /// yazi pane(s) navigate elsewhere. Toggled by ⌘P / the @TOGGLE_PIN sentinel.

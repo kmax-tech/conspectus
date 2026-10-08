@@ -617,3 +617,37 @@ spacing and hyphenation of the quoted blocks.
 rivers; ragged right is correct for a column), and hanging punctuation / widow
 + orphan control — TextKit has no equivalent, and the preview scrolls
 continuously, so there are no pages to break.
+
+## 2026-08-28 — Network mounts (CephFS via SMB): the preview must not touch them
+
+**Problem:** browsing the Ceph mount (`/Volumes/storage`, SMB) beachballed the
+app. The preview pipeline makes synchronous filesystem calls in places that
+must never block: the size-cap stat and `PDFDocument(url:)` run on the main
+thread, the mtime watch polls `stat` on a main-thread timer every 0.7s, and
+`update()` runs `fileExists` on the FIFO reader thread — one stalled SMB call
+wedges the UI or silences every further hover. Separately, the fzf pickers in
+the dotfiles keymap (`s`/`S`, later also `Z`/`⌥C`) run an unbounded
+`fd`/`rg` walk over the cwd; on SMB every directory listing is a network
+round-trip, so the walk itself looks like a freeze — no preview involved.
+
+**Solution, app side:** `CONSPECTUS_PREVIEW_SKIP_DIRS` (comma-separated dirs,
+prefix match on component boundaries — `ConspectusCore/DirList.swift`) plus
+⌘⇧P as a session-live toggle for the folder being browsed. Under a skipped
+dir a *file* hover shows a static note with **zero I/O on the hover path**;
+a *directory* still gets the capped listing: the only filesystem touch is an
+"is it a dir?" probe on a dedicated **serial** queue, so a hung mount blocks
+that one thread at most while the note is already up and stale generations
+die on return. The live list is read by the FIFO thread and written by the
+main thread → guarded by an `NSLock` (`skipDirsStore`/`skipDirs`).
+
+**Solution, keymap side:** all recursive pickers detect a network mount by
+`df -P .` device (`/dev/*`, `map*`, `devfs*` = local, anything else — SMB is
+`//user@host/share`, NFS `host:/path` — = network) and then cap `fd`/`rg` at
+`--max-depth 2`, announcing it in the fzf header. Unknown filesystems are
+capped too: a visible cap beats an invisible freeze. Go deeper by cd'ing
+deeper — the cap counts from the cwd.
+
+**Gotchas:** ⌘⇧P re-enabling previews on a *hung* mount blocks exactly like
+before the skip — deliberate, it is the user's explicit call. And a truly
+dead mount is unfixable client-side: even `df`/`stat` hang then; only
+`umount -f` helps. The skip list protects the app, not the mount.

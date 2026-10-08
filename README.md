@@ -307,6 +307,23 @@ the active instance automatically — no focus tracking involved. Note that
 - Preview size cap: files above `CONSPECTUS_PREVIEW_MAX_MB` (default 50) show a
   short "too large" note instead of previewing — a several-hundred-MB JSON
   would otherwise wedge Quick Look and spike memory. `0` disables the cap.
+- Preview off per location: under the directories in
+  `CONSPECTUS_PREVIEW_SKIP_DIRS` (comma-separated, e.g.
+  `CONSPECTUS_PREVIEW_SKIP_DIRS=/Volumes/ceph`) **files are not previewed** —
+  no size stat, no read, no mtime watch; a short note shows instead, with
+  zero I/O on the hover path. For network mounts (CephFS behind SMB/NFS,
+  sshfs), where a single blocking filesystem call on a stalled server would
+  beachball the app. **Folder listings stay on** (capped at 500 entries, like
+  everywhere): a lone "is it a dir?" probe runs on its own serial queue, so a
+  hung mount blocks only that probe while the note stays and the app keeps
+  running. Matching is by path prefix on component boundaries
+  (`/Volumes/ceph` covers `/Volumes/ceph/x`, not `/Volumes/cephalon`); yazi
+  itself still browses the mount normally.
+  **⌘⇧P toggles this live** for the folder currently browsed (and thereby its
+  whole subtree): previews off where they hang, or back on inside a skipped
+  mount — removing whichever entry covered the folder, session-only (the env
+  var stays the persistent seed). Turning previews back on on a truly hung
+  mount blocks exactly like before the skip — that's the explicit ask.
 - Text/source/notes/config (`.md`, `.tex`, `.py`, `.json`, …) preview in a
   **native in-process `NSTextView`** — off Quick Look and the third-party
   sbarex QL plugins entirely, which takes the common and most crash-prone
