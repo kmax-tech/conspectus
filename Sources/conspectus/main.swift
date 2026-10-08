@@ -96,6 +96,12 @@ let toggleMarkdownSentinel = "@TOGGLE_MD"
 /// like the others it is not a path, so it never collides with a hovered file.
 let togglePinSentinel = "@TOGGLE_PIN"
 
+/// FIFO control message asking conspectus to bring its window to the front —
+/// written by the bundled plugin after it handles a `conspectus-open` DDS
+/// message (the shell's `con <dir>`), so opening a directory from the terminal
+/// also surfaces the window. Not a path, so it never collides with a hover.
+let activateSentinel = "@ACTIVATE"
+
 /// FIFO message prefix the ide editor's nvim writes on BufEnter — followed by
 /// the active file's absolute path (`@EDITOR_FILE:/abs/path`). conspectus
 /// previews it only while the editor pane is focused, so the preview follows

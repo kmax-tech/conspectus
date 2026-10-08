@@ -56,6 +56,8 @@ extension Panel {
                         DispatchQueue.main.async { self?.toggleMarkdownMode() }
                     } else if s == togglePinSentinel {
                         DispatchQueue.main.async { self?.togglePreviewPin() }
+                    } else if s == activateSentinel {
+                        DispatchQueue.main.async { self?.activateFromShell() }
                     } else if s.hasPrefix(editorFilePrefix) {
                         let path = String(s.dropFirst(editorFilePrefix.count))
                         DispatchQueue.main.async { self?.editorFileHover(path) }

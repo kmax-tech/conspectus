@@ -439,6 +439,17 @@ extension Panel {
         }
     }
 
+    /// Bring the window to the front — the `@ACTIVATE` FIFO sentinel, written
+    /// by the bundled plugin after the shell routed a directory in via the
+    /// `conspectus-open` DDS message (zsh `con <dir>`). In-process activation,
+    /// so no Automation/accessibility permission is needed on the shell side.
+    /// Side effects: activates the app and raises/deminiaturizes the window.
+    func activateFromShell() {
+        NSApp.activate(ignoringOtherApps: true)
+        window?.deminiaturize(nil)
+        window?.makeKeyAndOrderFront(nil)
+    }
+
     // MARK: NSApplicationDelegate — focus resilience across app switches.
     // Launching an editor out of yazi (E c → VS Code, …) and coming back must
     // never leave the keyboard pointing nowhere: remember which terminal had

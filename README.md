@@ -421,6 +421,21 @@ the active instance automatically — no focus tracking involved. Note that
   commands, so an open filter prompt receives no stray keystroke. Creating
   and closing tabs stays yazi's (`t`, `close`) — and ⌘W stays the safe
   "close terminal panel".
+- Open-from-shell: a running instance can be told to show a directory —
+  `ya pub-to 0 conspectus-open --str /abs/dir` switches the left yazi pane to
+  the tab already at that dir, else opens a new tab there (browser-tab
+  semantics), and brings the window to the front. Meant to be wrapped in a
+  tiny shell function, e.g. in zsh:
+
+  ```zsh
+  con() {
+    if pgrep -qx conspectus; then
+      ya pub-to 0 conspectus-open --str "${${1:-$PWD}:a}"
+    else
+      conspectus "$@" >/dev/null 2>&1 &!
+    fi
+  }
+  ```
 - The preview hook for yazi ships **inside this repo**
   (`plugins/conspectus.yazi`) — no external plugin or binary needed. lf/nnn/
   xplr work as terminals; wire their selection hook to `$QLPEEK_FIFO` to get

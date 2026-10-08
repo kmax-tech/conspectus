@@ -211,6 +211,41 @@ function M:setup()
 				end
 			end
 		end
+		-- conspectus-open: show a directory in this window — sent from the
+		-- shell (`ya pub-to 0 conspectus-open --str <dir>`, wrapped by the
+		-- zsh `con` function). Browser-tab semantics: switch to the tab
+		-- already at that dir, else open a new tab there. Left pane only, so
+		-- split/triple mode doesn't open the dir twice. Afterwards the
+		-- @ACTIVATE sentinel asks the app to bring its window to the front.
+		-- Paths are compared as strings (the shell sends a cleaned absolute
+		-- path; a mismatch just means a fresh tab, never an error).
+		if peer == "L" then
+			ps.sub_remote("conspectus-open", function(body)
+				if type(body) ~= "string" or #body == 0 then return end
+				local okt, idx = pcall(function()
+					local t = cx.tabs
+					for i = 1, #t do
+						if tostring(t[i].current.cwd) == body then return i end
+					end
+					return 0
+				end)
+				if okt and idx > 0 then
+					emit("tab_switch", { idx - 1 })   -- tab_switch is 0-based
+				else
+					-- create-then-cd, same reason as the restore above: yazi 26
+					-- ignores tab_create's positional path.
+					emit("tab_create", { current = true })
+					emit("cd", { body })
+				end
+				if ok and fifo and #fifo > 0 then
+					local f = io.open(fifo, "a")
+					if f then
+						f:write("@ACTIVATE\n")
+						f:close()
+					end
+				end
+			end)
+		end
 		-- panesync-cd: enter a directory (folder-row click, `=` key).
 		ps.sub_remote("panesync-cd", function(body)
 			if type(body) == "string" and #body > 0 then
