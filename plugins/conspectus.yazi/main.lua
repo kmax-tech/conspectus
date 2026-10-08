@@ -29,10 +29,114 @@ local hovered_is_dir = ya.sync(function()
 	return h ~= nil and h.cha.is_dir
 end)
 
+-- Left click on a DIRECTORY row enters it, like Enter — yazi's own click only
+-- reveals (moves the cursor there). Wraps the preset `Entity:click` instead of
+-- replacing it, so reveal, right-click-opens and middle-click keep working;
+-- `enter` acts on the row the reveal just hovered (commands apply in emit
+-- order). Only inside conspectus, and only if the preset component is where we
+-- expect it — a yazi that moved it keeps its stock click behavior.
+--
+-- Consequence worth knowing: clicking a pane merely to focus it also enters,
+-- when the click happens to land on a folder row.
+local function install_dir_click()
+	if type(Entity) ~= "table" or type(Entity.click) ~= "function" then
+		ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+			content = "click-to-enter not installed — yazi's Entity:click is missing" })
+		return
+	end
+	local base = Entity.click
+	Entity.click = function(self, event, up)
+		base(self, event, up)
+		if up or event.is_middle or event.is_right then return end
+		local f = self._file
+		if f and f.cha and f.cha.is_dir then
+			(ya.emit or ya.mgr_emit)("enter", {})
+		end
+	end
+end
+
+-- Cell width of a string. `ui.width` is what yazi measures with itself; the
+-- byte-length fallback only matters if a future yazi drops it, and paths are
+-- ASCII often enough that it still lands on the right segment.
+local function cell_width(s)
+	local ok, w = pcall(ui.width, s)
+	return ok and w or #s
+end
+
+-- Split a path into its non-empty segments.
+local function path_segments(s)
+	local out = {}
+	for seg in s:gmatch("[^/]+") do out[#out + 1] = seg end
+	return out
+end
+
+-- Which prefix of `cwd` a click at cell offset `rel` into the header's path
+-- text addresses — nil for "not on the path" (padding, the flags suffix).
+--
+-- The header shows `ya.readable_path(cwd)`, i.e. $HOME collapsed to `~`, cut to
+-- the free width with rtl = true, so it is the LEFT end that disappears. Both
+-- facts point the same way: the visible segments are always a TAIL of the real
+-- path, so the mapping counts from the right and never has to know whether `~`
+-- swallowed two segments or truncation swallowed five. The one segment that
+-- cannot be mapped is a half-eaten first one ("…jects"), and a click there is
+-- refused instead of guessed into the wrong directory.
+local function breadcrumb_target(text, cwd, rel, truncated)
+	local shown, real = path_segments(text), path_segments(cwd)
+	if #shown == 0 or #real == 0 then return nil end   -- root has nothing above
+	local ends, i = {}, 1
+	while true do
+		local s, e = text:find("[^/]+", i)
+		if not s then break end
+		ends[#ends + 1], i = e, e + 1
+	end
+	local at
+	for k = 1, #ends do
+		if rel < cell_width(text:sub(1, ends[k])) then
+			at = k
+			break
+		end
+	end
+	if not at then return nil end
+	if truncated and at == 1 then return nil end
+	local k = #real - (#shown - at)
+	if k < 1 then return nil end
+	return "/" .. table.concat(real, "/", 1, k)
+end
+
+-- The cwd in the header is a path bar: click a segment to cd there. This is the
+-- only mouse route UPWARDS — the columns only ever descend (a click in the
+-- parent column enters that sibling directory), so without it "one level up" is
+-- keyboard-only. Same convention as Finder's path bar and Explorer's address
+-- bar, and it jumps any number of levels in one click.
+local function install_breadcrumb_click()
+	if type(Header) ~= "table" or type(Header.click) ~= "function" then
+		ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+			content = "path-bar clicks not installed — yazi's Header:click is missing" })
+		return
+	end
+	local base = Header.click
+	Header.click = function(self, event, up)
+		base(self, event, up)
+		if up or event.is_middle or event.is_right then return end
+		local cwd = tostring(self._current.cwd)
+		local shown = ya.readable_path(cwd)
+		-- The width budget the header computes in redraw — which has not run on
+		-- THIS instance: reflow builds a fresh one to route the click through.
+		local ok, right = pcall(function() return self:children_redraw(self.RIGHT):width() end)
+		local max = self._area.w - (ok and right or 0)
+		if max <= 0 then return end
+		local text = tostring(ui.truncate(shown, { max = max, rtl = true }))
+		local target = breadcrumb_target(text, cwd, event.x - self._area.x, text ~= shown)
+		if target then (ya.emit or ya.mgr_emit)("cd", { Url(target) }) end
+	end
+end
+
 function M:setup()
 	-- pcall-guarded env reads in case the yazi sandbox withholds os.getenv.
 	local ok, fifo = pcall(function() return os.getenv("QLPEEK_FIFO") end)
 	if ok and fifo and #fifo > 0 then
+		install_dir_click()
+		install_breadcrumb_click()
 		ps.sub("hover", function()
 			local path = get_hovered()
 			if not path then return end
@@ -113,6 +217,56 @@ function M:setup()
 				emit("cd", { body })
 			end
 		end)
+		-- panesync-history: browser-style back/forward — sent by the app for
+		-- the mouse's back/forward buttons and the Go menu. The body is
+		-- "<direction> <peer>" so only the pane the mouse is over moves in
+		-- split mode ("*" addresses both). Runs yazi's own history commands
+		-- instead of typing H/L into the pane: a keystroke would land inside
+		-- an open filter/search prompt, a command never does.
+		ps.sub_remote("panesync-history", function(body)
+			if type(body) ~= "string" then return end
+			local dir, target = body:match("^(%a+) ([LR*])$")
+			if not dir or (target ~= peer and target ~= "*") then return end
+			if dir == "back" then
+				emit("back", {})
+			elseif dir == "forward" then
+				emit("forward", {})
+			elseif dir == "up" then
+				emit("leave", {})
+			else
+				ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+					content = "unknown move direction '" .. dir .. "'" })
+			end
+		end)
+		-- panesync-tab: switch this pane's tabs from the app's Go menu
+		-- (⌘⇧[ / ⌘⇧] cycle, ⌘1…⌘9 jump — the tab chord kitty and WezTerm
+		-- use). Body is "<move> <peer>" like panesync-history; move is
+		-- "prev", "next", or a 1-based tab number. Commands, not keystrokes:
+		-- `[` typed into an open filter prompt would land in the query.
+		-- These keys exist for the moments a yazi pane does NOT hold the
+		-- keyboard (nvim, preview, terminal panel) — with focus in yazi its
+		-- own [ / ] / 1…9 do the same thing and never reach the app.
+		ps.sub_remote("panesync-tab", function(body)
+			if type(body) ~= "string" then return end
+			local move, target = body:match("^(%w+) ([LR*])$")
+			if not move or (target ~= peer and target ~= "*") then return end
+			if move == "prev" then
+				emit("tab_switch", { -1, relative = true })
+			elseif move == "next" then
+				emit("tab_switch", { 1, relative = true })
+			else
+				-- Absolute jump: 1-based on the wire (⌘3 = third tab),
+				-- 0-based in yazi. Out-of-range numbers are yazi's no-op,
+				-- same as typing 9 with three tabs open.
+				local n = tonumber(move)
+				if n and n >= 1 then
+					emit("tab_switch", { n - 1 })
+				else
+					ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+						content = "unknown tab move '" .. move .. "'" })
+				end
+			end
+		end)
 		-- panesync-reveal: move the cursor onto a path (file-row click) — cds
 		-- to its parent and selects it, so the hover sub above previews it.
 		ps.sub_remote("panesync-reveal", function(body)
@@ -157,17 +311,48 @@ function M:setup()
 	end
 end
 
--- `l` / `→` inside conspectus: enter the hovered directory, or — on a file,
--- where there's nothing to enter — move keyboard focus into the preview pane
--- (the `@FOCUS_PREVIEW` sentinel; `h`/`←` there returns to yazi). Decided from
--- the HOVERED item, never the selection, so a pending copy/cut can't hijack
--- navigation. Invoked as `ya emit plugin conspectus` from the keymap.
+-- Navigation entry point, in two modes — both decide "directory?" from the
+-- HOVERED item, never the selection, so a pending copy/cut can't hijack
+-- navigation (a shell `[ -d "$1" ]` test cannot: "$1" is the first SELECTED
+-- file). A directory is entered in both modes; they differ on a FILE:
+--
+--   (no arg)  `l` / `→`: nothing to "enter", so move keyboard focus into the
+--             preview pane (`@FOCUS_PREVIEW`; `h`/`←` there returns to yazi).
+--   "open"    `o` / `<Enter>`: in IDE mode ($CONSPECTUS_NVIM = the middle
+--             nvim's --listen socket) send the selected/hovered file(s) there
+--             as buffers, so several files pile up in one editor; otherwise
+--             the normal opener.
+--
+-- Invoked as `ya emit plugin conspectus [open]` from the keymap — note that
+-- `ya emit` passes arguments as a list, WITHOUT the `--` separator that the
+-- keymap's own `plugin conspectus -- open` form needs (verified: with `--`
+-- the argument arrives empty).
 function M:entry(job)
 	local emit = ya.emit or ya.mgr_emit
+	local mode = job and job.args and job.args[1]
+	if mode ~= nil and mode ~= "" and mode ~= "open" then
+		ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+			content = "unknown plugin mode '" .. tostring(mode) .. "' — treating it as l/→" })
+		mode = nil
+	end
+
 	if hovered_is_dir() then
 		emit("enter", {})
 		return
 	end
+
+	if mode == "open" then
+		local oks, sock = pcall(function() return os.getenv("CONSPECTUS_NVIM") end)
+		if oks and sock and #sock > 0 then
+			-- The socket may be stale (IDE pane closed since launch), so the
+			-- liveness test stays in the shell, next to the nvim call.
+			emit("shell", { 'if [ -S "$CONSPECTUS_NVIM" ]; then nvim --server "$CONSPECTUS_NVIM" --remote "$@"; else ya emit open; fi' })
+		else
+			emit("open", {})
+		end
+		return
+	end
+
 	local ok, fifo = pcall(function() return os.getenv("QLPEEK_FIFO") end)
 	if ok and fifo and #fifo > 0 then
 		local f = io.open(fifo, "a")

@@ -59,6 +59,25 @@ let watchEnabled: Bool = {
     return !(raw == "off" || raw == "0" || raw == "false" || raw == "no")
 }()
 
+/// Mouse side buttons (CONSPECTUS_MOUSE_HISTORY, default on): buttons 4 and 5
+/// — "back"/"forward" on most mice — step through the hovered yazi pane's
+/// directory history, so a folder tree can be browsed with the mouse alone
+/// (click a folder row to descend, side button to come back). yazi itself
+/// cannot see these buttons (crossterm reports left/middle/right only), so the
+/// app translates them into yazi's `back`/`forward` over the DDS. "off" leaves
+/// the buttons to whatever the mouse driver does with them; the Go menu
+/// (⌘[ / ⌘]) stays either way.
+let mouseHistoryEnabled: Bool = {
+    let raw = (ProcessInfo.processInfo.environment["CONSPECTUS_MOUSE_HISTORY"] ?? "on").lowercased()
+    switch raw {
+    case "on", "1", "true", "yes": return true
+    case "off", "0", "false", "no": return false
+    default:
+        warn("conspectus: CONSPECTUS_MOUSE_HISTORY must be on|off (got '\(raw)') — using on")
+        return true
+    }
+}()
+
 /// FIFO control message asking conspectus to move keyboard focus into the
 /// preview pane — written by yazi's `l`/→-on-a-file binding so h/l pane
 /// navigation flows from yazi into the preview. Not a path (those are

@@ -60,6 +60,22 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
 - Because the right pane previews files *and* folders, yazi runs at 2 columns
   (its own 3rd preview column is hidden via the overlay `yazi.toml`). You
   navigate in the middle column and enter directories to descend.
+- **Clicking works the same way inside the yazi pane**: a left click on a
+  folder row enters it, exactly like `Enter`. Stock yazi only moves the cursor
+  there; the bundled plugin wraps yazi's `Entity:click` to add the `enter`
+  (right-click keeps its stock "reveal + open"). The flip side: a click meant
+  only to focus a pane also descends when it lands on a folder row.
+- **Going up is the path bar**: the cwd in a pane's header is a breadcrumb —
+  click any segment to `cd` to that level, several levels in one click. The
+  columns themselves only ever descend (the left column holds the *parent's*
+  entries, so clicking there enters a sibling), which is why the mouse needs
+  the header. `⌘↑` (Go → Enclosing Folder) is the keyboard twin for one level.
+- **Out to Finder**: `⌥⌘R` (Go → Reveal in Finder) acts on the hovered item —
+  a folder opens, a file is revealed in its parent and selected. It is a menu
+  shortcut, so it works from every pane, including nvim and the preview, where
+  yazi's own binding cannot be typed. ⌥⌘R is VS Code's key for the same
+  command; in a bare terminal yazi the keyboard twin is `E f` (dotfiles
+  `keybindings.md`).
 - Coupling: the app creates a FIFO (one per instance,
   `~/.cache/conspectus/target-<pid>`) and hands its path to the shell via
   `QLPEEK_FIFO`. The file manager writes the hovered path there on selection;
@@ -215,7 +231,10 @@ dotfiles (`keybindings.md`); ⌘⌥-arrows remain as silent aliases. Trade-off
 (same as kitty): ⌥-arrows no longer reach the shell as word jumps —
 `M-b`/`M-f` and `C-a`/`C-e` still do. **Clicking** a pane focuses it too.
 A focused pane shows a subtle gray border (only when more than one
-focusable pane exists). **⌘⌃→ / ⌘⌃←** widen / narrow the focused pane
+focusable pane exists). The mouse can also *navigate*: a left click on a
+folder row enters that folder, and the **side buttons** (or **⌘[ / ⌘]** in the
+Go menu) step back and forward through that pane's directory history — enough
+to browse a tree without touching the keyboard. **⌘⌃→ / ⌘⌃←** widen / narrow the focused pane
 (WezTerm-style keyboard resize, 60 pt/step; the divider stays draggable and
 no pane can collapse below its minimum). The preview is **focus-by-intent**: a
 focused Quick Look scrolls with the arrow keys / PgUp / PgDn and pages PDFs
@@ -278,8 +297,12 @@ the active instance automatically — no focus tracking involved. Note that
   right, yazi's column for look-ahead + text/simple previews.
 - The launcher builds an overlay config under `~/.cache/conspectus/yazi-config`
   and points `YAZI_CONFIG_HOME` at it: your live config is symlinked in, the
-  **bundled `plugins/conspectus.yazi`** (hover → FIFO, panesync-cd follower) is
-  injected, and `init.lua` is generated to load your own init first. Your
+  **bundled `plugins/conspectus.yazi`** is injected, and `init.lua` is
+  generated to load your own init first. That plugin is the yazi-side half of
+  conspectus: it pushes hovers into the FIFO, follows the app's `panesync-*`
+  messages (row clicks, back/forward, the ⌘R restart), keeps the tab session,
+  decides `l` / `o` / `Enter` from the *hovered* entry, and makes a left click
+  on a folder row enter it. Your
   normal yazi is untouched — and a machine with **no yazi config at all**
   works too (yazi defaults + the bundled plugin). `theme.toml` switches to the
   catppuccin flavors only if they are installed; otherwise your own theme (or
@@ -292,6 +315,15 @@ the active instance automatically — no focus tracking involved. Note that
   combined share as a fraction (default `0.667`; `0.5` gives the preview half,
   `0.75` favours yazi); clamped to 0.25…0.75. The divider is still draggable,
   and the ratio scales when you resize the window.
+- Mouse back / forward: the side buttons (4 and 5) walk the **directory
+  history** of the pane under the pointer — together with click-to-enter that
+  makes the mouse alone enough to browse a tree. yazi cannot see those buttons
+  itself (crossterm reports left/middle/right only), so conspectus translates
+  them into yazi's own `back`/`forward` over the DDS. The same two commands sit
+  in the **Go menu as ⌘[ / ⌘]** — the keyboard twins, and the fallback for mice
+  whose driver already turns the side buttons into those chords.
+  `CONSPECTUS_MOUSE_HISTORY=off` leaves the buttons to the driver; the menu
+  keys stay either way.
 - Live refresh: the previewed file's mtime is polled (~0.7 s) while a file
   preview is showing, so editing a note in `nvim` (left pane, `E t`) and saving
   updates the preview (right) on the fly. Polling (not an fd watch) on purpose:
@@ -381,6 +413,14 @@ the active instance automatically — no focus tracking involved. Note that
   next bare start. Starting with an explicit `[path]` deliberately does NOT
   restore (begin *here*, clean); the snapshot keeps being written, so the
   tabs come back on the next bare start.
+- Tab keys: **⌘⇧[ / ⌘⇧]** cycle the active pane's tabs and **⌘1…⌘9** jump to
+  one — the same chords kitty and WezTerm use for their tabs (dotfiles
+  `keybindings.md`). They exist for the moments a yazi pane does *not* hold
+  the keyboard: from nvim, the preview, or the terminal panel, yazi's own
+  `[` / `]` / `1…9` never arrive. Like back/forward, they travel as DDS
+  commands, so an open filter prompt receives no stray keystroke. Creating
+  and closing tabs stays yazi's (`t`, `close`) — and ⌘W stays the safe
+  "close terminal panel".
 - The preview hook for yazi ships **inside this repo**
   (`plugins/conspectus.yazi`) — no external plugin or binary needed. lf/nnn/
   xplr work as terminals; wire their selection hook to `$QLPEEK_FIFO` to get

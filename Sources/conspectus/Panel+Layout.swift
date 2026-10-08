@@ -401,6 +401,40 @@ extension Panel {
         addResizeItem(viewMenu, "Shrink Focused Pane", NSLeftArrowFunctionKey, #selector(shrinkFocusedPane))
         viewItem.submenu = viewMenu
 
+        // Go menu: browser/Finder semantics for the file panes. ⌘[ / ⌘] are
+        // the keyboard twins of the mouse's side buttons — and the fallback
+        // for mice whose driver already maps those buttons to ⌘[ / ⌘] instead
+        // of delivering them as buttons 3/4.
+        let goItem = NSMenuItem(); main.addItem(goItem)
+        let goMenu = NSMenu(title: "Go")
+        let back = NSMenuItem(title: "Back", action: #selector(historyBack), keyEquivalent: "[")
+        back.target = self
+        goMenu.addItem(back)
+        let forward = NSMenuItem(title: "Forward", action: #selector(historyForward), keyEquivalent: "]")
+        forward.target = self
+        goMenu.addItem(forward)
+        goMenu.addItem(NSMenuItem.separator())
+        // ⌘↑ is Finder's "Enclosing Folder"; the columns can only descend, so
+        // this (and the header path bar) is how you leave a directory.
+        let up = NSMenuItem(title: "Enclosing Folder", action: #selector(goUp),
+                            keyEquivalent: String(UnicodeScalar(NSUpArrowFunctionKey)!))
+        up.keyEquivalentModifierMask = [.command]
+        up.target = self
+        goMenu.addItem(up)
+        goMenu.addItem(NSMenuItem.separator())
+        // ⌥⌘R is VS Code's key for the same command, and the GUI half of the
+        // cross-tool "reveal" contract (the keyboard half is yazi's `E f`).
+        // It sits one modifier away from ⌘R (reload panes) on purpose: the
+        // parity with the other apps outweighs the neighbourhood.
+        let reveal = NSMenuItem(title: "Reveal in Finder", action: #selector(revealInFinder),
+                                keyEquivalent: "r")
+        reveal.keyEquivalentModifierMask = [.command, .option]
+        reveal.target = self
+        goMenu.addItem(reveal)
+        goMenu.addItem(NSMenuItem.separator())
+        addTabItems(goMenu)
+        goItem.submenu = goMenu
+
         NSApp.mainMenu = main
     }
 
@@ -422,6 +456,35 @@ extension Panel {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.keyEquivalentModifierMask = [.option]; item.target = self
         menu.addItem(item)
+    }
+
+    /// Add the yazi-tab items: ⌘⇧[ / ⌘⇧] cycle, ⌘1…⌘9 jump. Same keys as
+    /// kitty and WezTerm use for their tabs (dotfiles `keybindings.md`), so
+    /// the chord means "sibling tab" in every window on the screen. The nine
+    /// numbered rows live in a submenu — their shortcuts work from anywhere,
+    /// but listing them flat would bury the rest of the Go menu.
+    ///
+    /// Creating and closing tabs stays with yazi (`t`, `close`): those act on
+    /// the pane you are in, and ⌘W must remain the safe "close terminal panel".
+    func addTabItems(_ menu: NSMenu) {
+        let prev = NSMenuItem(title: "Previous Tab", action: #selector(tabPrevious), keyEquivalent: "[")
+        prev.keyEquivalentModifierMask = [.command, .shift]; prev.target = self
+        menu.addItem(prev)
+        let next = NSMenuItem(title: "Next Tab", action: #selector(tabNext), keyEquivalent: "]")
+        next.keyEquivalentModifierMask = [.command, .shift]; next.target = self
+        menu.addItem(next)
+        let numbered = NSMenuItem(title: "Tab", action: nil, keyEquivalent: "")
+        let numberedMenu = NSMenu(title: "Tab")
+        for n in 1...9 {
+            let item = NSMenuItem(title: "Tab \(n)", action: #selector(tabByNumber(_:)),
+                                  keyEquivalent: String(n))
+            item.keyEquivalentModifierMask = [.command]
+            item.tag = n
+            item.target = self
+            numberedMenu.addItem(item)
+        }
+        numbered.submenu = numberedMenu
+        menu.addItem(numbered)
     }
 
     /// Add a pane-resize menu item bound to ⌘⌃+arrow.

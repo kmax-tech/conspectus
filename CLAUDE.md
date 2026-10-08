@@ -14,7 +14,7 @@ The thread through every rule: **nothing important should be implicit.**
 - `Sources/conspectus/` — the AppKit shell: `main.swift` (bootstrap only),
   `Appearance.swift` (theming/rendering), `Panel.swift` (state + lifecycle)
   with themed extensions (`Panel+Layout`, `Panel+Focus`, `Panel+Preview`,
-  `Panel+Terminal`, `Panel+CheatSheet`), and `Icon.swift`. UI, processes,
+  `Panel+Terminal`, `Panel+CheatSheet`, `Panel+History`), and `Icon.swift`. UI, processes,
   FIFO — the side-effect edge of the system. Top-level code stays in
   `main.swift` (Swift requires it); stored properties stay in `Panel.swift`.
 - `Tests/ConspectusCoreTests/` — XCTest suite for the core, mirroring its files.

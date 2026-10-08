@@ -115,32 +115,40 @@ extension Panel {
     /// `panesync-<action>`). Works from outside yazi without a YAZI_ID. yazi
     /// then emits a hover event, so the preview updates by itself — same path
     /// as any keyboard navigation. In triple mode both panes follow.
+    /// Side effects: see `publishToYazi`.
+    func sendToYazi(_ path: String, action: String) {
+        publishToYazi("panesync-\(action)", body: path)
+    }
+
+    /// Publish one DDS message to the yazi pane(s) — the single channel the app
+    /// uses to drive yazi from AppKit (`panesync-cd` / `-reveal` for row
+    /// clicks, `panesync-history` for back/forward, `panesync-restart` for ⌘R).
     /// Side effects: spawns `ya` (directly via the cached `yaPath`; through a
     /// login shell only if resolution hasn't landed or failed).
-    func sendToYazi(_ path: String, action: String) {
+    func publishToYazi(_ message: String, body: String) {
         let p = Process()
         if let ya = yaPath {
             p.executableURL = URL(fileURLWithPath: ya)
-            p.arguments = ["pub-to", "0", "panesync-\(action)", "--str", path]
+            p.arguments = ["pub-to", "0", message, "--str", body]
         } else {
             // `ya` not resolved (yet) — pay the slow login shell rather than
             // drop the click.
             p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            p.arguments = ["-lc", "ya pub-to 0 panesync-\(action) --str \"$CONSPECTUS_CLICK_PATH\""]
+            p.arguments = ["-lc", "ya pub-to 0 \(message) --str \"$CONSPECTUS_CLICK_PATH\""]
             var env = ProcessInfo.processInfo.environment
-            env["CONSPECTUS_CLICK_PATH"] = path
+            env["CONSPECTUS_CLICK_PATH"] = body
             p.environment = env
         }
         p.terminationHandler = { proc in
             if proc.terminationStatus != 0 {
-                warn("conspectus: ya pub-to failed (exit \(proc.terminationStatus)) — "
-                     + "click-to-navigate needs the bundled conspectus.yazi plugin")
+                warn("conspectus: ya pub-to \(message) failed (exit \(proc.terminationStatus)) — "
+                     + "driving yazi from the app needs the bundled conspectus.yazi plugin")
             }
         }
         do {
             try p.run()
         } catch {
-            warn("conspectus: cannot spawn ya for click-to-navigate: \(error.localizedDescription)")
+            warn("conspectus: cannot spawn ya for \(message): \(error.localizedDescription)")
         }
     }
 

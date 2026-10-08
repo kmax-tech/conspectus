@@ -618,6 +618,83 @@ rivers; ragged right is correct for a column), and hanging punctuation / widow
 + orphan control — TextKit has no equivalent, and the preview scrolls
 continuously, so there are no pages to break.
 
+## 2026-08-17 — Hover, not selection: `o`/`Enter` and click-to-enter in the plugin
+
+**Problem:** Two navigation keys asked the shell `[ -d "$1" ]` whether to enter
+a directory. But yazi's `shell` passes the SELECTED files, falling back to the
+hovered one only when nothing is selected — so with a pending copy/cut, `Enter`
+on a folder opened the selection instead of descending. `l`/`→` had been fixed
+in the bundled plugin (which reads `cx.active.current.hovered`); `o`/`<Enter>`
+still had the bug. Separately, a mouse click on a folder row only moved the
+cursor there: yazi's preset `Entity:click` emits `reveal`, nothing else.
+
+**Solution:** One plugin entry, two modes — no argument = the `l`/`→` behavior
+(enter a dir, else focus the preview), `open` = the `o`/`<Enter>` behavior
+(enter a dir, else push the file into the IDE nvim or the opener). Both ask the
+hovered item. Click-to-enter *wraps* the preset component rather than replacing
+it:
+
+```lua
+local base = Entity.click
+Entity.click = function(self, event, up)
+	base(self, event, up)                     -- keeps reveal + right-click open
+	if not up and not event.is_middle and not event.is_right
+	   and self._file and self._file.cha.is_dir then
+		ya.emit("enter", {})                  -- acts on what reveal just hovered
+	end
+end
+```
+
+**Gotcha 1:** `ya emit plugin conspectus -- open` does NOT reach the plugin.
+`ya emit` already takes the action's arguments as a list, and the `--` gets
+eaten — `job.args[1]` arrives as `""`. Verified in a pty harness against a
+probe plugin: `-- open`, `-- -- open`, `"-- open"` and `--args=open` all fail,
+plain `ya emit plugin conspectus open` works. The keymap's *own* form
+(`run = "plugin conspectus -- open"`, no `ya emit`) does need the `--`.
+
+**Gotcha 2:** the preset components are globals (`Entity`, `Current`, `Parent`)
+that exist by the time `init.lua` runs, so a plugin's `setup()` can wrap them —
+but a version that renames or moves `Entity:click` would silently disable the
+feature, so the wrapper checks and `ya.notify`s instead of failing quietly.
+
+**Testing:** a pty harness (python `pty.fork` + `TIOCSWINSZ`) runs the real
+plugin against a scratch tree and asserts on the hover FIFO. Two details make
+or break it: the FIFO reader must open with `O_RDWR` (a read-only open hits EOF
+the moment yazi closes its write end, exactly what the app avoids by holding it
+open), and the pty needs a window size or yazi renders no rows and every key
+lands in an empty list. Mouse clicks are just SGR sequences: `\e[<0;COL;ROWM`
+press, `…m` release.
+
+**Follow-up (same day) — mouse back/forward:** the side buttons cannot be bound
+in yazi at all: it reads mouse input through crossterm, whose `MouseButton` is
+left/middle/right only, so buttons 4/5 never become an event a keymap could
+see. AppKit does deliver them (`otherMouseDown`, `buttonNumber` 3 and 4), so
+the translation belongs in the app: a local monitor publishes
+`panesync-history` with `"<direction> <peer>"` and the plugin runs yazi's
+`back`/`forward`. Addressing the peer matters — a broadcast would move *both*
+panes in split mode, and the pane the pointer sits over is the one meant. The
+same actions are in the Go menu (⌘[ / ⌘]), which doubles as the fallback for
+mice whose driver converts the side buttons into those chords before macOS
+sees them. Publishing a *command* rather than typing `H`/`L` into the pane is
+deliberate: a synthetic keystroke would be swallowed by an open filter prompt.
+
+**Follow-up — going up with the mouse (2026-08-20):** the column layout can only
+descend. The left column shows the *parent's* entries, so a click there enters a
+sibling directory (measured: `reveal` + `enter` in one tick lands in the clicked
+dir), and no click anywhere in the panes leaves the current level. The fix is the
+path bar every GUI file manager has: the bundled plugin wraps yazi's no-op
+`Header:click` and cds to the clicked segment of the cwd. Two things make the
+mapping non-obvious: the header renders `ya.readable_path`, so `~` stands for two
+real segments, and it truncates with `rtl = true`, so the *left* end is what
+disappears. Both are handled by counting segments **from the right** — the shown
+text is always a tail of the real path — and by refusing a click on a half-eaten
+first segment instead of guessing. `_right_width` is not available at click time
+(reflow builds a fresh Header, only `redraw` sets it), so the width budget is
+recomputed from `children_redraw(RIGHT)`. Keyboard twin: ⌘↑ (Go → Enclosing
+Folder) publishes `panesync-history` with direction `up`, which runs yazi's
+`leave` — the app never tracks a pane's cwd, so it cannot compute the parent
+itself.
+
 ## 2026-08-28 — Network mounts (CephFS via SMB): the preview must not touch them
 
 **Problem:** browsing the Ceph mount (`/Volumes/storage`, SMB) beachballed the
