@@ -52,7 +52,7 @@ public let conspectusTips: [Tip] = [
             + "Filter narrows, find jumps."),
     Tip(keys: "w", short: "task manager",
         long: "The task manager shows what yazi is still doing in the background — "
-            + "size calculations, copies, deletions — and why ⌘R may refuse to reload."),
+            + "size calculations, copies, deletions — and why a yazi re-theme may wait."),
     Tip(keys: "H / L", short: "history back",
         long: "History back and forward, like a browser; `z` jumps by frecency (zoxide) "
             + "and `Z` picks from the same database with fzf."),
@@ -60,8 +60,9 @@ public let conspectusTips: [Tip] = [
         long: "Pin the preview to the current file (yellow border) so it stays put while "
             + "the cursor moves on — the way to read a PDF and browse at once."),
     Tip(keys: "⌘R", short: "re-theme panes",
-        long: "Restart the yazi panes in place — the fix after a light↔dark switch. "
-            + "Tabs survive it; running background tasks block it."),
+        long: "Restart the yazi panes in place with the current theme — automatic after a "
+            + "light↔dark switch, ⌘R forces it. Tabs survive it; it waits while file tasks "
+            + "run or files are selected (the bar says which)."),
     Tip(keys: "=", short: "sync the panes",
         long: "`=` cd's the other pane to this one's directory — the quickest start for "
             + "a copy between two trees."),

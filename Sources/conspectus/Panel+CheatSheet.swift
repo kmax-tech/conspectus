@@ -64,7 +64,7 @@ let cheatSheetGroups: [CheatSheetGroup] = [
                     ("", "  (the only cross-directory view — yazi highlights marks"),
                     ("", "  only inside their own directory; the yellow badge just counts)"),
                     ("⌘J", "terminal panel (opens in yazi's dir)"),
-                    ("⌘R", "reload yazi panes — re-theme after light↔dark (refused while tasks run)"),
+                    ("⌘R", "re-theme yazi panes now (automatic on light↔dark; waits while tasks or a selection exist)"),
                     ("", "yazi tabs survive ⌘R and app restarts (bare start restores; [path] = clean)"),
                     ("⌘W", "close terminal panel"),
                     ("⌘/", "toggle shortcut bar"),

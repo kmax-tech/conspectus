@@ -270,7 +270,7 @@ day:
 `y→p` = yank then paste (copies across panes in split mode); `cc`/`cf`/`cn`
 copy the full path / filename / name without extension to the clipboard;
 `w` opens yazi's task manager (background copies, deletions, size sums — and
-why ⌘R may refuse to reload). Toggle the bar with **⌘/** (or View → Toggle
+why a yazi re-theme may wait). Toggle the bar with **⌘/** (or View → Toggle
 Shortcut Bar) — the choice persists across launches.
 
 **Yank mirror.** While yazi's yank buffer is non-empty, the bar's front slot
@@ -342,7 +342,7 @@ the active instance automatically — no focus tracking involved. Note that
   **bundled `plugins/conspectus.yazi`** is injected, and `init.lua` is
   generated to load your own init first. That plugin is the yazi-side half of
   conspectus: it pushes hovers into the FIFO, follows the app's `panesync-*`
-  messages (row clicks, back/forward, the ⌘R restart), keeps the tab session,
+  messages (row clicks, back/forward, the theme restart), keeps the tab session,
   decides `l` / `o` / `Enter` from the *hovered* entry, and makes a left click
   on a folder row enter it. Your
   normal yazi is untouched — and a machine with **no yazi config at all**
@@ -458,12 +458,17 @@ the active instance automatically — no focus tracking involved. Note that
   conspectus; yazi picks the matching flavor by querying our background (OSC 11)
   via the overlay `theme.toml` (`dark = catppuccin-mocha`, `light =
   catppuccin-latte`). Needs both flavors installed
-  (`ya pkg add yazi-rs/flavors:catppuccin-mocha`). One caveat: yazi queries
-  the background **only at startup**, so a live light↔dark switch leaves a
-  running yazi in the old flavor — **⌘R** restarts the yazi pane(s) in place
-  (cwd preserved, preview/nvim untouched) to re-flavor. Graceful by design:
-  the bundled plugin refuses the restart while file tasks (copy/move) are
-  running and says so in yazi — press ⌘R again when they're done.
+  (`ya pkg add yazi-rs/flavors:catppuccin-mocha`). yazi queries the
+  background **only at startup**, so a light↔dark switch cannot re-colour a
+  running yazi — conspectus therefore **relaunches the yazi pane(s) in
+  place** on every appearance switch (cwd and tabs preserved, preview/nvim
+  untouched); **⌘R** forces the same relaunch by hand. Graceful by design:
+  the relaunch waits until a pane is idle — the bundled plugin refuses while
+  file tasks (copy/move) run or files are selected (a relaunch would lose the
+  selection; the yank buffer survives via the session plugin), the shortcut
+  bar says what it is waiting for (`🎨 yazi re-theme waits for file tasks`),
+  and the app re-asks every 5 s. After 15 min of a busy pane it stops and
+  leaves a ⌘R note in the bar. The first refusal is also shown in yazi.
 - Tab session: the yazi **tabs survive** ⌘R *and* a full app restart — the
   bundled plugin snapshots every tab's dir plus the active tab on each `cd`
   (`~/.cache/conspectus/tabs-L|R`, per pane side) and reopens them on the

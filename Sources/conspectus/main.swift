@@ -116,6 +116,13 @@ let yankPrefix = "@YANK:"
 /// buffer. Prefixed, so it never collides with a hover.
 let selectedPrefix = "@SELECTED:"
 
+/// FIFO message prefix for a REFUSED theme restart — the plugin's answer to a
+/// `panesync-restart` it would not honour, as `@RESTART_REFUSED:<peer>:<reason>`
+/// (reason `tasks`, `selection`, or `error`; see ConspectusCore/Retheme.swift).
+/// Lets the shortcut bar say what the pending re-theme waits for. Prefixed, so
+/// it never collides with a hover.
+let restartRefusedPrefix = "@RESTART_REFUSED:"
+
 /// FIFO message prefix the ide editor's nvim writes on BufEnter — followed by
 /// the active file's absolute path (`@EDITOR_FILE:/abs/path`). conspectus
 /// previews it only while the editor pane is focused, so the preview follows

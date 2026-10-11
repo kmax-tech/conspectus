@@ -3,6 +3,30 @@
 Solved hard problems — the *why* the code can't show. Keep entries short:
 problem, solution, gotcha.
 
+## 2026-10-11 — Automatic yazi re-theme: wait for idle, address panes by peer
+
+**Problem:** After a light↔dark switch the app re-themed itself live but the
+yazi panes stayed in the old flavor until a manual ⌘R (yazi reads OSC 11 only
+at startup). Making ⌘R automatic naively would bounce a pane mid-copy or throw
+away a selection — the reason it had been manual.
+
+**Solution:** The appearance observer calls the same `requestYaziRetheme`
+as ⌘R. The plugin decides idleness (no running tasks, normal mode, nothing
+selected) and answers a refusal over the FIFO (`@RESTART_REFUSED:<peer>:
+<tasks|selection|error>`); the app re-asks every 5 s until a 15-min deadline
+and shows the reason in the shortcut bar. The yank buffer needs no guard: the
+session plugin (`sync_yanked`) persists it through the DDS, so a relaunched
+yazi gets it back.
+
+**Gotcha:** The restart message must address panes individually (body
+`"<L|R|*> <ask|quiet>"`). With a plain broadcast, an idle pane restarts on
+the first attempt and is then bounced AGAIN on every retry meant for its busy
+sibling. `processTerminated` relaunches a pane only inside a 4-s arm window
+per attempt, so a manual `q` between retries still quits normally. The mode
+check fails loud: missing `is_select`/`is_unset` fields are `error` (stop,
+tell the user), never "not in use" — a silent pass there would restart a
+pane in visual mode after the next yazi API drift.
+
 ## 2026-07-30 — Tab session: yazi 26 ignores tab_create's positional path
 
 **Problem:** Restoring saved tabs via `emit("tab_create", { dir })` silently
@@ -83,9 +107,10 @@ in the old flavor — is solved by ⌘R (2026-07-30): a DDS `panesync-restart`
 asks each yazi to quit-if-idle (the plugin refuses while file tasks run —
 quitting would abort copies), and an armed window in `processTerminated` turns
 that quit into an in-place relaunch (cwd from --cwd-file / last hover) instead
-of the normal left-pane-quit-closes-app path. Deliberately manual, not
-automatic on the appearance notification: only the user knows whether NOW is a
-good moment to bounce the panes.
+of the normal left-pane-quit-closes-app path. First shipped as a manual ⌘R
+only ("only the user knows whether NOW is a good moment"); since 2026-10-11
+the appearance switch triggers it automatically and the plugin's idle check
+is the judge of "a good moment" — see that entry.
 
 ## 2026-07-26 — IDE mode: send files to one nvim instead of spawning editors
 

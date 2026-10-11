@@ -55,18 +55,80 @@ extension Panel {
         window.makeFirstResponder(term)
     }
 
-    /// ⌘R — theme reload: ask every yazi pane (DDS broadcast) to quit so it
-    /// can be relaunched with the CURRENT theme. yazi picks its Catppuccin
-    /// flavor only at startup (OSC 11), so a live light↔dark switch leaves a
-    /// running yazi in the old flavor — this is the graceful nudge. The
-    /// bundled plugin refuses while file tasks run (quitting would abort
-    /// them) and says so in yazi; then nothing restarts and the arm window
-    /// below just expires. Side effects: broadcasts over the DDS, arms the
-    /// restart window.
-    @objc func reloadYaziPanes() {
+    /// ⌘R — theme reload on demand; the appearance observer calls the same
+    /// path automatically.
+    @objc func reloadYaziPanes() { requestYaziRetheme() }
+
+    /// Theme reload: relaunch each yazi pane with the CURRENT theme. yazi
+    /// picks its Catppuccin flavor only at startup (OSC 11), so a light↔dark
+    /// switch leaves a running yazi in the old flavor. The relaunch waits for
+    /// the pane to be idle: the bundled plugin refuses while file tasks run or
+    /// a selection exists (and reports why over the FIFO); the app re-asks
+    /// every few seconds until the deadline, then stops and leaves a ⌘R note
+    /// in the shortcut bar. Preview and nvim are untouched. Side effects:
+    /// resets the pending set and deadline, sends the first attempt.
+    func requestYaziRetheme() {
+        yaziRethemePending = ["L"]
+        if term2 != nil { yaziRethemePending.insert("R") }
+        yaziRethemeDeadline = Date().addingTimeInterval(yaziRethemeTimeout)
+        yaziRethemeRefusals = [:]
+        yaziRethemeNote = nil
+        logEvent("yazi theme reload requested for \(yaziRethemePending.sorted())")
+        attemptYaziRetheme(firstAttempt: true)
+    }
+
+    /// One attempt: arm the restart window, ask the pending pane(s) over the
+    /// DDS (body "<L|R|*> <ask|quiet>" — the plugin ignores a target that is
+    /// not its own, so a pane that already relaunched is not bounced again),
+    /// and schedule the next attempt. A pane that quits is relaunched by
+    /// `processTerminated`, which clears it from the pending set; one that
+    /// refuses answers `@RESTART_REFUSED` (`yaziRethemeRefused`). Past the
+    /// deadline the app stops asking and says so. Side effects: DDS publish,
+    /// retry timer, shortcut bar re-render, stderr warning on give-up.
+    func attemptYaziRetheme(firstAttempt: Bool) {
+        yaziRethemeRetry?.cancel()
+        yaziRethemeRetry = nil
+        if term2 == nil { yaziRethemePending.remove("R") }   // split closed meanwhile
+        guard !yaziRethemePending.isEmpty else { styleHintBar(); return }
+        if Date() >= yaziRethemeDeadline {
+            yaziRethemeNote = "theme changed — ⌘R re-themes yazi when you are ready"
+            warn("conspectus: yazi theme reload gave up after \(Int(yaziRethemeTimeout / 60)) min "
+                 + "(pane(s) \(yaziRethemePending.sorted()) stayed busy) — press ⌘R when idle")
+            yaziRethemePending = []
+            styleHintBar()
+            return
+        }
         yaziRestartArmedUntil = Date().addingTimeInterval(4)   // idle quits arrive well within this
-        sendToYazi("-", action: "restart")                     // body unused by the subscriber
-        logEvent("yazi theme reload requested")
+        let target = yaziRethemePending.count == 2 ? "*" : yaziRethemePending.first!
+        publishToYazi("panesync-restart", body: "\(target) \(firstAttempt ? "ask" : "quiet")")
+        let retry = DispatchWorkItem { [weak self] in self?.attemptYaziRetheme(firstAttempt: false) }
+        yaziRethemeRetry = retry
+        DispatchQueue.main.asyncAfter(deadline: .now() + yaziRethemeRetryInterval, execute: retry)
+        styleHintBar()
+    }
+
+    /// FIFO handler for `@RESTART_REFUSED:<peer>:<reason>` — the plugin would
+    /// not quit. `tasks`/`selection` are transient: remember the reason for
+    /// the bar, the scheduled retry does the rest. `error` (the plugin cannot
+    /// read yazi's state) is final for that pane: stop asking, say so. An
+    /// answer from a pane that is not pending is a protocol slip — warned,
+    /// not acted on. Side effects: pending set, bar re-render, stderr.
+    func yaziRethemeRefused(_ body: String) {
+        let parts = body.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2, yaziRethemePending.contains(parts[0]) else {
+            warn("conspectus: unexpected @RESTART_REFUSED '\(body)' — ignored")
+            return
+        }
+        let (peer, reason) = (parts[0], parts[1])
+        if reason == rethemeRefusalError {
+            yaziRethemePending.remove(peer)
+            yaziRethemeNote = "theme reload failed — plugin could not read yazi's state; ⌘R to retry"
+            warn("conspectus: yazi pane \(peer) refused the theme reload: cannot read task/selection state")
+        } else {
+            yaziRethemeRefusals[peer] = reason
+        }
+        logEvent("yazi theme reload refused by \(peer): \(reason)")
+        styleHintBar()
     }
 
     /// Replace a quit yazi with a fresh instance in the SAME pane (the armed
@@ -94,6 +156,14 @@ extension Panel {
                                  "CONSPECTUS_TABS_RESTORE": "1"],
                rememberCwd: left, startIn: dir)
         window.makeFirstResponder(fresh)
+        // This pane is re-themed; the last one to go ends the retries.
+        yaziRethemePending.remove(left ? "L" : "R")
+        yaziRethemeRefusals[left ? "L" : "R"] = nil
+        if yaziRethemePending.isEmpty {
+            yaziRethemeRetry?.cancel()
+            yaziRethemeRetry = nil
+            yaziRethemeNote = nil
+        }
         // A fresh yazi starts with an empty yank buffer — drop the bar's copy
         // of the old one. If the session plugin restores the buffer, its yank
         // event refills the bar; stale is the one state this must never show.

@@ -14,9 +14,10 @@
 --   2. panesync: follow the app's DDS messages — `panesync-cd` / `-reveal`
 --      (a row clicked in the preview listing, or the user's `=` key),
 --      `panesync-history` (the mouse's back/forward buttons, ⌘[ / ⌘]),
---      `panesync-restart` (⌘R re-theme), `panesync-selected` (⌘L asks for
---      the selection, answered over the FIFO), plus `conspectus-open` from the
---      shell. Guarded by $CONSPECTUS_PEER, which only conspectus sets, so a
+--      `panesync-restart` (re-theme after light↔dark and ⌘R; refused over
+--      the FIFO as `@RESTART_REFUSED:…` while the pane is busy),
+--      `panesync-selected` (⌘L asks for the selection, answered over the
+--      FIFO), plus `conspectus-open` from the shell. Guarded by $CONSPECTUS_PEER, which only conspectus sets, so a
 --      plain terminal yazi never follows.
 --   3. Tab session: snapshot this pane's tabs on every cd and restore them
 --      when the app asks, so tabs survive ⌘R and app restarts.
@@ -358,14 +359,39 @@ function M:setup()
 				f:close()
 			end
 		end)
-		-- panesync-restart (⌘R): quit so the app can relaunch this pane with
-		-- the fresh theme — yazi picks its Catppuccin flavor only at startup,
-		-- so a live light↔dark switch needs a restart to re-flavor. Graceful
-		-- by contract: NEVER with file tasks running (quitting would abort
-		-- copies/moves) — then just say so and stay alive; the app's restart
-		-- window simply expires. If the tasks API ever drifts, fail SAFE:
-		-- report and don't quit.
-		ps.sub_remote("panesync-restart", function(_)
+		-- panesync-restart: quit so the app can relaunch this pane with the
+		-- fresh theme — yazi picks its Catppuccin flavor only at startup, so a
+		-- light↔dark switch needs a restart to re-flavor. Sent by the app on
+		-- every appearance change and on ⌘R, body "<target> <ask|quiet>":
+		-- target is a peer ("L"/"R") or "*", so a pane that already restarted
+		-- is not bounced again while its sibling is still waiting; "ask" is
+		-- the first attempt (a refusal is shown in yazi), "quiet" a retry.
+		-- Graceful by contract — NEVER while the pane is in use:
+		--   · file tasks running (quitting would abort copies/moves),
+		--   · select/unset mode or marked files (a relaunch loses the
+		--     selection; the yank buffer survives via the session plugin,
+		--     the tabs via ours).
+		-- A refusal goes back to the app over the FIFO as
+		-- `@RESTART_REFUSED:<peer>:<tasks|selection|error>`, so the shortcut
+		-- bar can say what it is waiting for and the app can retry. If the
+		-- tasks/mode API ever drifts, fail SAFE: report `error`, don't quit.
+		ps.sub_remote("panesync-restart", function(body)
+			if type(body) ~= "string" then return end
+			local target, how = body:match("^([LR*]) (%a+)$")
+			if not target or (target ~= peer and target ~= "*") then return end
+			local function refuse(reason, text)
+				local okf2, fifo = pcall(function() return os.getenv("QLPEEK_FIFO") end)
+				if okf2 and fifo and #fifo > 0 then
+					local f = io.open(fifo, "a")
+					if f then
+						f:write("@RESTART_REFUSED:" .. peer .. ":" .. reason .. "\n")
+						f:close()
+					end
+				end
+				if how == "ask" then
+					ya.notify({ title = "conspectus", timeout = 3, level = "warn", content = text })
+				end
+			end
 			-- Busy = tasks announced but not yet finished. Field names drifted
 			-- across yazi versions (26.x: summary/success/failed, 25.x:
 			-- progress/succ/fail) — try both before giving up.
@@ -380,13 +406,29 @@ function M:setup()
 				end)
 			end
 			if not ok3 then
-				ya.notify({ title = "conspectus", timeout = 3, level = "warn",
-					content = "theme reload: cannot read task state — not restarting" })
+				refuse("error", "theme reload: cannot read task state — not restarting")
 				return
 			end
 			if busy then
-				ya.notify({ title = "conspectus", timeout = 3, level = "warn",
-					content = "theme reload postponed — file tasks running (⌘R again when idle)" })
+				refuse("tasks", "theme reload postponed — file tasks running (retries when idle)")
+				return
+			end
+			-- In use = select/unset mode (v/V) or files marked for a pending
+			-- y/x/d. Missing mode fields mean the API drifted — error, never
+			-- "not in use".
+			local ok4, in_use = pcall(function()
+				local m = cx.active.mode
+				if m.is_select == nil or m.is_unset == nil then error("tab::Mode fields missing") end
+				if m.is_select or m.is_unset then return true end
+				for _ in pairs(cx.active.selected) do return true end
+				return false
+			end)
+			if not ok4 then
+				refuse("error", "theme reload: cannot read selection state — not restarting")
+				return
+			end
+			if in_use then
+				refuse("selection", "theme reload postponed — selection active (retries when cleared)")
 				return
 			end
 			save_tabs()   -- final snapshot: catch tab ops since the last cd

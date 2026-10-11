@@ -152,11 +152,28 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     weak var lastFocusedTerm: LocalProcessTerminalView?
     weak var lastTopTerm: LocalProcessTerminalView?   // ⌥↑ returns here from the terminal panel
     /// While `Date()` is before this, a yazi pane quitting is a REQUESTED
-    /// theme-reload restart (⌘R) — relaunch it in place instead of the normal
-    /// quit handling (left pane: close app). A short window, so a restart
-    /// refused by the plugin (busy tasks) simply expires and a later manual
-    /// `q` quits normally. Main thread only.
+    /// theme-reload restart — relaunch it in place instead of the normal
+    /// quit handling (left pane: close app). A short window per attempt, so a
+    /// restart refused by the plugin simply expires and a later manual `q`
+    /// quits normally. Main thread only.
     var yaziRestartArmedUntil = Date.distantPast
+    /// Panes still owed a theme restart ("L"/"R"). Set by
+    /// `requestYaziRetheme` (appearance switch, ⌘R); a peer leaves the set
+    /// when its pane relaunches. The plugin refuses while a pane is in use,
+    /// so `attemptYaziRetheme` re-asks every `yaziRethemeRetryInterval` until
+    /// `yaziRethemeDeadline`, then gives up and leaves ⌘R to the user.
+    /// Main thread only.
+    var yaziRethemePending: Set<String> = []
+    var yaziRethemeDeadline = Date.distantPast
+    var yaziRethemeRetry: DispatchWorkItem?
+    /// Reason word of each pending pane's last refusal (`@RESTART_REFUSED`) —
+    /// what the shortcut bar says it is waiting for. Main thread only.
+    var yaziRethemeRefusals: [String: String] = [:]
+    /// Standing shortcut-bar note after the app stopped asking (deadline
+    /// passed, or the plugin could not read yazi's state): the re-theme is
+    /// now the user's ⌘R. nil = none. Cleared by the next relaunch.
+    /// Main thread only.
+    var yaziRethemeNote: String?
     /// Yazi's yank buffer as last announced over the FIFO (`@YANK:`); nil when
     /// empty. Shown in the shortcut bar in place of the tip of the day.
     /// Cleared on pane relaunch — a fresh yazi starts with an empty buffer,
@@ -170,6 +187,12 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     let minPane: CGFloat = 300
     /// How far ⌘⌃←/→ move a divider per keystroke (points).
     let paneResizeStep: CGFloat = 60
+    /// Theme reload of the yazi panes: how often the app re-asks a busy pane,
+    /// and how long before it stops and leaves ⌘R to the user. The automatic
+    /// switch (sunrise/sunset) usually meets an idle pane; a selection or a
+    /// long copy is what the retries wait out.
+    let yaziRethemeRetryInterval: TimeInterval = 5
+    let yaziRethemeTimeout: TimeInterval = 15 * 60
     /// Bottom terminal panel: initial and minimum height.
     let termPanelHeight: CGFloat = 240
     let minTermHeight: CGFloat = 120
@@ -402,7 +425,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         }
     }
 
-    /// Re-theme live when the user toggles the macOS appearance.
+    /// Re-theme live when the macOS appearance changes: the app's own chrome
+    /// at once, the yazi panes by an in-place relaunch as soon as each is idle
+    /// (`requestYaziRetheme`) — yazi fixes its flavor at startup, so nothing
+    /// short of a relaunch re-colours it.
     func observeAppearanceChanges() {
         DistributedNotificationCenter.default.addObserver(
             forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
@@ -418,6 +444,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                 self.styleTermPanes()
                 self.updateFocusBorders()
                 if let p = self.lastPath { self.update(p) }
+                self.requestYaziRetheme()
             }
         }
     }

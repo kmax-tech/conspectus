@@ -205,12 +205,21 @@ extension Panel {
         let keyColor = nsColor(pal.ansi[3])                          // yellow accent
         let labelColor = nsColor(pal.fg).withAlphaComponent(0.8)
         let s = NSMutableAttributedString()
-        // Front slot: yank buffer while one exists, tip of the day otherwise —
-        // the bar truncates at the tail on narrow windows, and the one line
-        // that changes is the one worth keeping visible. The yank line mirrors
-        // yazi's badge colors (green = copied, red = cut) and says WHAT is in
-        // the buffer, which yazi itself no longer shows once you navigate away.
-        if let yank = yankState, let summary = yankHintSummary(yank) {
+        // Front slot: a pending yazi re-theme first (it waits on something the
+        // user can finish or clear), then the yank buffer while one exists,
+        // the tip of the day otherwise — the bar truncates at the tail on
+        // narrow windows, and the one line that changes is the one worth
+        // keeping visible. The yank line mirrors yazi's badge colors (green =
+        // copied, red = cut) and says WHAT is in the buffer, which yazi itself
+        // no longer shows once you navigate away.
+        if let note = yaziRethemeNote {
+            s.append(NSAttributedString(string: "🎨 " + note + "   ·   ",
+                                        attributes: [.font: font, .foregroundColor: keyColor]))
+        } else if !yaziRethemePending.isEmpty {
+            let waiting = rethemeWaitSummary(pending: yaziRethemePending, refusals: yaziRethemeRefusals)
+            s.append(NSAttributedString(string: "🎨 " + waiting + "   ·   ",
+                                        attributes: [.font: font, .foregroundColor: keyColor]))
+        } else if let yank = yankState, let summary = yankHintSummary(yank) {
             let modeColor = nsColor(pal.ansi[yank.isCut ? 1 : 2])
             s.append(NSAttributedString(string: "⧉ " + summary,
                                         attributes: [.font: font, .foregroundColor: modeColor]))

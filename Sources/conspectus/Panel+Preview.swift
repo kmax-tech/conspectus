@@ -64,6 +64,9 @@ extension Panel {
                     } else if s.hasPrefix(yankPrefix) {
                         let body = String(s.dropFirst(yankPrefix.count))
                         DispatchQueue.main.async { self?.yankChanged(body) }
+                    } else if s.hasPrefix(restartRefusedPrefix) {
+                        let body = String(s.dropFirst(restartRefusedPrefix.count))
+                        DispatchQueue.main.async { self?.yaziRethemeRefused(body) }
                     } else if s.hasPrefix(editorFilePrefix) {
                         let path = String(s.dropFirst(editorFilePrefix.count))
                         DispatchQueue.main.async { self?.editorFileHover(path) }
@@ -130,7 +133,8 @@ extension Panel {
 
     /// Publish one DDS message to the yazi pane(s) — the single channel the app
     /// uses to drive yazi from AppKit (`panesync-cd` / `-reveal` for row
-    /// clicks, `panesync-history` for back/forward, `panesync-restart` for ⌘R).
+    /// clicks, `panesync-history` for back/forward, `panesync-restart` for the
+    /// theme reload).
     /// Side effects: spawns `ya` (directly via the cached `yaPath`; through a
     /// login shell only if resolution hasn't landed or failed).
     func publishToYazi(_ message: String, body: String) {
