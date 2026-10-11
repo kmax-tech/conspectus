@@ -60,7 +60,7 @@ extension Panel {
                         DispatchQueue.main.async { self?.activateFromShell() }
                     } else if s.hasPrefix(selectedPrefix) {
                         let body = String(s.dropFirst(selectedPrefix.count))
-                        DispatchQueue.main.async { self?.showSelectedList(parseSelectedPaths(body)) }
+                        DispatchQueue.main.async { self?.selectedArrived(parseSelectedPaths(body)) }
                     } else if s.hasPrefix(yankPrefix) {
                         let body = String(s.dropFirst(yankPrefix.count))
                         DispatchQueue.main.async { self?.yankChanged(body) }

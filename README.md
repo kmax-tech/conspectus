@@ -250,7 +250,9 @@ opens in its default app), **Open With** (LaunchServices' list, the same one
 Finder shows, default app first, plus Other…), **Reveal in Finder** / **Open in
 Finder**, **Get Info** (Finder's info window, via Apple Events — macOS asks
 once for Automation permission), **Share**, **Services** (incl. Quick Actions
-that take files), **Copy Path** / **Copy Name**, and **Rename…** / **Move to
+that take files), **Alfred Actions…** (Alfred's Universal Actions panel for
+the file, via its AppleScript `action` command; only shown with Alfred
+installed), **Copy Path** / **Copy Name**, and **Rename…** / **Move to
 Trash**. The last two run *inside yazi* (`rename` / `remove --hovered` on the
 clicked item, never on a selection you left elsewhere), so there is one task
 system and one confirmation. In a yazi pane the right-click first moves yazi's
@@ -260,6 +262,17 @@ reports as hovered. Not offered (yet): Tags, Compress, Duplicate, Make Alias.
 **Selecting text:** click into the preview to focus it, then drag to select
 and **⌘C** to copy — in the PDF view and in the text/markdown preview alike
 (**⌘A** selects all). ⌘C / ⌘V also copy/paste in the terminal panes.
+
+**⌘C copies the file** in a yazi pane, Finder-style: with no terminal text
+selected, the file under the cursor goes onto the pasteboard as a file URL
+(plus its path as text), so ⌘V in Finder pastes the file and a text field gets
+the path. yazi is then asked for its *marked* selection and a non-empty answer
+replaces the pasteboard a few milliseconds later (yazi has no selection event,
+so it is pulled). The hovered file is written first so that **Alfred's
+selection hotkey**, which simulates ⌘C in apps it cannot read, always finds a
+file — for the marked set in Alfred, use yazi's `E a` (dotfiles keymap: Alfred
+Actions for the selection or the hovered item, works in a bare terminal yazi
+too). Terminal text selected by dragging still copies as text.
 
 ## Bottom terminal (⌘J)
 

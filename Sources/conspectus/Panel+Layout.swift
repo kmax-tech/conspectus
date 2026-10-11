@@ -374,10 +374,15 @@ extension Panel {
         // (a key equivalent needs a menu item), so selection couldn't be copied.
         // Cut/Paste are included for completeness — AppKit auto-disables them on
         // the read-only previews and enables ⌘V paste in the terminal panes.
+        // Copy is the one exception to target-nil: in a yazi pane without a
+        // text selection it copies the FILE, Finder-style (copySmart); it
+        // forwards to the first responder everywhere else.
         let editItem = NSMenuItem(); main.addItem(editItem)
         let editMenu = NSMenu(title: "Edit")
         editMenu.addItem(NSMenuItem(title: "Cut",   action: #selector(NSText.cut(_:)),   keyEquivalent: "x"))
-        editMenu.addItem(NSMenuItem(title: "Copy",  action: #selector(NSText.copy(_:)),  keyEquivalent: "c"))
+        let copy = NSMenuItem(title: "Copy", action: #selector(copySmart(_:)), keyEquivalent: "c")
+        copy.target = self
+        editMenu.addItem(copy)
         editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
         editMenu.addItem(NSMenuItem.separator())
         editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))

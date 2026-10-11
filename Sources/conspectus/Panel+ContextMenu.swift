@@ -19,6 +19,11 @@ import UniformTypeIdentifiers
 // the hovered item only, so there is one task system, one confirmation and
 // one place that knows about selections. Finder entries deliberately left
 // out for now (TODO.md): Tags, Compress, Duplicate, Make Alias.
+//
+// Also here, because it is the same Finder-semantics territory: ⌘C in a yazi
+// pane copies the FILE (as Finder does), not terminal text, so Finder pastes
+// it and Alfred's selection hotkey sees a file; and "Alfred Actions…" opens
+// Alfred's Universal Actions panel directly (its AppleScript `action`).
 
 /// A right-click in a yazi pane waiting for yazi to report the clicked row as
 /// hovered. `fallback` fires if no hover arrives (the row was already the
@@ -153,6 +158,11 @@ extension Panel: NSServicesMenuRequestor {
         let services = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
         services.submenu = servicesMenu            // AppKit fills it when shown (NSApp.servicesMenu)
         menu.addItem(services)
+        // Only with Alfred installed — its absence is the normal case on a
+        // machine without Alfred, so no warning, just no item (deliberate).
+        if NSWorkspace.shared.urlForApplication(withBundleIdentifier: alfredBundleID) != nil {
+            add("Alfred Actions…", #selector(contextAlfred(_:)), me)
+        }
         menu.addItem(.separator())
         add("Copy Path", #selector(contextCopyPath(_:)), me)
         add("Copy Name", #selector(contextCopyName(_:)), me)
@@ -254,22 +264,82 @@ extension Panel: NSServicesMenuRequestor {
 
     /// Get Info: Finder's info window, via Apple Events (there is no AppKit
     /// API for it). The first use prompts for Automation permission; a denial
-    /// surfaces here as an error. Side effects: activates Finder, stderr.
+    /// surfaces as an error. Side effects: activates Finder, stderr.
     @objc func contextGetInfo(_ sender: Any?) {
         guard let t = target(of: sender) else { return }
-        let escaped = t.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        let source = """
-        tell application "Finder"
-            activate
-            open information window of (POSIX file "\(escaped)" as alias)
-        end tell
-        """
-        var error: NSDictionary?
+        runAppleScript(finderGetInfoScript(path: t.path), what: "Get Info for \(t.path)")
+    }
+
+    /// Alfred Actions…: Alfred's Universal Actions panel for the file — the
+    /// same panel its selection hotkey shows in Finder, but told the file
+    /// directly instead of guessing a "selection" from a terminal. Side
+    /// effects: Alfred comes forward, stderr on failure.
+    @objc func contextAlfred(_ sender: Any?) {
+        guard let t = target(of: sender) else { return }
+        runAppleScript(alfredActionsScript(paths: [t.path]), what: "Alfred actions for \(t.path)")
+    }
+
+    /// Compile and run one AppleScript; failures (no Automation permission,
+    /// app missing, script error) are warned with Apple's error record, never
+    /// swallowed. Side effects: whatever the script does, stderr.
+    func runAppleScript(_ source: String, what: String) {
         guard let script = NSAppleScript(source: source) else {
-            warn("conspectus: Get Info — could not compile the Finder script"); return
+            warn("conspectus: \(what) — could not compile the AppleScript"); return
         }
+        var error: NSDictionary?
         script.executeAndReturnError(&error)
-        if let error = error { warn("conspectus: Get Info for \(t.path) failed: \(error)") }
+        if let error = error { warn("conspectus: \(what) failed: \(error)") }
+    }
+
+    // MARK: ⌘C — Finder semantics in a yazi pane.
+
+    /// Edit → Copy (⌘C). In a yazi pane with terminal text selected (drag),
+    /// that text is copied as before. With no text selected the FILE under
+    /// the cursor goes onto the pasteboard as a file URL (plus its path as
+    /// text): Finder's ⌘V pastes the file, text fields get the path, and
+    /// Alfred's selection hotkey — which simulates ⌘C in apps it cannot read
+    /// — sees a file. Then yazi is asked for its MARKED selection (it has no
+    /// selection event, so it is pulled), and a non-empty answer replaces
+    /// the pasteboard a few ms later; the hovered file is written first so an
+    /// immediate reader (Alfred) never finds the pasteboard empty.
+    /// Everywhere else the first responder's own copy: runs (previews, the
+    /// terminal panel, nvim). Side effects: pasteboard, DDS publish.
+    @objc func copySmart(_ sender: Any?) {
+        if let t = window.firstResponder as? LocalProcessTerminalView, t === term || t === term2 {
+            if t.selectionActive { t.copy(sender ?? self); return }
+            copyFilesToPasteboard([lastPath ?? currentYaziDir()])
+            selectionConsumer = { [weak self] paths in
+                guard !paths.isEmpty else { return }       // nothing marked: the hovered file stands
+                self?.copyFilesToPasteboard(paths)
+            }
+            publishToYazi("panesync-selected", body: t === term2 ? "R" : "L")
+            return
+        }
+        NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: sender)
+    }
+
+    /// Put files on the general pasteboard the way Finder does (file URLs),
+    /// with their paths as the text flavor. Side effects: replaces the
+    /// pasteboard, stderr on refusal.
+    func copyFilesToPasteboard(_ paths: [String]) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        if !pb.writeObjects(paths.map { URL(fileURLWithPath: $0) as NSURL }) {
+            warn("conspectus: pasteboard refused \(paths.count) file URL(s)")
+        }
+        pb.setString(paths.joined(separator: "\n"), forType: .string)
+        logEvent("copied \(paths.count) file(s) to the pasteboard")
+    }
+
+    /// `@SELECTED` answer from yazi: a one-shot consumer (⌘C) takes it,
+    /// otherwise it is ⌘L's list in the preview.
+    func selectedArrived(_ paths: [String]) {
+        if let consume = selectionConsumer {
+            selectionConsumer = nil
+            consume(paths)
+        } else {
+            showSelectedList(paths)
+        }
     }
 
     @objc func contextCopyPath(_ sender: Any?) {

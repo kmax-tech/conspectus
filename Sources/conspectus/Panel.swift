@@ -175,6 +175,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// The file the open context menu is about — what the Services menu's
     /// `validRequestor` / `writeSelection` hand to a service. Main thread only.
     var contextMenuPath: String?
+    /// One-shot taker of the next `@SELECTED` answer (⌘C wants the marked
+    /// files on the pasteboard); nil means the answer is ⌘L's list.
+    /// Main thread only.
+    var selectionConsumer: (([String]) -> Void)?
     /// The one Services submenu AppKit fills (registered as NSApp.servicesMenu),
     /// re-parented into every context menu.
     let servicesMenu = NSMenu(title: "Services")
