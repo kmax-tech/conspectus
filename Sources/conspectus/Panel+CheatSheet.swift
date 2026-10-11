@@ -73,6 +73,8 @@ let cheatSheetGroups: [CheatSheetGroup] = [
                     ("⌘⌃← / ⌘⌃→", "resize: narrow / widen the focused pane (WezTerm-style)"),
                     ("l / →", "on a file: focus the preview (h / ← there returns to yazi)"),
                     ("click", "focus the clicked pane (border follows); on a folder row: enter it"),
+                    ("right-click", "Finder's file menu for the item under the mouse: Open, Open With,"),
+                    ("", "  Reveal/Get Info, Share, Services, copy path/name; Rename/Trash run in yazi"),
                     ("click path", "the cwd in the header is a breadcrumb — click a segment to"),
                     ("", "  cd there (the only mouse way UP; columns only descend)"),
                     ("⌘↑", "enclosing folder (Go menu) — one level up, like in Finder"),

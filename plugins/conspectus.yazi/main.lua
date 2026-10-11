@@ -17,7 +17,8 @@
 --      `panesync-restart` (re-theme after light↔dark and ⌘R; refused over
 --      the FIFO as `@RESTART_REFUSED:…` while the pane is busy),
 --      `panesync-selected` (⌘L asks for the selection, answered over the
---      FIFO), plus `conspectus-open` from the shell. Guarded by $CONSPECTUS_PEER, which only conspectus sets, so a
+--      FIFO), `panesync-act` (the right-click menu's rename/trash, run on
+--      the hovered item), plus `conspectus-open` from the shell. Guarded by $CONSPECTUS_PEER, which only conspectus sets, so a
 --      plain terminal yazi never follows.
 --   3. Tab session: snapshot this pane's tabs on every cd and restore them
 --      when the app asks, so tabs survive ⌘R and app restarts.
@@ -28,6 +29,11 @@
 --      the mouse can go UP as well as down (the columns only ever go down).
 
 local M = {}
+
+-- A file operation the app's context menu asked for (`panesync-act`) that
+-- waits for its path to become the hovered item — see the handler below.
+-- { cmd = "rename"|"remove", path = "<abs path>" } or nil.
+local pending_act = nil
 
 local get_hovered = ya.sync(function()
 	local h = cx.active.current.hovered
@@ -157,6 +163,16 @@ function M:setup()
 			if f then
 				f:write(path .. "\n")
 				f:close()
+			end
+			-- A context-menu operation waits for exactly its file to be the
+			-- hovered one; any other hover cancels it (never act on a
+			-- neighbour because a reveal landed elsewhere).
+			if pending_act then
+				local act = pending_act
+				pending_act = nil
+				if act.path == path then
+					(ya.emit or ya.mgr_emit)(act.cmd, { hovered = true })
+				end
 			end
 		end)
 
@@ -338,6 +354,41 @@ function M:setup()
 		ps.sub_remote("panesync-reveal", function(body)
 			if type(body) == "string" and #body > 0 then
 				emit("reveal", { body })
+			end
+		end)
+		-- panesync-act: the app's right-click menu hands a file operation to
+		-- yazi instead of doing it itself — rename and trash stay yazi's (one
+		-- task system, one confirmation, one place that knows the selection).
+		-- Body "<peer> <rename|remove> <path>". The command runs on the
+		-- HOVERED item only (`--hovered`), never on a selection the user left
+		-- elsewhere — and only once that item IS the path: if it is hovered
+		-- already (right-click in this pane), run now; otherwise reveal it
+		-- (listing rows live in a child directory) and let the resulting
+		-- hover run it (see the hover handler), so a reveal that lands
+		-- elsewhere cancels instead of renaming or trashing a neighbour.
+		ps.sub_remote("panesync-act", function(body)
+			if type(body) ~= "string" then return end
+			local target, cmd, path = body:match("^([LR]) (%a+) (.+)$")
+			if not target or target ~= peer then return end
+			if cmd ~= "rename" and cmd ~= "remove" then
+				ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+					content = "unknown context action '" .. cmd .. "'" })
+				return
+			end
+			local ok5, hovered = pcall(function()
+				local h = cx.active.current.hovered
+				return h and tostring(h.url) or nil
+			end)
+			if not ok5 then
+				ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+					content = "context action: cannot read the hovered item — not running " .. cmd })
+				return
+			end
+			if hovered == path then
+				emit(cmd, { hovered = true })
+			else
+				pending_act = { cmd = cmd, path = path }
+				emit("reveal", { path })
 			end
 		end)
 		-- panesync-selected (⌘L): answer the app's pull request for this

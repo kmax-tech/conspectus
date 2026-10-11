@@ -71,6 +71,7 @@ extension Panel {
                         let path = String(s.dropFirst(editorFilePrefix.count))
                         DispatchQueue.main.async { self?.editorFileHover(path) }
                     } else if !s.isEmpty {
+                        DispatchQueue.main.async { self?.hoverArrived(s) }   // a pending right-click menu
                         self?.update(s)
                     }
                 }

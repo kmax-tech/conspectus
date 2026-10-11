@@ -56,8 +56,11 @@ extension Panel {
     /// directory before the first hover.
     ///
     /// Side effects: activates Finder.
-    @objc func revealInFinder() {
-        let path = lastPath ?? currentYaziDir()
+    @objc func revealInFinder() { revealPathInFinder(lastPath ?? currentYaziDir()) }
+
+    /// Reveal/open one path in Finder (⌥⌘R on the hovered item, the context
+    /// menu on the clicked one). Side effects: activates Finder, stderr.
+    func revealPathInFinder(_ path: String) {
         guard FileManager.default.fileExists(atPath: path) else {
             warn("reveal: no such path \(path)")   // deleted under the cursor
             return

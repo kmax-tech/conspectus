@@ -169,6 +169,15 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// Reason word of each pending pane's last refusal (`@RESTART_REFUSED`) —
     /// what the shortcut bar says it is waiting for. Main thread only.
     var yaziRethemeRefusals: [String: String] = [:]
+    /// Right-click in a yazi pane waiting for the clicked row's hover (see
+    /// Panel+ContextMenu). Main thread only.
+    var pendingContextMenu: PendingContextMenu?
+    /// The file the open context menu is about — what the Services menu's
+    /// `validRequestor` / `writeSelection` hand to a service. Main thread only.
+    var contextMenuPath: String?
+    /// The one Services submenu AppKit fills (registered as NSApp.servicesMenu),
+    /// re-parented into every context menu.
+    let servicesMenu = NSMenu(title: "Services")
     /// Standing shortcut-bar note after the app stopped asking (deadline
     /// passed, or the plugin could not read yazi's state): the re-theme is
     /// now the user's ⌘R. nil = none. Cleared by the next relaunch.
@@ -319,6 +328,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         startTerminalRepaintInsurance()
         startPreviewClickMonitor()
         startMouseHistoryMonitor()
+        startContextMenuMonitor()
     }
 
     /// SwiftTerm (1.15.0) can wedge its display-update pipeline under fast

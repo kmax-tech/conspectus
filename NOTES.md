@@ -3,6 +3,30 @@
 Solved hard problems — the *why* the code can't show. Keep entries short:
 problem, solution, gotcha.
 
+## 2026-10-11 — Right-click menu in a terminal pane: ask yazi which row that was
+
+**Problem:** A Finder-style context menu needs the file under the mouse. In the
+preview pane the app knows it (listing rows carry their path). In a yazi pane
+it does not — the pane is a grid of characters yazi drew; only yazi knows which
+file sits on which row. And SwiftTerm forwards left clicks only, so a
+right-click never even reaches yazi.
+
+**Solution:** A local `rightMouseDown` monitor (same pattern as the side
+buttons) swallows the click, synthesizes a left mouse down/up into the terminal
+view (yazi moves its cursor onto the row and emits a hover), arms a
+`PendingContextMenu`, and the next FIFO hover opens the menu for exactly that
+path. A 300 ms fallback covers the silent case: the clicked row was already
+hovered, so no hover event comes, and the menu opens for the last hover.
+
+**Gotcha:** File operations from the menu must not run on "whatever yazi
+hovers right now". yazi's `rename`/`remove` act on the SELECTION when one
+exists — `--hovered` fixes that — and after a `reveal` into another directory
+the hover is not yet the target. The plugin therefore runs the command
+immediately only if the hovered url already equals the path; otherwise it
+stores a `pending_act`, reveals, and the hover handler runs it only when the
+hover IS that path — any other hover cancels it. Trashing a neighbour because
+a reveal landed one row off is the failure this guards against.
+
 ## 2026-10-11 — Automatic yazi re-theme: wait for idle, address panes by peer
 
 **Problem:** After a light↔dark switch the app re-themed itself live but the

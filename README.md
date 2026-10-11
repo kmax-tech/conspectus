@@ -243,6 +243,20 @@ focused Quick Look scrolls with the arrow keys / PgUp / PgDn and pages PDFs
 the keyboard into it, so hjkl in yazi always keep working; coming back from
 an editor launched out of yazi restores focus to the last terminal.
 
+**Right-click** opens Finder's file menu for the item under the mouse — in a
+yazi pane (the row you clicked), on a row of the folder listing, or on the
+preview (the previewed file): **Open** (a folder is entered in yazi, a file
+opens in its default app), **Open With** (LaunchServices' list, the same one
+Finder shows, default app first, plus Other…), **Reveal in Finder** / **Open in
+Finder**, **Get Info** (Finder's info window, via Apple Events — macOS asks
+once for Automation permission), **Share**, **Services** (incl. Quick Actions
+that take files), **Copy Path** / **Copy Name**, and **Rename…** / **Move to
+Trash**. The last two run *inside yazi* (`rename` / `remove --hovered` on the
+clicked item, never on a selection you left elsewhere), so there is one task
+system and one confirmation. In a yazi pane the right-click first moves yazi's
+cursor onto the row, like a left click, then opens the menu for the file yazi
+reports as hovered. Not offered (yet): Tags, Compress, Duplicate, Make Alias.
+
 **Selecting text:** click into the preview to focus it, then drag to select
 and **⌘C** to copy — in the PDF view and in the text/markdown preview alike
 (**⌘A** selects all). ⌘C / ⌘V also copy/paste in the terminal panes.

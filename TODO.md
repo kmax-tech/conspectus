@@ -12,6 +12,14 @@ Auslöser, ohne Termin.*
 
 ## Notiert, nicht geplant
 
+- **Kontextmenü: fehlende Finder-Einträge** (2026-10-11). Tags (schreibbar
+  über `URLResourceKey.tagNamesKey`, braucht aber eine Farbpunkt-UI),
+  Komprimieren (`ditto -c -k --keepParent`), Duplizieren, Alias erzeugen
+  (`URL.writeBookmarkData`). Auslöser: wenn einer davon im Alltag fehlt.
+  Offen zu prüfen am echten Fenster: füllt AppKit das Services-Untermenü im
+  Kontextmenü (Quick Actions) und erscheint die Automation-Abfrage für
+  „Informationen" nur einmal?
+
 - **Theme auf ANSI-Indizes statt Truecolor-Flavor** (2026-10-11). Ein eigenes
   `theme.toml` nur mit den 16 Terminalfarben würde den Palettentausch von
   SwiftTerm sofort auf yazi durchschlagen lassen: kein Neustart, kein
