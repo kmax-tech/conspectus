@@ -255,8 +255,13 @@ the file, via its AppleScript `action` command; only shown with Alfred
 installed), **Open in lazycvs** (only inside a CVS checkout, i.e. next to a
 `CVS/Root` marker: the terminal panel opens at half the window height running
 `lcvs <item>` in that directory — the dotfiles shim around lazycvs, which lands
-on the clicked item; quitting lazycvs closes the panel, an lcvs error stays
-visible above a shell; an open panel is replaced; from the keyboard: yazi's
+on the clicked item; while it runs, **lazycvs follows yazi**: every directory
+you enter is sent over a per-instance FIFO (`lcvs -follow`), and lazycvs moves
+its selection there — unless a dialog or its search is open (then it catches
+up afterwards) or the directory lies outside the checkout (then it stays put);
+quitting lazycvs closes the panel, an lcvs error stays visible above a shell
+(an lcvs build without `-follow` fails here too: `lcvs build`); an open panel
+is replaced; from the keyboard: yazi's
 `E C` in the dotfiles keymap, which beeps outside a checkout), **Copy Path** / **Copy
 Name**, and **Rename…** / **Move to Trash**. The last two run *inside yazi* (`rename` / `remove --hovered` on the
 clicked item, never on a selection you left elsewhere), so there is one task

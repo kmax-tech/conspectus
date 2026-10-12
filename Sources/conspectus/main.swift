@@ -319,6 +319,12 @@ let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/co
 // updated again. Stale FIFOs of dead instances are removed at startup.
 let fifoPath = (cacheDir as NSString).appendingPathComponent("target-\(getpid())")
 
+// Follow channel for lazycvs in the terminal panel (`lcvs -follow <fifo>`):
+// while lazycvs runs there, every directory yazi enters is written into it
+// and lazycvs moves its selection along. Per-pid like the FIFO above; exists
+// only while that panel is open.
+let lazycvsFollowPath = (cacheDir as NSString).appendingPathComponent("lazycvs-follow-\(getpid())")
+
 // Last cwd: yazi writes it here on exit (--cwd-file); a bare `conspectus`
 // resumes there, falling back to $HOME.
 let lastCwdPath = (cacheDir as NSString).appendingPathComponent("last-cwd")

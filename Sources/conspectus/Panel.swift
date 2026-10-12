@@ -172,6 +172,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// Right-click in a yazi pane waiting for the clicked row's hover (see
     /// Panel+ContextMenu). Main thread only.
     var pendingContextMenu: PendingContextMenu?
+    /// Write end of `lazycvsFollowPath` while lazycvs runs in the terminal
+    /// panel (-1 = no follow), and the directory last sent, so only real
+    /// directory changes reach lazycvs. Main thread only.
+    var lazycvsFollowFD: Int32 = -1
+    var lazycvsFollowedDir: String?
     /// The file the open context menu is about — what the Services menu's
     /// `validRequestor` / `writeSelection` hand to a service. Main thread only.
     var contextMenuPath: String?
@@ -433,14 +438,15 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         }
     }
 
-    /// Remove FIFOs left behind by dead instances: `target-<pid>` whose
-    /// process is gone, plus the legacy shared `target`. Deliberate try? on
-    /// the listing — the directory was created a moment ago, and a failed
-    /// cleanup only leaves harmless stale pipes behind.
+    /// Remove FIFOs left behind by dead instances: `target-<pid>` and
+    /// `lazycvs-follow-<pid>` whose process is gone, plus the legacy shared
+    /// `target`. Deliberate try? on the listing — the directory was created a
+    /// moment ago, and a failed cleanup only leaves harmless stale pipes behind.
     func cleanupStaleFifos() {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: cacheDir)) ?? []
-        for f in files where f.hasPrefix("target") {
-            let alive = Int32(f.dropFirst("target-".count)).map { kill($0, 0) == 0 } ?? false
+        for f in files {
+            guard let prefix = ["target-", "lazycvs-follow-", "target"].first(where: { f.hasPrefix($0) }) else { continue }
+            let alive = Int32(f.dropFirst(prefix.count)).map { kill($0, 0) == 0 } ?? false
             if !alive { unlink((cacheDir as NSString).appendingPathComponent(f)) }
         }
     }

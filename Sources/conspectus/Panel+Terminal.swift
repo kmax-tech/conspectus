@@ -33,16 +33,71 @@ extension Panel {
     }
 
     /// Context menu → Open in lazycvs: the terminal panel opens running
-    /// `lcvs <path>` in `dir` (lcvs walks up to the CVS/Root marker and lands
-    /// on the item). Quitting lazycvs normally closes the panel; if lcvs
-    /// fails (not on PATH, not built) its error stays visible above a shell
-    /// in `dir`. An already open panel is replaced — the panel is a fresh
-    /// shell per open by design. Side effects: kills a running panel shell,
-    /// spawns lcvs.
+    /// `lcvs [-follow <fifo>] <path>` in `dir` (lcvs walks up to the CVS/Root
+    /// marker and lands on the item). With the follow channel up, every
+    /// directory yazi enters afterwards is sent to lazycvs
+    /// (`followInLazycvs`). Quitting lazycvs normally closes the panel; if
+    /// lcvs fails (not on PATH, not built, too old for -follow) its error
+    /// stays visible above a shell in `dir`. An already open panel is
+    /// replaced — the panel is a fresh shell per open by design. Side
+    /// effects: kills a running panel shell, creates the follow FIFO, spawns
+    /// lcvs.
     func openLazycvs(in dir: String, at path: String) {
         closeBottomTerminal()
-        startBottomTerminal(script: "cd \"$1\" && \(lazycvsCommand) \"$2\" && exit; exec zsh -i",
-                            args: [dir, path], height: outerSplit.frame.height * lazycvsPanelShare)
+        let follow = openLazycvsFollow() ? ["-follow", lazycvsFollowPath] : []
+        lazycvsFollowedDir = isDirectory(path) ? path : (path as NSString).deletingLastPathComponent
+        startBottomTerminal(script: "cd \"$1\" && shift && \(lazycvsCommand) \"$@\" && exit; exec zsh -i",
+                            args: [dir] + follow + [path],
+                            height: outerSplit.frame.height * lazycvsPanelShare)
+    }
+
+    /// Create the lazycvs follow FIFO and hold its write end. Non-blocking:
+    /// the open must not wait for lazycvs, and a write must never stall the
+    /// main thread if lazycvs stops reading. Returns false (lazycvs then runs
+    /// without following) after warning once on stderr. Side effects: FIFO
+    /// on disk, `lazycvsFollowFD`.
+    func openLazycvsFollow() -> Bool {
+        unlink(lazycvsFollowPath)
+        guard mkfifo(lazycvsFollowPath, 0o600) == 0 else {
+            warn("conspectus: mkfifo(\(lazycvsFollowPath)) failed: \(String(cString: strerror(errno))) — lazycvs will not follow yazi")
+            return false
+        }
+        let fd = open(lazycvsFollowPath, O_RDWR | O_NONBLOCK)
+        guard fd >= 0 else {
+            warn("conspectus: open(\(lazycvsFollowPath)) failed: \(String(cString: strerror(errno))) — lazycvs will not follow yazi")
+            unlink(lazycvsFollowPath)
+            return false
+        }
+        lazycvsFollowFD = fd
+        return true
+    }
+
+    /// Close and remove the follow FIFO (panel closed, lazycvs gone).
+    /// Side effects: closes the fd, unlinks the FIFO.
+    func closeLazycvsFollow() {
+        guard lazycvsFollowFD >= 0 else { return }
+        close(lazycvsFollowFD)
+        lazycvsFollowFD = -1
+        lazycvsFollowedDir = nil
+        unlink(lazycvsFollowPath)
+    }
+
+    /// A yazi hover while lazycvs follows: send the hovered item's directory
+    /// — the dir yazi is in, as in `currentYaziDir` — when it changed.
+    /// lazycvs ignores directories outside its checkout. A full pipe
+    /// (lazycvs not reading, e.g. it exited into the fallback shell) drops
+    /// the line: deliberate, the next directory change is what matters.
+    /// Side effects: writes to the follow FIFO, stderr on a real failure.
+    func followInLazycvs(hover path: String) {
+        guard lazycvsFollowFD >= 0, path.hasPrefix("/") else { return }
+        let dir = (path as NSString).deletingLastPathComponent
+        guard dir != lazycvsFollowedDir else { return }
+        lazycvsFollowedDir = dir
+        let line = Array((dir + "\n").utf8)
+        if write(lazycvsFollowFD, line, line.count) < 0 && errno != EAGAIN {
+            warn("conspectus: lazycvs follow write failed: \(String(cString: strerror(errno))) — follow stopped")
+            closeLazycvsFollow()
+        }
     }
 
     /// yazi's `E C` (FIFO `@LAZYCVS:<path>`): open lazycvs for the item if it
@@ -81,6 +136,7 @@ extension Panel {
     /// per open — that is how the panel "follows" yazi's dir).
     func closeBottomTerminal() {
         guard let t = bottomTerm else { return }
+        closeLazycvsFollow()
         bottomTerm = nil
         bottomPane?.removeFromSuperview()
         bottomPane = nil
@@ -211,7 +267,7 @@ extension Panel {
             let restarting = Date() < self.yaziRestartArmedUntil
             if source === self.term {
                 if restarting { self.relaunchYaziPane(left: true); return }
-                unlink(fifoPath); unlink(nvimSocketPath)   // clean up both channels
+                unlink(fifoPath); unlink(nvimSocketPath); unlink(lazycvsFollowPath)   // clean up all channels
                 NSApp.terminate(nil)                       // left pane quit -> close app
             } else if source === self.term2 {
                 if restarting { self.relaunchYaziPane(left: false); return }

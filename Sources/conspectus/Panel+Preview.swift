@@ -74,7 +74,10 @@ extension Panel {
                         let path = String(s.dropFirst(editorFilePrefix.count))
                         DispatchQueue.main.async { self?.editorFileHover(path) }
                     } else if !s.isEmpty {
-                        DispatchQueue.main.async { self?.hoverArrived(s) }   // a pending right-click menu
+                        DispatchQueue.main.async {
+                            self?.hoverArrived(s)                            // a pending right-click menu
+                            self?.followInLazycvs(hover: s)                  // lazycvs in the terminal panel
+                        }
                         self?.update(s)
                     }
                 }
