@@ -28,17 +28,38 @@ extension Panel {
     /// yazi dir. A failed cd prints its error into the terminal itself and
     /// the shell still starts (visible, not swallowed).
     func openBottomTerminal() {
+        startBottomTerminal(script: "cd \"$1\"; exec zsh -i", args: [currentYaziDir()],
+                            height: termPanelHeight)
+    }
+
+    /// Context menu → Open in lazycvs: the terminal panel opens running
+    /// `lcvs <path>` in `dir` (lcvs walks up to the CVS/Root marker and lands
+    /// on the item). Quitting lazycvs normally closes the panel; if lcvs
+    /// fails (not on PATH, not built) its error stays visible above a shell
+    /// in `dir`. An already open panel is replaced — the panel is a fresh
+    /// shell per open by design. Side effects: kills a running panel shell,
+    /// spawns lcvs.
+    func openLazycvs(in dir: String, at path: String) {
+        closeBottomTerminal()
+        startBottomTerminal(script: "cd \"$1\" && \(lazycvsCommand) \"$2\" && exit; exec zsh -i",
+                            args: [dir, path], height: outerSplit.frame.height * lazycvsPanelShare)
+    }
+
+    /// Start the panel's login zsh with `script`; `args` arrive as $1, $2, …
+    /// (positional, so paths are never spliced into shell source). Side
+    /// effects: adds the panel, relayouts, spawns the process, takes focus.
+    func startBottomTerminal(script: String, args: [String], height: CGFloat) {
         guard bottomTerm == nil else { return }
         let t = makeTerm()
         bottomTerm = t
         let pane = makeTermPane(t)
         bottomPane = pane
         outerSplit.addSubview(pane)
-        layoutOuterPanes(terminalHeight: termPanelHeight)   // frames BEFORE startProcess so cols/rows fit
+        layoutOuterPanes(terminalHeight: height)   // frames BEFORE startProcess so cols/rows fit
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
         t.startProcess(executable: "/bin/zsh",
-                       args: ["-l", "-c", "cd \"\(currentYaziDir())\"; exec zsh -i"],
+                       args: ["-l", "-c", script, "zsh"] + args,
                        environment: env.map { "\($0.key)=\($0.value)" })
         window.makeFirstResponder(t)
     }

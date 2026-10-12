@@ -209,6 +209,12 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// Bottom terminal panel: initial and minimum height.
     let termPanelHeight: CGFloat = 240
     let minTermHeight: CGFloat = 120
+    /// Context menu → Open in lazycvs: the command run in the terminal panel
+    /// (the dotfiles shim around the lazycvs checkout, found on the login
+    /// shell's PATH) and the window share the panel opens with — a full TUI
+    /// is cramped in the plain-shell height.
+    let lazycvsCommand = "lcvs"
+    let lazycvsPanelShare: CGFloat = 0.5
 
     /// True while the preview pane is part of the window. Source of truth is
     /// the view hierarchy itself, so the flag can never drift from reality.

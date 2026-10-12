@@ -75,7 +75,7 @@ let cheatSheetGroups: [CheatSheetGroup] = [
                     ("click", "focus the clicked pane (border follows); on a folder row: enter it"),
                     ("right-click", "Finder's file menu for the item under the mouse: Open, Open With,"),
                     ("", "  Reveal/Get Info, Share, Services, Alfred Actions, copy path/name;"),
-                    ("", "  Rename/Trash run in yazi"),
+                    ("", "  Rename/Trash run in yazi; in a CVS checkout: Open in lazycvs (terminal panel)"),
                     ("⌘C", "in a yazi pane: copy the FILE (Finder-style; marked files win) —"),
                     ("", "  Finder pastes it, Alfred's selection hotkey sees it; text selected → text"),
                     ("click path", "the cwd in the header is a breadcrumb — click a segment to"),

@@ -163,6 +163,10 @@ extension Panel: NSServicesMenuRequestor {
         if NSWorkspace.shared.urlForApplication(withBundleIdentifier: alfredBundleID) != nil {
             add("Alfred Actions…", #selector(contextAlfred(_:)), me)
         }
+        // Only inside a CVS checkout — elsewhere lazycvs has nothing to show.
+        if let dir = cvsWorkingDir(for: path) {
+            add("Open in lazycvs", #selector(contextLazycvs(_:)), ContextTarget(path: path, peer: peer, app: nil, dir: dir))
+        }
         menu.addItem(.separator())
         add("Copy Path", #selector(contextCopyPath(_:)), me)
         add("Copy Name", #selector(contextCopyName(_:)), me)
@@ -279,6 +283,15 @@ extension Panel: NSServicesMenuRequestor {
         runAppleScript(alfredActionsScript(paths: [t.path]), what: "Alfred actions for \(t.path)")
     }
 
+    /// Open in lazycvs: the terminal panel runs lazycvs for the item, in its
+    /// CVS working directory. Side effects: see `openLazycvs`.
+    @objc func contextLazycvs(_ sender: Any?) {
+        guard let t = target(of: sender), let dir = t.dir else {
+            warn("conspectus: lazycvs item without a working dir — ignored"); return
+        }
+        openLazycvs(in: dir, at: t.path)
+    }
+
     /// Compile and run one AppleScript; failures (no Automation permission,
     /// app missing, script error) are warned with Apple's error record, never
     /// swallowed. Side effects: whatever the script does, stderr.
@@ -391,12 +404,14 @@ extension Panel: NSServicesMenuRequestor {
 }
 
 /// What a context-menu item acts on: the file, the yazi pane that runs file
-/// operations for it, and (Open With) the application.
+/// operations for it, (Open With) the application, and (Open in lazycvs) the
+/// CVS working directory.
 final class ContextTarget: NSObject {
     let path: String
     let peer: String
     let app: URL?
-    init(path: String, peer: String, app: URL?) {
-        self.path = path; self.peer = peer; self.app = app
+    let dir: String?
+    init(path: String, peer: String, app: URL?, dir: String? = nil) {
+        self.path = path; self.peer = peer; self.app = app; self.dir = dir
     }
 }

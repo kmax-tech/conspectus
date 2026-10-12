@@ -252,8 +252,12 @@ Finder**, **Get Info** (Finder's info window, via Apple Events — macOS asks
 once for Automation permission), **Share**, **Services** (incl. Quick Actions
 that take files), **Alfred Actions…** (Alfred's Universal Actions panel for
 the file, via its AppleScript `action` command; only shown with Alfred
-installed), **Copy Path** / **Copy Name**, and **Rename…** / **Move to
-Trash**. The last two run *inside yazi* (`rename` / `remove --hovered` on the
+installed), **Open in lazycvs** (only inside a CVS checkout, i.e. next to a
+`CVS/Root` marker: the terminal panel opens at half the window height running
+`lcvs <item>` in that directory — the dotfiles shim around lazycvs, which lands
+on the clicked item; quitting lazycvs closes the panel, an lcvs error stays
+visible above a shell; an open panel is replaced), **Copy Path** / **Copy
+Name**, and **Rename…** / **Move to Trash**. The last two run *inside yazi* (`rename` / `remove --hovered` on the
 clicked item, never on a selection you left elsewhere), so there is one task
 system and one confirmation. In a yazi pane the right-click first moves yazi's
 cursor onto the row, like a left click, then opens the menu for the file yazi
