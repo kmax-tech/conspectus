@@ -258,7 +258,9 @@ installed), **Open in lazycvs** (only inside a CVS checkout, i.e. next to a
 on the clicked item; while it runs, **lazycvs follows yazi**: every directory
 you enter is sent over a per-instance FIFO (`lcvs -follow`), and lazycvs moves
 its selection there — unless a dialog or its search is open (then it catches
-up afterwards) or the directory lies outside the checkout (then it stays put);
+up afterwards); a CVS directory outside its current root (e.g. the parent of
+the one it started in) re-roots lazycvs there in place, a directory outside any
+checkout leaves it where it is;
 quitting lazycvs closes the panel, an lcvs error stays visible above a shell
 (an lcvs build without `-follow` fails here too: `lcvs build`); an open panel
 is replaced; from the keyboard: yazi's
