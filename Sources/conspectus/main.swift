@@ -129,6 +129,13 @@ let restartRefusedPrefix = "@RESTART_REFUSED:"
 /// the editor. Prefixed (not a bare path) so it's distinct from a yazi hover.
 let editorFilePrefix = "@EDITOR_FILE:"
 
+/// FIFO message prefix for yazi's `E C` (dotfiles keymap) — `@LAZYCVS:<path>`
+/// with the hovered (or first selected) item: the same action as the context
+/// menu's "Open in lazycvs", so the key opens the terminal panel instead of
+/// running lazycvs inside the yazi pane. Prefixed, so it never collides with
+/// a hover.
+let lazycvsPrefix = "@LAZYCVS:"
+
 /// Quick Look fallback toggle (CONSPECTUS_QUICKLOOK): "on" (default) previews
 /// the long tail — video, audio, office, fonts, anything not text/image/PDF —
 /// through Quick Look. "off" disables it entirely; those files show a short

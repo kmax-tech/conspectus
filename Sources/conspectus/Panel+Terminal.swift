@@ -45,6 +45,19 @@ extension Panel {
                             args: [dir, path], height: outerSplit.frame.height * lazycvsPanelShare)
     }
 
+    /// yazi's `E C` (FIFO `@LAZYCVS:<path>`): open lazycvs for the item if it
+    /// sits in a CVS checkout; otherwise beep and say why (the context menu
+    /// hides the item instead, a key cannot). Side effects: see
+    /// `openLazycvs`; beep + stderr when not a checkout.
+    func lazycvsRequested(_ path: String) {
+        guard let dir = cvsWorkingDir(for: path) else {
+            NSSound.beep()
+            warn("conspectus: E C — \(path) is not in a CVS checkout (no CVS/Root)")
+            return
+        }
+        openLazycvs(in: dir, at: path)
+    }
+
     /// Start the panel's login zsh with `script`; `args` arrive as $1, $2, …
     /// (positional, so paths are never spliced into shell source). Side
     /// effects: adds the panel, relayouts, spawns the process, takes focus.

@@ -67,6 +67,9 @@ extension Panel {
                     } else if s.hasPrefix(restartRefusedPrefix) {
                         let body = String(s.dropFirst(restartRefusedPrefix.count))
                         DispatchQueue.main.async { self?.yaziRethemeRefused(body) }
+                    } else if s.hasPrefix(lazycvsPrefix) {
+                        let path = String(s.dropFirst(lazycvsPrefix.count))
+                        DispatchQueue.main.async { self?.lazycvsRequested(path) }
                     } else if s.hasPrefix(editorFilePrefix) {
                         let path = String(s.dropFirst(editorFilePrefix.count))
                         DispatchQueue.main.async { self?.editorFileHover(path) }
