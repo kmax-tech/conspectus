@@ -256,11 +256,12 @@ installed), **Open in lazycvs** (only inside a CVS checkout, i.e. next to a
 `CVS/Root` marker: the terminal panel opens at half the window height running
 `lcvs <item>` in that directory — the dotfiles shim around lazycvs, which lands
 on the clicked item; while it runs, **lazycvs follows yazi**: every directory
-you enter is sent over a per-instance FIFO (`lcvs -follow`), and lazycvs moves
-its selection there — unless a dialog or its search is open (then it catches
-up afterwards); a CVS directory outside its current root (e.g. the parent of
-the one it started in) re-roots lazycvs there in place, a directory outside any
-checkout leaves it where it is;
+you enter is sent over a per-instance FIFO (`lcvs -follow`), and lazycvs makes
+it its root, in place — the lazycvs tree always starts where yazi stands, up or
+down, and the scans of the root left behind are cancelled; a dialog or search
+open in lazycvs defers the switch until you are done, a directory outside any
+checkout leaves it where it is (`~/cvsrepo` itself is a checkout of the whole
+repository, so stopping there scans everything);
 quitting lazycvs closes the panel, an lcvs error stays visible above a shell
 (an lcvs build without `-follow` fails here too: `lcvs build`); an open panel
 is replaced; from the keyboard: yazi's

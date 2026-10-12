@@ -84,7 +84,7 @@ extension Panel {
 
     /// A yazi hover while lazycvs follows: send the hovered item's directory
     /// — the dir yazi is in, as in `currentYaziDir` — when it changed.
-    /// lazycvs re-roots on a CVS directory outside its current root and
+    /// lazycvs makes every followed checkout directory its root and
     /// ignores directories outside any checkout. A full pipe
     /// (lazycvs not reading, e.g. it exited into the fallback shell) drops
     /// the line: deliberate, the next directory change is what matters.
