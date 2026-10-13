@@ -12,8 +12,8 @@ public struct RGB: Equatable {
 }
 
 /// A maximal stretch of text sharing the same styling. `fg == nil` means the
-/// default foreground; `bg == nil` means the themed pane background (glow's
-/// code blocks / some themes set a background). `bg` defaults to nil so the
+/// default foreground; `bg == nil` means the themed pane background (some bat
+/// themes set a background). `bg` defaults to nil so the
 /// text-only callers and tests need not mention it.
 public struct AnsiRun: Equatable {
     public let text: String

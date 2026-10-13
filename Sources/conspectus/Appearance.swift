@@ -31,8 +31,8 @@ func batTheme() -> String {
 
 /// Turn parsed ANSI runs (from `bat --color=always`) into an attributed string:
 /// truecolor foreground per run, bold/italic via font traits, underline as an
-/// attribute. `defaultFg` fills runs with no explicit colour; the background is
-/// the pane's (we ignore any ANSI bg so text always sits on the themed bg).
+/// attribute. `defaultFg` fills runs with no explicit colour; a run's ANSI
+/// background is applied when set, otherwise the pane's themed bg shows through.
 func renderANSI(_ runs: [AnsiRun], font: NSFont, defaultFg: NSColor) -> NSAttributedString {
     let fm = NSFontManager.shared
     let bold = fm.convert(font, toHaveTrait: .boldFontMask)
@@ -46,7 +46,7 @@ func renderANSI(_ runs: [AnsiRun], font: NSFont, defaultFg: NSColor) -> NSAttrib
         let f = run.bold && run.italic ? boldItalic : run.bold ? bold : run.italic ? italic : font
         var attrs: [NSAttributedString.Key: Any] = [.font: f]
         attrs[.foregroundColor] = run.fg.map(color) ?? defaultFg
-        if let bg = run.bg { attrs[.backgroundColor] = color(bg) }   // glow code blocks / themed bg
+        if let bg = run.bg { attrs[.backgroundColor] = color(bg) }   // some bat themes set one
         if run.underline { attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue }
         result.append(NSAttributedString(string: run.text, attributes: attrs))
     }

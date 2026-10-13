@@ -478,7 +478,7 @@ extension Panel {
         }
     }
 
-    /// Toggle the markdown mode (rendered via glow ↔ source via bat) — a global
+    /// Toggle the markdown mode (native render ↔ source via bat) — a global
     /// setting, so `M` flips it consistently from any pane. If a markdown file
     /// is on screen, re-render it so the change is visible immediately.
     /// Triggered by yazi's `M` (via the FIFO sentinel) or `M` in the focused
@@ -567,27 +567,6 @@ extension Panel {
         let out = Pipe()
         p.standardOutput = out
         p.standardError = Pipe()   // swallow bat's stderr
-        do {
-            try p.run()
-            let data = out.fileHandleForReading.readDataToEndOfFile()
-            p.waitUntilExit()
-            guard p.terminationStatus == 0 else { return nil }
-            return String(data: data, encoding: .utf8)
-        } catch {
-            return nil
-        }
-    }
-
-    /// Render markdown to ANSI with `glow` (formatted: styled headers, lists,
-    /// bold/italic, code blocks), or nil on failure (caller falls back to bat).
-    /// `--width 0` lets glow use the natural width; off the main thread.
-    private func runGlow(_ glow: String, style: String, path: String) -> String? {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: glow)
-        p.arguments = ["--style=\(style)", "--width", "0", path]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = Pipe()
         do {
             try p.run()
             let data = out.fileHandleForReading.readDataToEndOfFile()
