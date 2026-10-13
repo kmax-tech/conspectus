@@ -65,15 +65,11 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 </dict></plist>
 EOF
 
-# refresh Launch Services + icon cache so Finder/Dock pick up the new bundle
-touch "$APP"
-LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-[ -x "$LSREG" ] && "$LSREG" -f "$APP" >/dev/null 2>&1 || true
-
 rm -rf "$tmp"
-# rm -rf + recreate can leave the LaunchServices DB stale — launchOrFocus
-# (Hammerspoon Hyper+F) then silently fails until something re-registers the
-# bundle. Register it explicitly.
+# Refresh Launch Services + the icon cache: rm -rf + recreate can leave the
+# LaunchServices DB stale — launchOrFocus (Hammerspoon Hyper+F) then silently
+# fails until something re-registers the bundle. Register it explicitly.
+touch "$APP"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
 
 echo "==> installed: $APP"
