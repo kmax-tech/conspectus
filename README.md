@@ -2,13 +2,13 @@
 
 **The best of both worlds, glued by a minimal Swift wrapper:** [yazi's](https://yazi-rs.github.io/)
 fast, fully customizable keyboard navigation — your config, your keybindings,
-your plugins — combined with **macOS-native previews** in full Quick Look
-fidelity (PDF, video, .ai, .psd, rendered Markdown and highlighted code via QL
-extensions, …).
+your plugins — combined with **macOS-native previews**: text and source
+highlighted in-process, markdown typeset as a document, images and PDFs in
+native views, and Quick Look for the long tail (video, .ai, .psd, Office, …).
 
-Terminal file managers navigate better than Finder ever will; Finder previews
-better than any terminal ever will. conspectus refuses to choose: a split
-window with yazi in an embedded terminal on the left and a live Quick Look
+Terminal file managers navigate better than Finder ever will; a native pane
+previews better than any terminal ever will. conspectus refuses to choose: a
+split window with yazi in an embedded terminal on the left and a live preview
 pane on the right, driven by whatever you hover. The Swift wrapper stays
 deliberately minimal — it owns the window, the preview, and the glue, and
 leaves everything about *navigation* to yazi.
@@ -50,7 +50,11 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
 - Left pane: [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) hosting a
   login shell that `exec`s the file manager.
 - Right pane: a universal preview that swaps by hovered item type —
-  - **File** → `QLPreviewView` (embeddable Quick Look, same generators as Finder).
+  - **File** → one of four covers over an always-alive `QLPreviewView`: text /
+    source / notes in a native `NSTextView` (markdown rendered or `bat`-
+    highlighted), raster images in an `NSImageView`, PDFs in PDFKit, and
+    everything else through Quick Look (same generators as Finder). See
+    "Status / limits" for each.
   - **Folder** → a rendered contents listing (folders first, natural sort, Nerd
     Font glyphs, Catppuccin colors). Quick Look on a folder only shows its icon +
     metadata, so we render the look-ahead ourselves. **Clicking a row hands
@@ -79,8 +83,8 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
 - Coupling: the app creates a FIFO (one per instance,
   `~/.cache/conspectus/target-<pid>`) and hands its path to the shell via
   `QLPEEK_FIFO`. The file manager writes the hovered path there on selection;
-  the app swaps the preview in place. For yazi this is the `qlpeek send` plugin
-  (honours `QLPEEK_FIFO`) and follow mode auto-enables inside conspectus.
+  the app swaps the preview in place. For yazi the bundled
+  `plugins/conspectus.yazi` does this, writing the FIFO straight from Lua.
 
 Any other TUI can drive the preview by writing an absolute path to
 `$QLPEEK_FIFO` when its cursor moves.
@@ -93,12 +97,11 @@ Swift toolchain to build.
 
 **Optional, but the preview shines with them:**
 
-- **Quick Look extensions** — conspectus shows whatever Quick Look can
-  render, so extensions upgrade it directly:
-  [QLMarkdown](https://github.com/sbarex/QLMarkdown) (rendered Markdown) and
-  [Syntax Highlight](https://github.com/sbarex/SourceCodeSyntaxHighlight)
-  (highlighted source code): `brew install --cask qlmarkdown syntax-highlight`.
-  Without them, code and Markdown fall back to plain text.
+- **[`bat`](https://github.com/sharkdp/bat)** (`brew install bat`) for syntax
+  highlighting in the native text preview; without it source shows as plain
+  themed monospace. `BAT_THEME` overrides the Catppuccin theme the app picks.
+- **Quick Look extensions** only matter for the long tail that still goes
+  through Quick Look (text, markdown, images and PDFs are rendered natively).
 - **A Nerd Font** (e.g. `brew install --cask font-jetbrains-mono-nerd-font`)
   for yazi's file icons and the folder listing glyphs — otherwise you get
   tofu boxes.
@@ -109,7 +112,7 @@ Swift toolchain to build.
 ## Build & run
 
 ```sh
-./build.sh             # swift build -c release (first run fetches SwiftTerm)
+./build.sh             # swift build -c release (first run fetches SwiftTerm + swift-markdown)
 swift test             # unit tests for the pure helpers (ConspectusCore)
 conspectus             # yazi + Quick Look preview, starting at $HOME
 conspectus ~/work      # start at a given directory (tilde/relative resolved)
@@ -372,11 +375,11 @@ the active instance automatically — no focus tracking involved. Note that
 ## Status / limits
 
 - SwiftTerm is not kitty: no kitty graphics protocol, so yazi's *own* image
-  preview column won't render images inside conspectus — but that's what the Quick
-  Look pane is for. yazi's 3rd column is kept anyway, because it also does
-  **directory look-ahead** (contents of the hovered folder), which Quick Look
-  does not replace. Quick Look is additive: full fidelity for files on the
-  right, yazi's column for look-ahead + text/simple previews.
+  preview column could not render images inside conspectus — which is why
+  preview modes hide that column (`CONSPECTUS_COLUMNS=2`, the default) and the
+  right pane does both jobs: file previews *and* the directory look-ahead
+  listing. `CONSPECTUS_COLUMNS=3` keeps yazi's column alongside if you want
+  its text previews too.
 - The launcher builds an overlay config under `~/.cache/conspectus/yazi-config`
   and points `YAZI_CONFIG_HOME` at it: your live config is symlinked in, the
   **bundled `plugins/conspectus.yazi`** is injected, and `init.lua` is
@@ -435,8 +438,9 @@ the active instance automatically — no focus tracking involved. Note that
   closed (⌘E) too, since the hovered path is tracked either way. ⌥⌘P and not
   ⌘P because ⌘P pins the preview and ⌘⇧P is the per-folder preview switch.
 - Event diagnosis (off by default): `CONSPECTUS_EVENT_LOG=<path>` appends a line
-  per preview request and per scroll event reaching the Quick Look view — for
-  debugging a preview that stops reacting.
+  per preview request, note delivery, context menu and scroll event reaching
+  the Quick Look view — for debugging a preview that stops reacting. The file
+  is appended to, never truncated; delete it yourself.
 - Preview size cap: files above `CONSPECTUS_PREVIEW_MAX_MB` (default 50) show a
   short "too large" note instead of previewing — a several-hundred-MB JSON
   would otherwise wedge Quick Look and spike memory. `0` disables the cap.
@@ -542,8 +546,8 @@ the active instance automatically — no focus tracking involved. Note that
   (`plugins/conspectus.yazi`) — no external plugin or binary needed. lf/nnn/
   xplr work as terminals; wire their selection hook to `$QLPEEK_FIFO` to get
   the live preview.
-- Prototype: no app-level shortcuts yet beyond the window chrome; file-manager
-  keys are yazi's own.
+- App-level shortcuts are the window chrome only (⌘D/E/I/J/K/L/N/P/R/W, the
+  Go menu, ⌥-arrows); every file-manager key is yazi's own, from your keymap.
 
 ## License
 

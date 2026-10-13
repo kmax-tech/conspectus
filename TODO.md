@@ -33,3 +33,17 @@ Auslöser, ohne Termin.*
   lebt nicht in einem tmux-Pane; die Variante „Vorschau als eigenes Fenster"
   ist `qlpeek`. Einziger echter Nutzen wäre, dass yazi einen conspectus-
   Neustart überlebt (detach/attach).
+
+- **Audit 2026-10-13 — Rest** (gefixt und committet: Editor-Pane-Theming,
+  erzwungenes Event-Log, toter glow-Code, Icon-Hex, geteilte Helfer,
+  Doku-Drift in README/CLAUDE/NOTES/Headern). Übrig, ohne Termin:
+  - `update()` schreibt `lastPath` und liest `previewPinned` auf dem
+    FIFO-Thread ohne Lock (Panel+Preview.swift), während `skipDirs` eines
+    bekam. Entweder ein Lock oder ein „Main thread only"-Verdikt mit
+    Begründung. Auslöser: ein Race im Alltag.
+  - Kleinere Klarheit: `yankChanged("copy:")` als Reset
+    (Panel+Terminal.swift), `resolveStart(home: currentYaziDir())` als
+    Fallback-Zweckentfremdung (Panel+Terminal.swift).
+  - Panel ist das God-Object (rund 90 Stored Properties, zehn Extensions);
+    einziger größerer Hebel wäre ein Preview-Controller (Cover-Logik + Watch
+    + Dedup). Auslöser: wenn Panel+Preview beim nächsten Feature kippt.

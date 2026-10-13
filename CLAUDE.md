@@ -9,14 +9,23 @@ The thread through every rule: **nothing important should be implicit.**
 
 ## Structure
 
-- `Sources/ConspectusCore/` — pure, unit-testable logic (start-dir resolution,
-  palettes/hex parsing, icon mapping, listing order). No SwiftTerm dependency.
-- `Sources/conspectus/` — the AppKit shell: `main.swift` (bootstrap only),
-  `Appearance.swift` (theming/rendering), `Panel.swift` (state + lifecycle)
-  with themed extensions (`Panel+Layout`, `Panel+Focus`, `Panel+Preview`,
-  `Panel+Terminal`, `Panel+CheatSheet`, `Panel+History`), and `Icon.swift`. UI, processes,
-  FIFO — the side-effect edge of the system. Top-level code stays in
-  `main.swift` (Swift requires it); stored properties stay in `Panel.swift`.
+- `Sources/ConspectusCore/` — unit-testable logic without AppKit state or
+  SwiftTerm: start-dir resolution, palettes/hex parsing, icon mapping,
+  listing order, the keymap parser, ANSI parsing, note lookup, typography,
+  tips. Mostly pure; the few functions that read the filesystem
+  (`loadFolder`, `resolveNote`, `cvsWorkingDir`, `isDirectory`) say so in
+  their doc comment and return data, never mutate app state.
+- `Sources/conspectus/` — the AppKit shell: `main.swift` (bootstrap, env
+  vars, FIFO sentinels), `Appearance.swift` (theming/rendering),
+  `MarkdownRender.swift` (swift-markdown AST → attributed string),
+  `Icon.swift`, and `Panel.swift` (state + lifecycle) with themed extensions
+  (`Panel+Layout`, `Panel+Focus`, `Panel+Preview`, `Panel+PDFBar`,
+  `Panel+Notes`, `Panel+Print`, `Panel+Terminal`, `Panel+History`,
+  `Panel+ContextMenu`, `Panel+CheatSheet`). UI, processes, FIFO — the
+  side-effect edge of the system. Top-level code stays in `main.swift` (Swift
+  requires it); stored properties stay in `Panel.swift`.
+- `Sources/ConspectusShield/` — one ObjC function: the @try/@catch swizzle
+  around Quick Look's scroller teardown (Swift cannot catch ObjC exceptions).
 - `Tests/ConspectusCoreTests/` — XCTest suite for the core, mirroring its files.
 - `bin/conspectus` — launcher script (builds the yazi overlay config and
   injects the bundled plugin).
@@ -64,8 +73,9 @@ executable. That boundary is what keeps the important parts testable.
     (`isDirectory`, `nsColor`, …) before adding a new one; promote repeated
     logic there instead of duplicating it.
 12. **Dependencies are a decision.** Ask before adding a package; record it in
-    `Package.swift`. Currently the only dependency is SwiftTerm — keep it that
-    way unless there's a strong reason.
+    `Package.swift`. Currently two: SwiftTerm (the terminal) and Apple's
+    swift-markdown (the markdown AST, approved 2026-07-25) — keep it at that
+    unless there's a strong reason.
 
 ## Build & verify
 

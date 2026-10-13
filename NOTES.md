@@ -193,6 +193,10 @@ it. Respawn-on-exit was rejected: it makes the editor un-quittable.
 
 ## 2026-07-22 — QLPreviewView comes back blank after being hidden
 
+> Superseded 2026-07-23 (third trap, below): the view is never hidden any
+> more, the covers sit on top of it, and the rebuild survives only in
+> `attachPreview`. Kept for the symptom.
+
 **Problem:** Hovering a folder hides the `QLPreviewView`; on returning to a
 file it could stay permanently blank. Its remote Quick Look extension dies
 while the view is hidden, and `refreshPreviewItem()` doesn't revive it.
@@ -214,8 +218,9 @@ itself (its remote Quick Look extension is torn down), and setting
 `previewItem` on a closed view is a QuickLook assertion failure. The left
 yazi keeps writing hovered paths to the FIFO the whole time.
 
-**Solution:** `update()` skips all view work while `term2 != nil` (there is
-no preview pane in split mode; `lastPath` keeps tracking). `removeSecondPane()`
+**Solution:** `update()` skips all view work while the preview is detached
+(today `previewAttached`, derived from the view hierarchy; `lastPath` keeps
+tracking). `removeSecondPane()`
 rebuilds the `QLPreviewView` via `rebuildPreview()` (shared with the
 dir→file blank-fix path) and replays `lastPath` so the preview resumes.
 
@@ -510,6 +515,12 @@ event-tracking — exactly when the wedge happens.
 
 ## 2026-07-24 — Fourth QLPreviewView trap: wheel events die after mouse re-entry
 
+> Amended the same day: the eager nudge on every `mouseEntered` was REVERTED —
+> its resign/become churn could wedge SwiftTerm's repainting (next entry).
+> The nudge now runs lazily in `scrollWheel`, only when a wheel event bubbles
+> up to the view at all (which is itself the proof the remote dropped it);
+> see the comment in `Panel+Focus.swift`.
+
 **Problem:** Scroll the PDF preview (works), move the pointer to another
 pane — no click — and back: the same document is still displayed but no
 longer scrolls. User-discovered recovery: focusing the preview (⌘⌥→)
@@ -525,8 +536,8 @@ can land in the preview in between; `allowFocus` is reset immediately).
 
 **Notes:** Diagnosed with CONSPECTUS_EVENT_LOG (scroll arrival vs. preview
 requests) plus the user's "focusing fixes it" observation — the nudge is
-that observation, automated. The launcher temporarily defaults the event
-log; remove that block once the fix is confirmed in daily use.
+that observation, automated. The launcher defaulted the event log on for the
+diagnosis; that block was removed 2026-10-13 (the log is opt-in again).
 
 ## 2026-07-23 — Click-to-navigate felt sluggish: a login shell per click
 
