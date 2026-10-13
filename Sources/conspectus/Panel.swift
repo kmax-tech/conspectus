@@ -7,11 +7,16 @@ import ConspectusShield
 // Panel — the application delegate and owner of the whole window. This file
 // holds the stored state and the app lifecycle (startup, FIFO management,
 // appearance observer, watchdog); the behavior lives in themed extensions:
-//   Panel+Layout.swift    window/menu/pane construction and split layout
-//   Panel+Focus.swift     focus cycling, focus-by-intent preview, borders
-//   Panel+Preview.swift   Quick Look + folder listing pipeline
-//   Panel+Terminal.swift  bottom terminal panel, process lifecycle
-//   Panel+CheatSheet.swift  shortcut bar content and the ⌘K panel
+//   Panel+Layout.swift       window/menu/pane construction and split layout
+//   Panel+Focus.swift        focus cycling, focus-by-intent preview, borders
+//   Panel+Preview.swift      FIFO reader, preview routing (text/image/PDF/QL), folder listing
+//   Panel+PDFBar.swift       the control strip above the PDF preview
+//   Panel+Notes.swift        PDF companion notes, ide auto-follow, nvim RPC
+//   Panel+Print.swift        ⌥⌘P — print what the preview renders
+//   Panel+Terminal.swift     bottom terminal panel, lazycvs, yazi re-theme, process lifecycle
+//   Panel+History.swift      Go menu: back/forward, enclosing folder, reveal, tabs
+//   Panel+ContextMenu.swift  right-click file menu, ⌘C copies the file, Services
+//   Panel+CheatSheet.swift   shortcut bar content and the ⌘K panel
 
 final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDelegate, NSSplitViewDelegate,
                    NSTextViewDelegate, NSSearchFieldDelegate {
@@ -142,7 +147,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// event monitor) — gates the terminal repaint insurance. Main thread only.
     var lastWheelActivity = Date.distantPast
     /// Absolute path of the `ya` CLI, resolved once at startup by
-    /// `resolveYaPath()` — click-to-navigate spawns it directly instead of
+    /// `resolveOnLoginPath` — click-to-navigate spawns it directly instead of
     /// paying a login-shell startup (~150ms+) on every click. Main thread only.
     var yaPath: String?
     /// Absolute path of `nvim`, resolved once when the editor pane first opens.
@@ -369,7 +374,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         let timer = Timer(timeInterval: repaintInterval, repeats: true) { [weak self] _ in
             guard let self = self,
                   Date().timeIntervalSince(self.lastWheelActivity) < activityWindow else { return }
-            for t in [self.term, self.term2, self.bottomTerm] { t?.needsDisplay = true }
+            for t in [self.term, self.term2, self.editorTerm, self.bottomTerm] { t?.needsDisplay = true }
         }
         timer.tolerance = 0.3   // let the system coalesce wakeups
         RunLoop.main.add(timer, forMode: .common)
@@ -461,9 +466,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
             object: nil, queue: .main) { [weak self] _ in
             guard let self = self else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                applyTheme(self.term)
-                if let t2 = self.term2 { applyTheme(t2) }
-                if let bt = self.bottomTerm { applyTheme(bt) }
+                for t in [self.term, self.term2, self.editorTerm, self.bottomTerm] {
+                    if let t = t { applyTheme(t) }
+                }
                 self.styleFolder()
                 self.styleHintBar()
                 self.styleCheatSheet()

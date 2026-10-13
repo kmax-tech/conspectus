@@ -131,7 +131,7 @@ extension Panel {
     /// Repaint the pane padding in the active palette (theme changes).
     func styleTermPanes() {
         let bg = nsColor(activePalette().bg).cgColor
-        for pane in [termPane, term2Pane, bottomPane] {
+        for pane in [termPane, term2Pane, editorPane, bottomPane] {
             pane?.layer?.backgroundColor = bg
         }
     }
