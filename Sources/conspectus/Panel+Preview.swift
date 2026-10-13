@@ -1,5 +1,6 @@
 import Cocoa
 import Quartz
+import SwiftTerm
 import ConspectusCore
 
 // The preview pipeline: FIFO reader -> update() -> Quick Look (debounced) or
@@ -223,10 +224,7 @@ extension Panel {
             // listing, a file keeps it, and on a hung mount the probe just
             // never comes back while the note stays and the app keeps running.
             skipProbeQueue.async { [weak self] in
-                guard let self = self, self.isCurrentListing(gen) else { return }
-                var isDir: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir),
-                      isDir.boolValue else { return }
+                guard let self = self, self.isCurrentListing(gen), isDirectory(path) else { return }
                 DispatchQueue.main.async {
                     guard self.isCurrentListing(gen), self.previewAttached else { return }
                     self.showFolder(path, generation: gen)
@@ -270,10 +268,6 @@ extension Panel {
         }
     }
 
-    /// Route a settled file hover to the right preview. Priority, all covering
-    /// the always-alive QL view: text/source/notes → native NSTextView (off
-    /// the fragile Quick Look path); PDFs → native PDFKit view; everything else
-    /// → Quick Look (fallback for the long tail). Exactly one cover shows.
     /// mtime of `path`, or nil if it can't be stat'd (e.g. momentarily gone
     /// mid-rebuild). Pure path→mtime; no inode identity involved — which is the
     /// whole point of polling over an fd watch.
@@ -341,6 +335,11 @@ extension Panel {
         imageView?.isHidden = true
     }
 
+    /// Route a settled file hover to the right preview. Priority, all covering
+    /// the always-alive QL view: text/source/notes → native NSTextView (off
+    /// the fragile Quick Look path); raster images → native NSImageView; PDFs →
+    /// native PDFKit view; everything else → Quick Look (fallback for the long
+    /// tail). Exactly one cover shows.
     func requestFilePreview(_ path: String, generation gen: Int) {
         watchPreviewFile(path)   // live-refresh this file if it's edited on disk
         // A different file replaces the previewed PDF → its note is no longer
@@ -450,20 +449,16 @@ extension Panel {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             let attr: NSAttributedString
-            if renderMd {
-                let text = (try? String(contentsOfFile: path, encoding: .utf8))
-                    ?? (try? String(contentsOfFile: path, encoding: .isoLatin1)) ?? ""
+            if renderMd, let text = readTextLeniently(path) {
                 logEvent("textPreview via markdown-render \(path)")
                 attr = MarkdownRenderer(palette: pal).render(text)
             } else if let bat = bat, let ansi = self.runBat(bat, theme: theme, path: path) {
                 logEvent("textPreview via bat (source) \(path)")
                 attr = renderANSI(parseANSI(ansi), font: font, defaultFg: fg)
             } else {
-                // Fallback: raw text, themed monospace. UTF-8 then Latin-1 so a
-                // non-UTF-8 file still shows something (deliberate lenient decode).
-                let text = (try? String(contentsOfFile: path, encoding: .utf8))
-                    ?? (try? String(contentsOfFile: path, encoding: .isoLatin1))
-                    ?? "(cannot decode as text)"
+                // Fallback: raw text, themed monospace; a file that decodes as
+                // neither UTF-8 nor Latin-1 says so instead of showing nothing.
+                let text = readTextLeniently(path) ?? "(cannot decode as text)"
                 attr = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: fg])
             }
             guard self.isCurrentListing(gen) else { return }
@@ -612,16 +607,6 @@ extension Panel {
         folderScroll.isHidden = false   // cover the always-alive Quick Look view
     }
 
-    /// Swap the right pane to the folder listing and load it off the main
-    /// thread (mirrors Quick Look, which is asynchronous by design). The
-    /// previous listing stays visible until the new one lands — Finder-style,
-    /// no white flash, no main-thread hitch.
-    ///
-    /// The QLPreviewView is COVERED by the opaque listing, never hidden:
-    /// hiding it triggers QL's _teardownScrollers, which can crash in KVO
-    /// removeObserver when its internal bindings are torn (seen in the wild),
-    /// and a hidden view also auto-closes its remote extension (the blank-
-    /// preview class of bugs). Covering sidesteps all of it.
     /// ⌘L — ask yazi for its current selection. The selection lives inside
     /// yazi and has no change event, so it can only be PULLED: this publishes
     /// a `panesync-selected` DDS request naming the pane whose selection is
@@ -629,8 +614,8 @@ extension Panel {
     /// asks the left). The plugin answers over the FIFO (`@SELECTED:`), which
     /// lands in `showSelectedList`. Side effects: spawns `ya pub-to`.
     @objc func requestSelectedList() {
-        let peer = window.firstResponder === term2 ? "R" : "L"
-        publishToYazi("panesync-selected", body: peer)
+        publishToYazi("panesync-selected",
+                      body: peerLetter(of: window.firstResponder as? LocalProcessTerminalView))
     }
 
     /// Show yazi's selection as a clickable list in the folder-listing pane
@@ -657,6 +642,16 @@ extension Panel {
         }
     }
 
+    /// Swap the right pane to the folder listing and load it off the main
+    /// thread (mirrors Quick Look, which is asynchronous by design). The
+    /// previous listing stays visible until the new one lands — Finder-style,
+    /// no white flash, no main-thread hitch.
+    ///
+    /// The QLPreviewView is COVERED by the opaque listing, never hidden:
+    /// hiding it triggers QL's _teardownScrollers, which can crash in KVO
+    /// removeObserver when its internal bindings are torn (seen in the wild),
+    /// and a hidden view also auto-closes its remote extension (the blank-
+    /// preview class of bugs). Covering sidesteps all of it.
     func showFolder(_ path: String, generation gen: Int) {
         logEvent("showFolder \(path)")
         stopWatchingPreviewFile()   // a directory has no single file to watch
@@ -677,4 +672,13 @@ extension Panel {
             }
         }
     }
+}
+
+/// Read a text file for display or print. Deliberately lenient: UTF-8 first,
+/// then Latin-1, so a legacy-encoded file still shows instead of refusing.
+/// nil only when neither decodes (binary, unreadable, gone) — the caller
+/// says so visibly. Side effects: reads the file.
+func readTextLeniently(_ path: String) -> String? {
+    (try? String(contentsOfFile: path, encoding: .utf8))
+        ?? (try? String(contentsOfFile: path, encoding: .isoLatin1))
 }

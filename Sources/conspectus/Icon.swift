@@ -1,14 +1,14 @@
 import Cocoa
+import ConspectusCore
 
 // conspectus app icon — High Gothic / Warhammer-40k: an iron-and-gold Adeptus-
 // Mechanicus cog framing a jewelled-glass rose window, with a red mechanical
 // lens/reticle at the centre (matching the perlege icon so the tools read as a
 // family). Drawn in CoreGraphics; used as the Dock / Cmd-Tab icon at launch.
 func conspectusIcon() -> NSImage {
+    // Hardcoded literals: a typo must crash here (nsColor's try!), never paint black.
     func col(_ hex: String, _ a: CGFloat = 1) -> NSColor {
-        let v = UInt32(hex, radix: 16) ?? 0
-        return NSColor(srgbRed: CGFloat((v >> 16) & 0xff)/255, green: CGFloat((v >> 8) & 0xff)/255,
-                       blue: CGFloat(v & 0xff)/255, alpha: a)
+        a == 1 ? nsColor(hex) : nsColor(hex).withAlphaComponent(a)
     }
     let S: CGFloat = 1024
     let img = NSImage(size: NSSize(width: S, height: S)); img.lockFocus()

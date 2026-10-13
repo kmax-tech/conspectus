@@ -1,4 +1,5 @@
 import Cocoa
+import SwiftTerm
 import ConspectusCore
 
 // The Go menu's moves: browser-style back / forward for the yazi panes (the
@@ -110,6 +111,15 @@ extension Panel {
             if let t2 = term2, hit === t2 || hit.isDescendant(of: t2) { return "R" }
             if let t1 = term, hit === t1 || hit.isDescendant(of: t1) { return "L" }
         }
-        return (lastTopTerm != nil && lastTopTerm === term2) ? "R" : "L"
+        return peerLetter(of: lastTopTerm)
+    }
+
+    /// The peer letter the plugin filters on (`CONSPECTUS_PEER`): "R" for the
+    /// second yazi pane, "L" for the left pane — and for anything that is not
+    /// a yazi pane (nil, nvim, the terminal panel), which always addresses the
+    /// left one. The one place this mapping lives.
+    func peerLetter(of t: LocalProcessTerminalView?) -> String {
+        guard let t = t, t === term2 else { return "L" }
+        return "R"
     }
 }

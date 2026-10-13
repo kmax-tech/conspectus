@@ -26,7 +26,7 @@ extension Panel {
             if let note = note, let nvim = nvim {
                 let q = "get(map(filter(getbufinfo(), {_, b -> b.name ==# \(vimQuote(note))}), "
                       + "{_, b -> get(b.variables, 'conspectus_pinned', 0)}), 0, 0)"
-                pinned = runNvimExpr(nvim, q).1 == "1"
+                pinned = runNvimExpr(nvim, q).out == "1"
             }
             guard self.isCurrentListing(gen) else { return }
             DispatchQueue.main.async {
@@ -233,9 +233,12 @@ extension Panel {
 }
 
 /// Run `nvim --server <ide socket> --remote-expr <expr>` synchronously and
-/// return (exit status, stdout, stderr), both trimmed. Blocking — call
-/// off the main thread.
-private func runNvimExpr(_ nvim: String, _ expr: String) -> (Int32, String, String) {
+/// return exit status, stdout and stderr (both trimmed). The one way the app
+/// talks to the ide editor's nvim — note delivery, pin queries, the split
+/// handoff and the focus-in file query all go through here. A spawn failure
+/// comes back as status -1 with the error in `err`. Blocking — call off the
+/// main thread.
+func runNvimExpr(_ nvim: String, _ expr: String) -> (status: Int32, out: String, err: String) {
     let p = Process()
     p.executableURL = URL(fileURLWithPath: nvim)
     p.arguments = ["--server", nvimSocketPath, "--remote-expr", expr]

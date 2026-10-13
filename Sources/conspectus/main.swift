@@ -36,6 +36,20 @@ func die(_ msg: String) -> Never {
     exit(1)
 }
 
+/// Read an on/off env var: on|1|true|yes, off|0|false|no (case-insensitive).
+/// Unset → `def`; anything else fails loud and uses `def`. The one grammar
+/// for every boolean switch below. Side effects: stderr on a bad value.
+func boolEnv(_ name: String, default def: Bool) -> Bool {
+    guard let raw = ProcessInfo.processInfo.environment[name]?.lowercased() else { return def }
+    switch raw {
+    case "on", "1", "true", "yes": return true
+    case "off", "0", "false", "no": return false
+    default:
+        warn("conspectus: \(name) must be on|off (got '\(raw)') — using \(def ? "on" : "off")")
+        return def
+    }
+}
+
 /// How markdown files preview: "render" (native swift-markdown → themed
 /// document, the default) or "source" (bat → highlighted markdown source).
 /// Toggle at runtime with `M`. Invalid values fail loud → default.
@@ -54,10 +68,7 @@ let markdownRenderDefault: Bool = {
 /// currently-previewed file and re-renders when it changes on disk — so
 /// editing a note in nvim (left) updates the preview (right) on save. "off"
 /// disables the watcher.
-let watchEnabled: Bool = {
-    let raw = (ProcessInfo.processInfo.environment["CONSPECTUS_WATCH"] ?? "on").lowercased()
-    return !(raw == "off" || raw == "0" || raw == "false" || raw == "no")
-}()
+let watchEnabled = boolEnv("CONSPECTUS_WATCH", default: true)
 
 /// Mouse side buttons (CONSPECTUS_MOUSE_HISTORY, default on): buttons 4 and 5
 /// — "back"/"forward" on most mice — step through the hovered yazi pane's
@@ -67,16 +78,7 @@ let watchEnabled: Bool = {
 /// app translates them into yazi's `back`/`forward` over the DDS. "off" leaves
 /// the buttons to whatever the mouse driver does with them; the Go menu
 /// (⌘[ / ⌘]) stays either way.
-let mouseHistoryEnabled: Bool = {
-    let raw = (ProcessInfo.processInfo.environment["CONSPECTUS_MOUSE_HISTORY"] ?? "on").lowercased()
-    switch raw {
-    case "on", "1", "true", "yes": return true
-    case "off", "0", "false", "no": return false
-    default:
-        warn("conspectus: CONSPECTUS_MOUSE_HISTORY must be on|off (got '\(raw)') — using on")
-        return true
-    }
-}()
+let mouseHistoryEnabled = boolEnv("CONSPECTUS_MOUSE_HISTORY", default: true)
 
 /// FIFO control message asking conspectus to move keyboard focus into the
 /// preview pane — written by yazi's `l`/→-on-a-file binding so h/l pane
@@ -150,16 +152,7 @@ let lazycvsPrefix = "@LAZYCVS:"
 /// Quick Look surface (no remote extension ever spawned, no crash class at all)
 /// can turn it off and trade long-tail previews for maximum stability. It stays
 /// ON by default because the fallback is still useful and the shield guards it.
-let quickLookEnabled: Bool = {
-    let raw = (ProcessInfo.processInfo.environment["CONSPECTUS_QUICKLOOK"] ?? "on").lowercased()
-    switch raw {
-    case "on", "1", "true", "yes": return true
-    case "off", "0", "false", "no": return false
-    default:
-        warn("conspectus: CONSPECTUS_QUICKLOOK must be on|off (got '\(raw)') — using on")
-        return true
-    }
-}()
+let quickLookEnabled = boolEnv("CONSPECTUS_QUICKLOOK", default: true)
 
 /// PDF preview mode (CONSPECTUS_PDF_MODE): "page" (default) previews PDFs in
 /// the native PDFKit view, page-wise — "perlege light", same keys as perlege

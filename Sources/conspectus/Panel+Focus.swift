@@ -252,17 +252,9 @@ extension Panel {
     func editorSplitNavOrHandoff(_ dir: String) {
         guard let nvim = nvimPath else { moveEditorNeighbour(dir); return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: nvim)
-            p.arguments = ["--server", nvimSocketPath, "--remote-expr", "v:lua.conspectus_move('\(dir)')"]
-            let out = Pipe(); p.standardOutput = out; p.standardError = Pipe()
-            var moved = false
-            do {
-                try p.run()
-                let d = out.fileHandleForReading.readDataToEndOfFile()
-                p.waitUntilExit()
-                moved = (String(data: d, encoding: .utf8) ?? "").contains("moved")
-            } catch { moved = false }
+            // Anything but "moved" (an "edge" answer, a missing helper, a dead
+            // server) hands off to the neighbouring pane.
+            let moved = runNvimExpr(nvim, "v:lua.conspectus_move('\(dir)')").out.contains("moved")
             if !moved { DispatchQueue.main.async { self?.moveEditorNeighbour(dir) } }
         }
     }
@@ -364,18 +356,8 @@ extension Panel {
     func previewEditorCurrentFile() {
         guard let nvim = nvimPath else { return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: nvim)
-            p.arguments = ["--server", nvimSocketPath, "--remote-expr", "expand('%:p')"]
-            let out = Pipe(); p.standardOutput = out; p.standardError = Pipe()
-            var path = ""
-            do {
-                try p.run()
-                let d = out.fileHandleForReading.readDataToEndOfFile()
-                p.waitUntilExit()
-                path = (String(data: d, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            } catch { return }
-            guard !path.isEmpty else { return }   // empty buffer: leave the preview as-is
+            let path = runNvimExpr(nvim, "expand('%:p')").out
+            guard !path.isEmpty else { return }   // empty buffer (or no answer): leave the preview as-is
             DispatchQueue.main.async {
                 guard let self = self,
                       self.window.firstResponder === self.editorTerm else { return }  // still editing

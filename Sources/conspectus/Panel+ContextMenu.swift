@@ -325,7 +325,7 @@ extension Panel: NSServicesMenuRequestor {
                 guard !paths.isEmpty else { return }       // nothing marked: the hovered file stands
                 self?.copyFilesToPasteboard(paths)
             }
-            publishToYazi("panesync-selected", body: t === term2 ? "R" : "L")
+            publishToYazi("panesync-selected", body: peerLetter(of: t))
             return
         }
         NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: sender)

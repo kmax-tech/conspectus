@@ -71,7 +71,7 @@ extension Panel {
         if isImagePreviewable(path), let image = NSImage(contentsOfFile: path) {
             return imagePrintOperation(image)
         }
-        if isTextPreviewable(path), let text = readForPrint(path) {
+        if isTextPreviewable(path), let text = readTextLeniently(path) {
             return textPrintOperation(printableText(text, for: path))
         }
         return nil
@@ -139,14 +139,6 @@ extension Panel {
             .font: terminalFont(size: 10),      // ~78 columns at 0.75in margins
             .foregroundColor: NSColor.black,
         ])
-    }
-
-    /// Read a text file for printing. Deliberately lenient, exactly like the
-    /// text preview: UTF-8, then Latin-1, so a legacy-encoded file still prints
-    /// instead of refusing.
-    private func readForPrint(_ path: String) -> String? {
-        (try? String(contentsOfFile: path, encoding: .utf8))
-            ?? (try? String(contentsOfFile: path, encoding: .isoLatin1))
     }
 
     /// Refuse to print, visibly: a sheet says why. A `warn()` alone would be

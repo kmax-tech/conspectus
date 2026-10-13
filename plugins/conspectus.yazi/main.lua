@@ -3,7 +3,7 @@
 -- bin/conspectus; the user's own yazi config is never touched, and no
 -- external binaries are needed.
 --
--- Four jobs:
+-- Five jobs:
 --   1. Preview coupling: every hover writes the hovered path to the FIFO the
 --      app hands us via $QLPEEK_FIFO; every yank change writes the buffer as
 --      `@YANK:<copy|cut>:<paths>` (the app's shortcut bar mirrors it).
@@ -29,6 +29,17 @@
 --      the mouse can go UP as well as down (the columns only ever go down).
 
 local M = {}
+
+-- Append one line to the app's FIFO. Never blocks: the app holds its FIFO open
+-- read-write for its whole life, so the open-for-append returns at once. A
+-- FIFO that cannot be opened (app gone) is a silent no-op — yazi dies with the
+-- app anyway, and there is nobody left to tell.
+local function fifo_write(fifo, line)
+	local f = io.open(fifo, "a")
+	if not f then return end
+	f:write(line .. "\n")
+	f:close()
+end
 
 -- A file operation the app's context menu asked for (`panesync-act`) that
 -- waits for its path to become the hovered item — see the handler below.
@@ -159,11 +170,7 @@ function M:setup()
 		ps.sub("hover", function()
 			local path = get_hovered()
 			if not path then return end
-			local f = io.open(fifo, "a")
-			if f then
-				f:write(path .. "\n")
-				f:close()
-			end
+			fifo_write(fifo, path)
 			-- A context-menu operation waits for exactly its file to be the
 			-- hovered one; any other hover cancels it (never act on a
 			-- neighbour because a reveal landed elsewhere).
@@ -187,11 +194,7 @@ function M:setup()
 			for _, url in pairs(cx.yanked) do
 				paths[#paths + 1] = tostring(url)
 			end
-			local f = io.open(fifo, "a")
-			if f then
-				f:write("@YANK:" .. mode .. ":" .. table.concat(paths, "\t") .. "\n")
-				f:close()
-			end
+			fifo_write(fifo, "@YANK:" .. mode .. ":" .. table.concat(paths, "\t"))
 		end)
 	end
 
@@ -284,13 +287,7 @@ function M:setup()
 					emit("tab_create", { current = true })
 					emit("cd", { body })
 				end
-				if ok and fifo and #fifo > 0 then
-					local f = io.open(fifo, "a")
-					if f then
-						f:write("@ACTIVATE\n")
-						f:close()
-					end
-				end
+				if ok and fifo and #fifo > 0 then fifo_write(fifo, "@ACTIVATE") end
 			end)
 		end
 		-- panesync-cd: enter a directory (folder-row click, `=` key).
@@ -404,11 +401,7 @@ function M:setup()
 			for _, url in pairs(cx.active.selected) do
 				paths[#paths + 1] = tostring(url)
 			end
-			local f = io.open(fifo, "a")
-			if f then
-				f:write("@SELECTED:" .. table.concat(paths, "\t") .. "\n")
-				f:close()
-			end
+			fifo_write(fifo, "@SELECTED:" .. table.concat(paths, "\t"))
 		end)
 		-- panesync-restart: quit so the app can relaunch this pane with the
 		-- fresh theme — yazi picks its Catppuccin flavor only at startup, so a
@@ -431,13 +424,8 @@ function M:setup()
 			local target, how = body:match("^([LR*]) (%a+)$")
 			if not target or (target ~= peer and target ~= "*") then return end
 			local function refuse(reason, text)
-				local okf2, fifo = pcall(function() return os.getenv("QLPEEK_FIFO") end)
-				if okf2 and fifo and #fifo > 0 then
-					local f = io.open(fifo, "a")
-					if f then
-						f:write("@RESTART_REFUSED:" .. peer .. ":" .. reason .. "\n")
-						f:close()
-					end
+				if ok and fifo and #fifo > 0 then
+					fifo_write(fifo, "@RESTART_REFUSED:" .. peer .. ":" .. reason)
 				end
 				if how == "ask" then
 					ya.notify({ title = "conspectus", timeout = 3, level = "warn", content = text })
@@ -535,11 +523,7 @@ function M:entry(job)
 
 	local ok, fifo = pcall(function() return os.getenv("QLPEEK_FIFO") end)
 	if ok and fifo and #fifo > 0 then
-		local f = io.open(fifo, "a")
-		if f then
-			f:write("@FOCUS_PREVIEW\n")
-			f:close()
-		end
+		fifo_write(fifo, "@FOCUS_PREVIEW")
 	else
 		emit("open", {})
 	end
