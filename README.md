@@ -467,7 +467,8 @@ the active instance automatically — no focus tracking involved. Note that
   case (markdown → WebKit) off the fragile remote path. **Syntax-highlighted
   via `bat`** (its ANSI parsed to an attributed string, Catppuccin theme
   matching the app's light/dark palette); falls back to plain monospace if
-  `bat` isn't installed.
+  `bat` isn't installed. The encoding is detected (UTF-8, UTF-16 with BOM,
+  Windows-1252, Latin-1), so legacy Latin-1 files show their umlauts.
 - Markdown previews **rendered** by default — a native document view
   (swift-markdown → themed `NSAttributedString`: proportional serif, sized
   headings, inline-code chips, real tables via `NSTextTable`, lists,

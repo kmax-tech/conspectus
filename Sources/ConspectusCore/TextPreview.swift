@@ -92,3 +92,24 @@ public func stripFrontmatter(_ text: String) -> String {
     }
     return text   // opened but never closed → not valid frontmatter
 }
+
+/// Decode a text file's bytes, guessing the encoding — legacy trees (the CVS
+/// repo) hold plenty of Latin-1 TeX that strict UTF-8 readers (bat) turn into
+/// `�`. Order, most specific first:
+/// 1. UTF-16 with a BOM (a BOM-less guess would turn ASCII into CJK noise),
+/// 2. UTF-8 (an optional UTF-8 BOM is dropped),
+/// 3. Windows-1252 — Latin-1 plus „“–€ in 0x80–0x9F, what Word pastes leave,
+/// 4. Latin-1, which maps every byte and so never fails.
+/// Never nil: any byte sequence decodes under step 4; whether the file is
+/// text at all is the caller's call (`isTextPreviewable`). Pure.
+public func decodeText(_ data: Data) -> String {
+    let bom = [UInt8](data.prefix(2))
+    if bom == [0xFF, 0xFE] || bom == [0xFE, 0xFF],
+       let s = String(data: data, encoding: .utf16) { return s }
+    if let s = String(data: data, encoding: .utf8) { return s }
+    if let s = String(data: data, encoding: .windowsCP1252) { return s }
+    guard let s = String(data: data, encoding: .isoLatin1) else {
+        fatalError("Latin-1 decode failed — impossible, every byte maps")
+    }
+    return s
+}

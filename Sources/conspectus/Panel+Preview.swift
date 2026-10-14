@@ -452,13 +452,14 @@ extension Panel {
             if renderMd, let text = readTextLeniently(path) {
                 logEvent("textPreview via markdown-render \(path)")
                 attr = MarkdownRenderer(palette: pal).render(text)
-            } else if let bat = bat, let ansi = self.runBat(bat, theme: theme, path: path) {
+            } else if let bat = bat, let text = readTextLeniently(path),
+                      let ansi = self.runBat(bat, theme: theme, path: path, text: text) {
                 logEvent("textPreview via bat (source) \(path)")
                 attr = renderANSI(parseANSI(ansi), font: font, defaultFg: fg)
             } else {
-                // Fallback: raw text, themed monospace; a file that decodes as
-                // neither UTF-8 nor Latin-1 says so instead of showing nothing.
-                let text = readTextLeniently(path) ?? "(cannot decode as text)"
+                // Fallback: raw text, themed monospace; an unreadable file
+                // says so instead of showing nothing.
+                let text = readTextLeniently(path) ?? "(cannot read file)"
                 attr = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: fg])
             }
             guard self.isCurrentListing(gen) else { return }
@@ -551,19 +552,39 @@ extension Panel {
         showTextPreview(path, generation: bumpListingGeneration())
     }
 
-    /// Run `bat` and return its ANSI-coloured output, or nil on failure (caller
-    /// falls back to plain text). `--style=plain` = no line numbers/decorations;
-    /// `--wrap=never` lets the NSTextView do the wrapping. Off the main thread.
-    private func runBat(_ bat: String, theme: String, path: String) -> String? {
+    /// Run `bat` on already-decoded `text` and return its ANSI-coloured output,
+    /// or nil on failure (caller falls back to plain text). The text goes in on
+    /// stdin as UTF-8 — bat reads files as strict UTF-8 and turns Latin-1
+    /// umlauts into `�` — and `--file-name` keeps syntax detection by `path`.
+    /// `--style=plain` = no line numbers/decorations; `--wrap=never` lets the
+    /// NSTextView do the wrapping. Off the main thread.
+    private func runBat(_ bat: String, theme: String, path: String, text: String) -> String? {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: bat)
         p.arguments = ["--color=always", "--style=plain", "--paging=never",
-                       "--wrap=never", "--theme=\(theme)", path]
+                       "--wrap=never", "--theme=\(theme)", "--file-name=\(path)", "-"]
+        let inp = Pipe()
         let out = Pipe()
+        p.standardInput = inp
         p.standardOutput = out
         p.standardError = Pipe()   // swallow bat's stderr
         do {
             try p.run()
+            // Feed stdin from a second thread: a large file would fill both
+            // pipe buffers and deadlock if we wrote it all before reading.
+            // F_SETNOSIGPIPE: if bat dies early, the write fails with EPIPE
+            // instead of SIGPIPE killing the whole app.
+            let writer = inp.fileHandleForWriting
+            _ = fcntl(writer.fileDescriptor, F_SETNOSIGPIPE, 1)
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try writer.write(contentsOf: Data(text.utf8))
+                    try writer.close()
+                } catch {
+                    // bat's own exit status decides the fallback; just note it.
+                    logEvent("runBat stdin write failed for \(path): \(error)")
+                }
+            }
             let data = out.fileHandleForReading.readDataToEndOfFile()
             p.waitUntilExit()
             guard p.terminationStatus == 0 else { return nil }
@@ -674,11 +695,12 @@ extension Panel {
     }
 }
 
-/// Read a text file for display or print. Deliberately lenient: UTF-8 first,
-/// then Latin-1, so a legacy-encoded file still shows instead of refusing.
-/// nil only when neither decodes (binary, unreadable, gone) — the caller
+/// Read a text file for display or print, guessing its encoding
+/// (`decodeText`: UTF-16 BOM → UTF-8 → Windows-1252 → Latin-1), so legacy
+/// Latin-1 files show their umlauts instead of mojibake. nil only when the
+/// file can't be read (gone, no permission) — deliberate `try?`: the caller
 /// says so visibly. Side effects: reads the file.
 func readTextLeniently(_ path: String) -> String? {
-    (try? String(contentsOfFile: path, encoding: .utf8))
-        ?? (try? String(contentsOfFile: path, encoding: .isoLatin1))
+    guard let data = FileManager.default.contents(atPath: path) else { return nil }
+    return decodeText(data)
 }

@@ -68,4 +68,33 @@ final class TextPreviewTests: XCTestCase {
         XCTAssertFalse(isImagePreviewable("/x/paper.pdf"))    // PDF has its own path
         XCTAssertFalse(isImagePreviewable("/x/clip.mp4"))     // video → Quick Look
     }
+
+    func testDecodeUTF8KeepsUmlauts() {
+        XCTAssertEqual(decodeText(Data("Größe über".utf8)), "Größe über")
+    }
+
+    func testDecodeDropsUTF8BOM() {
+        XCTAssertEqual(decodeText(Data([0xEF, 0xBB, 0xBF] + Array("ok".utf8))), "ok")
+    }
+
+    func testDecodeLatin1Umlauts() {
+        // "Größe" as written by a Latin-1 editor: ö = F6, ß = DF.
+        XCTAssertEqual(decodeText(Data([0x47, 0x72, 0xF6, 0xDF, 0x65])), "Größe")
+    }
+
+    func testDecodeWindows1252Quotes() {
+        // „x“ — 84/93 are C1 controls in Latin-1, quotes in Windows-1252.
+        XCTAssertEqual(decodeText(Data([0x84, 0x78, 0x93])), "\u{201E}x\u{201C}")
+    }
+
+    func testDecodeByteUndefinedIn1252FallsBackToLatin1() {
+        // 0x81 has no Windows-1252 mapping → Latin-1, never a failure.
+        XCTAssertEqual(decodeText(Data([0x41, 0x81, 0xF6])), "A\u{81}ö")
+    }
+
+    func testDecodeUTF16OnlyWithBOM() {
+        XCTAssertEqual(decodeText(Data([0xFF, 0xFE, 0x41, 0x00])), "A")
+        // Without a BOM the same bytes are UTF-8 "A\0", not CJK.
+        XCTAssertEqual(decodeText(Data([0x41, 0x00])), "A\u{0}")
+    }
 }

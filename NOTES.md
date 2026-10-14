@@ -3,6 +3,22 @@
 Solved hard problems — the *why* the code can't show. Keep entries short:
 problem, solution, gotcha.
 
+## 2026-10-14 — Latin-1 files: decode ourselves, feed bat via stdin
+
+**Problem:** Text previews of legacy files (CVS repo: Latin-1 TeX) showed `�`
+for every umlaut, although `readTextLeniently` already had a Latin-1 fallback.
+That fallback only ran without bat — bat reads files as strict UTF-8 and
+replaces each invalid byte with U+FFFD, so its output decoded fine and the
+fallback never fired.
+
+**Solution:** `ConspectusCore.decodeText` guesses the encoding (UTF-16 with
+BOM → UTF-8 → Windows-1252 → Latin-1), and `runBat` gets the decoded text on
+stdin as UTF-8 with `--file-name=<path>`, so syntax detection still works.
+
+**Gotcha:** Writing bat's stdin needs its own thread (both pipe buffers full →
+deadlock), and the write fd gets `F_SETNOSIGPIPE` — otherwise a bat that exits
+early kills the app with SIGPIPE.
+
 ## 2026-10-11 — Right-click menu in a terminal pane: ask yazi which row that was
 
 **Problem:** A Finder-style context menu needs the file under the mouse. In the
