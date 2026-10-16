@@ -5,8 +5,11 @@
 --
 -- Five jobs:
 --   1. Preview coupling: every hover writes the hovered path to the FIFO the
---      app hands us via $QLPEEK_FIFO; every yank change writes the buffer as
---      `@YANK:<copy|cut>:<paths>` (the app's shortcut bar mirrors it).
+--      app hands us via $QLPEEK_FIFO, preceded by the tab's sort preference
+--      as `@SORT:<by>:<reverse>:<dir_first>` (the app's folder listing
+--      orders itself like yazi's columns; yazi re-hovers after every `sort`,
+--      so the pair always arrives together); every yank change writes the
+--      buffer as `@YANK:<copy|cut>:<paths>` (the app's shortcut bar mirrors it).
 --      Written directly from Lua — the app
 --      holds the FIFO open read-write for its whole lifetime, so opening it
 --      for append returns immediately (a FIFO open-for-write only blocks
@@ -50,6 +53,16 @@ local get_hovered = ya.sync(function()
 	local h = cx.active.current.hovered
 	return h and tostring(h.url) or nil
 end)
+
+-- The active tab's sort preference as the `@SORT:` body: `<by>:<reverse>:
+-- <dir_first>` with the booleans as Lua's "true"/"false". Read from yazi's
+-- tab preference (cx.active.pref, yazi 26). Errors (API drift) propagate to
+-- the caller, which reports once and leaves the app on its previous order.
+local get_sort = ya.sync(function()
+	local p = cx.active.pref
+	return p.sort_by .. ":" .. tostring(p.sort_reverse) .. ":" .. tostring(p.sort_dir_first)
+end)
+local sort_warned = false
 
 -- Whether the item UNDER THE CURSOR is a directory — read from yazi's real
 -- state, so it's correct even with files selected (unlike a shell `[ -d "$1" ]`
@@ -170,6 +183,16 @@ function M:setup()
 		ps.sub("hover", function()
 			local path = get_hovered()
 			if not path then return end
+			-- Sort first, path second: the app applies the order it last
+			-- received when the hover path arrives (lines keep FIFO order).
+			local oks, sort = pcall(get_sort)
+			if oks then
+				fifo_write(fifo, "@SORT:" .. sort)
+			elseif not sort_warned then
+				sort_warned = true
+				ya.notify({ title = "conspectus", timeout = 5, level = "warn",
+					content = "cannot read the sort preference — the folder listing keeps its default order (" .. tostring(sort) .. ")" })
+			end
 			fifo_write(fifo, path)
 			-- A context-menu operation waits for exactly its file to be the
 			-- hovered one; any other hover cancels it (never act on a

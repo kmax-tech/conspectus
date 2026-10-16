@@ -110,6 +110,14 @@ let activateSentinel = "@ACTIVATE"
 /// visible after navigating away. Prefixed, so it never collides with a hover.
 let yankPrefix = "@YANK:"
 
+/// FIFO message prefix for yazi's SORT preference — written by the bundled
+/// plugin right before every hover path as `@SORT:<by>:<reverse>:<dir_first>`
+/// (ConspectusCore.parseListingSort), so the folder listing orders a folder
+/// the way yazi's columns do. Before-every-hover rather than on-change: yazi
+/// publishes no sort event, but it re-hovers after every `sort`, so the pair
+/// always arrives together. Prefixed, so it never collides with a hover.
+let sortPrefix = "@SORT:"
+
 /// FIFO message prefix for yazi's SELECTION (Space/v marks) — the plugin's
 /// answer to the app's `panesync-selected` DDS request (⌘L), as
 /// `@SELECTED:<path>\t<path>…` (empty = nothing selected). Request/answer, not

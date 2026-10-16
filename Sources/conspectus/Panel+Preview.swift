@@ -62,6 +62,9 @@ extension Panel {
                     } else if s.hasPrefix(selectedPrefix) {
                         let body = String(s.dropFirst(selectedPrefix.count))
                         DispatchQueue.main.async { self?.selectedArrived(parseSelectedPaths(body)) }
+                    } else if s.hasPrefix(sortPrefix) {
+                        let body = String(s.dropFirst(sortPrefix.count))
+                        DispatchQueue.main.async { self?.sortChanged(body) }
                     } else if s.hasPrefix(yankPrefix) {
                         let body = String(s.dropFirst(yankPrefix.count))
                         DispatchQueue.main.async { self?.yankChanged(body) }
@@ -86,6 +89,18 @@ extension Panel {
                 fclose(f)
             }
         }
+    }
+
+    /// FIFO handler (main thread): yazi announced its sort preference
+    /// (`@SORT:` body) — the hover that follows it renders the listing in that
+    /// order. A malformed body keeps the previous order and warns, never
+    /// silently falls back.
+    func sortChanged(_ body: String) {
+        guard let sort = parseListingSort(body) else {
+            warn("conspectus: malformed @SORT FIFO message '\(body)' — keeping the previous order")
+            return
+        }
+        listingSort = sort
     }
 
     // MARK: NSTextViewDelegate — click a row in the folder listing.
@@ -679,9 +694,10 @@ extension Panel {
         hideAllCovers()
         lastTextPath = nil
         folderScroll.isHidden = false   // opaque — covers the always-alive preview
+        let sort = listingSort   // read on main; the loader queue gets a copy
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let contents = loadFolder(path, cap: folderListingCap)
+            let contents = loadFolder(path, cap: folderListingCap, sort: sort)
             // Navigated on already? Skip the attributed-string build entirely.
             guard self.isCurrentListing(gen) else { return }
             let listing = renderListing(contents, in: path)

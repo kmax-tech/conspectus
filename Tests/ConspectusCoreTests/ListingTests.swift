@@ -25,6 +25,62 @@ final class ListingTests: XCTestCase {
         XCTAssertEqual(sortEntries([]), [])
     }
 
+    // sortEntries with yazi's other preferences (ListingSort).
+    private func stamp(_ day: Int) -> Date { Date(timeIntervalSince1970: Double(day) * 86_400) }
+    private var mixed: [DirEntry] {[
+        DirEntry(name: "b.txt", isDir: false, modified: stamp(2), size: 300, created: stamp(1)),
+        DirEntry(name: "a.md", isDir: false, modified: stamp(3), size: 100, created: stamp(3)),
+        DirEntry(name: "dir", isDir: true, modified: stamp(1), size: nil, created: stamp(2)),
+        DirEntry(name: "c.txt", isDir: false, modified: stamp(2), size: 200, created: stamp(4)),
+    ]}
+
+    func testSortEntriesMtimeReverseMixedIsYaziTimeline() {
+        // `, t`: newest first, dirs mixed in; equal mtimes break by name, reversed.
+        let sort = ListingSort(by: .mtime, reverse: true, dirFirst: false)
+        XCTAssertEqual(sortEntries(mixed, sort).map(\.name), ["a.md", "c.txt", "b.txt", "dir"])
+    }
+
+    func testSortEntriesMtimeKeepsDirsFirst() {
+        let sort = ListingSort(by: .mtime, reverse: false, dirFirst: true)
+        XCTAssertEqual(sortEntries(mixed, sort).map(\.name), ["dir", "b.txt", "c.txt", "a.md"])
+    }
+
+    func testSortEntriesSizeTreatsDirAsZero() {
+        let sort = ListingSort(by: .size, reverse: false, dirFirst: false)
+        XCTAssertEqual(sortEntries(mixed, sort).map(\.name), ["dir", "a.md", "c.txt", "b.txt"])
+    }
+
+    func testSortEntriesBtime() {
+        let sort = ListingSort(by: .btime, reverse: false, dirFirst: false)
+        XCTAssertEqual(sortEntries(mixed, sort).map(\.name), ["b.txt", "dir", "a.md", "c.txt"])
+    }
+
+    func testSortEntriesExtensionDirsHaveNone() {
+        let sort = ListingSort(by: .extension, reverse: false, dirFirst: false)
+        XCTAssertEqual(sortEntries(mixed, sort).map(\.name), ["dir", "a.md", "b.txt", "c.txt"])
+    }
+
+    func testSortEntriesRandomAndNoneFallBackToNatural() {
+        for by in [ListingSort.By.random, .none] {
+            let sort = ListingSort(by: by, reverse: false, dirFirst: true)
+            XCTAssertEqual(sortEntries(mixed, sort), sortEntries(mixed), "\(by)")
+        }
+    }
+
+    func testParseListingSortValid() {
+        XCTAssertEqual(parseListingSort("mtime:true:false"),
+                       ListingSort(by: .mtime, reverse: true, dirFirst: false))
+        XCTAssertEqual(parseListingSort("natural:false:true"), ListingSort.default)
+    }
+
+    func testParseListingSortRejectsGarbage() {
+        XCTAssertNil(parseListingSort(""))
+        XCTAssertNil(parseListingSort("mtime:true"))
+        XCTAssertNil(parseListingSort("bogus:true:true"))
+        XCTAssertNil(parseListingSort("mtime:yes:no"))
+        XCTAssertNil(parseListingSort("mtime:true:false:extra"))
+    }
+
     func testCapEntriesUnderLimitKeepsAll() {
         let entries = [DirEntry(name: "a", isDir: true), DirEntry(name: "b", isDir: false)]
         let r = capEntries(entries, limit: 500)
@@ -162,6 +218,14 @@ final class LoadFolderTests: XCTestCase {
         let c = loadFolder(tmp, cap: 500)
         XCTAssertEqual(c.entries.first?.modified, stamp)
         XCTAssertEqual(c.entries.first?.size, 1)
+        XCTAssertNotNil(c.entries.first?.created)
+    }
+
+    func testLoadFolderHonoursSort() throws {
+        try "x".write(toFile: tmp + "/a.txt", atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(atPath: tmp + "/zdir", withIntermediateDirectories: true)
+        let mixed = ListingSort(by: .natural, reverse: false, dirFirst: false)
+        XCTAssertEqual(loadFolder(tmp, cap: 500, sort: mixed).entries.map(\.name), ["a.txt", "zdir"])
     }
 
     func testDirectoriesHaveNoSize() throws {

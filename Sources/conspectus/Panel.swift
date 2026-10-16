@@ -203,6 +203,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// and if the session plugin restores one, its event refills this.
     /// Main thread only.
     var yankState: YankState?
+    /// Yazi's sort preference as last announced over the FIFO (`@SORT:`), the
+    /// order the folder listing uses. Set on the main thread by `sortChanged`,
+    /// read on the main thread by `showFolder` before it hands off to the
+    /// loader queue. Main thread only.
+    var listingSort = ListingSort.default
 
     /// Minimum pane extent (width in the horizontal split, height of the pane
     /// area in the outer split) — window resizes and divider drags must not

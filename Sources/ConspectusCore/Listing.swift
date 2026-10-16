@@ -1,7 +1,8 @@
 import AppKit
 
 // Pure logic behind the right pane's folder look-ahead listing: entry
-// ordering, the date column format and the extension -> icon mapping. The rendering (fonts,
+// ordering (mirroring yazi's sort preference), the size and date column
+// formats and the extension -> icon mapping. The rendering (fonts,
 // NSAttributedString, filesystem reads) stays in the app.
 
 /// One entry of a folder listing.
@@ -14,13 +15,58 @@ public struct DirEntry: Equatable {
     /// File size in bytes; nil for directories (shown as "-", like yazi) and
     /// when it could not be read.
     public let size: Int?
+    /// Creation date (yazi's "btime"); nil if it could not be read. Only used
+    /// for ordering, never shown.
+    public let created: Date?
 
-    public init(name: String, isDir: Bool, modified: Date? = nil, size: Int? = nil) {
+    public init(name: String, isDir: Bool, modified: Date? = nil, size: Int? = nil,
+                created: Date? = nil) {
         self.name = name
         self.isDir = isDir
         self.modified = modified
         self.size = size
+        self.created = created
     }
+}
+
+/// How a folder listing is ordered — yazi's sort preference, which the bundled
+/// plugin announces over the FIFO (`@SORT:<by>:<reverse>:<dir_first>`) before
+/// every hover, so the pane lists a folder the way yazi lists its own columns
+/// (`, t` and the other `,` keys reach the pane).
+public struct ListingSort: Equatable {
+    /// yazi's `sort_by` values. `random` and `none` cannot be mirrored (one is
+    /// per-process randomness, the other readdir order) and fall back to
+    /// `natural` — documented here, not warned about: both are legitimate
+    /// yazi states, not errors.
+    public enum By: String, CaseIterable {
+        case natural, alphabetical, mtime, btime, size, `extension`, random, none
+    }
+    public let by: By
+    public let reverse: Bool
+    public let dirFirst: Bool
+
+    public init(by: By, reverse: Bool, dirFirst: Bool) {
+        self.by = by
+        self.reverse = reverse
+        self.dirFirst = dirFirst
+    }
+
+    /// The order before the first `@SORT` arrives (and in tests): natural,
+    /// directories first — this user's yazi.toml and yazi's own dir-first preset.
+    public static let `default` = ListingSort(by: .natural, reverse: false, dirFirst: true)
+}
+
+/// Parse the body of a `@SORT:` FIFO message: `<by>:<reverse>:<dir_first>`,
+/// the flags spelled `true`/`false` (Lua's `tostring` of a boolean). nil for
+/// anything else — the caller warns and keeps the previous order; bad input
+/// is never coerced into a default.
+public func parseListingSort(_ body: String) -> ListingSort? {
+    let parts = body.split(separator: ":", omittingEmptySubsequences: false)
+    guard parts.count == 3, let by = ListingSort.By(rawValue: String(parts[0])),
+          let reverse = Bool(String(parts[1])), let dirFirst = Bool(String(parts[2])) else {
+        return nil
+    }
+    return ListingSort(by: by, reverse: reverse, dirFirst: dirFirst)
 }
 
 /// Format a byte count for the listing's size column the way yazi's
@@ -93,18 +139,50 @@ public func capEntries(_ entries: [DirEntry], limit: Int) -> (shown: [DirEntry],
     return (Array(entries.prefix(limit)), entries.count - limit)
 }
 
-/// Order entries the way the folder listing shows them: directories first,
-/// then natural (Finder-like) name order, so "file2" sorts before "file10".
-public func sortEntries(_ entries: [DirEntry]) -> [DirEntry] {
-    entries.sorted { a, b in
-        if a.isDir != b.isDir { return a.isDir }
-        return a.name.localizedStandardCompare(b.name) == .orderedAscending
+/// Order entries the way yazi orders them under `sort` (yazi-fs/sorter.rs):
+/// directories promoted first when `dirFirst` (never reversed), then the sort
+/// key, ties broken by name; `reverse` flips key and tie-break alike. The
+/// comparisons approximate yazi's byte-level ones with Foundation's:
+/// `localizedStandardCompare` for natural ("file2" before "file10"),
+/// case-insensitive compare for alphabetical and extensions. A missing date
+/// sorts as the oldest, a directory's size as 0, a directory's extension as
+/// empty — each what yazi does with its 0 / len / no-ext equivalents.
+public func sortEntries(_ entries: [DirEntry], _ sort: ListingSort = .default) -> [DirEntry] {
+    func key(_ a: DirEntry, _ b: DirEntry) -> ComparisonResult {
+        switch sort.by {
+        case .natural, .random, .none:
+            return a.name.localizedStandardCompare(b.name)
+        case .alphabetical:
+            return a.name.caseInsensitiveCompare(b.name)
+        case .mtime:
+            return compare(a.modified ?? .distantPast, b.modified ?? .distantPast)
+        case .btime:
+            return compare(a.created ?? .distantPast, b.created ?? .distantPast)
+        case .size:
+            return compare(a.size ?? 0, b.size ?? 0)
+        case .extension:
+            let ea = a.isDir ? "" : (a.name as NSString).pathExtension
+            let eb = b.isDir ? "" : (b.name as NSString).pathExtension
+            return ea.caseInsensitiveCompare(eb)
+        }
     }
+    return entries.sorted { a, b in
+        if sort.dirFirst && a.isDir != b.isDir { return a.isDir }
+        var ord = key(a, b)
+        if ord == .orderedSame { ord = a.name.compare(b.name) }   // yazi's alphabetical fallback
+        return (ord == .orderedAscending) != sort.reverse && ord != .orderedSame
+    }
+}
+
+/// `ComparisonResult` for any `Comparable` — Foundation only offers it on
+/// strings and numbers.
+private func compare<T: Comparable>(_ a: T, _ b: T) -> ComparisonResult {
+    a < b ? .orderedAscending : (a > b ? .orderedDescending : .orderedSame)
 }
 
 /// Contents of a folder prepared for the look-ahead listing.
 public struct FolderContents: Equatable {
-    /// Entries in display order (directories first, natural sort), capped.
+    /// Entries in display order (see `sortEntries`), capped.
     public let entries: [DirEntry]
     /// How many entries the cap cut off (0 if none).
     public let omitted: Int
@@ -119,17 +197,18 @@ public struct FolderContents: Equatable {
 }
 
 /// Read a folder for the look-ahead listing: isDirectory bits, sizes and
-/// modification dates bulk-fetched during enumeration (one getattrlistbulk kernel pass, no stat per entry),
-/// directories-first natural sort over all entries, then capped to `cap` for
-/// display. Safe to call off the main thread.
+/// dates bulk-fetched during enumeration (one getattrlistbulk kernel pass,
+/// no stat per entry), ordered by `sort` (see `sortEntries`) over all
+/// entries, then capped to `cap` for display. Safe to call off the main thread.
 ///
 /// A read failure is returned as `error` rather than thrown — the folder
 /// vanishing mid-hover is an expected race, and the caller renders the error
 /// into the pane (visible, not swallowed).
 ///
 /// Side effects: reads the directory from disk.
-public func loadFolder(_ dir: String, cap: Int) -> FolderContents {
-    let listingKeys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
+public func loadFolder(_ dir: String, cap: Int, sort: ListingSort = .default) -> FolderContents {
+    let listingKeys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey,
+                                         .contentModificationDateKey, .creationDateKey]
     let urls: [URL]
     do {
         urls = try FileManager.default.contentsOfDirectory(
@@ -148,9 +227,10 @@ public func loadFolder(_ dir: String, cap: Int) -> FolderContents {
         return DirEntry(name: url.lastPathComponent,
                         isDir: isDir,
                         modified: values?.contentModificationDate,
-                        size: isDir ? nil : values?.fileSize)
+                        size: isDir ? nil : values?.fileSize,
+                        created: values?.creationDate)
     }
-    let capped = capEntries(sortEntries(all), limit: cap)
+    let capped = capEntries(sortEntries(all, sort), limit: cap)
     return FolderContents(entries: capped.shown, omitted: capped.omitted)
 }
 
