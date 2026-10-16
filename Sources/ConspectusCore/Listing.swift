@@ -87,6 +87,36 @@ public func readableSize(_ bytes: Int) -> String {
     return number + units[unit]
 }
 
+/// Shorten a name for the listing's name column the way yazi's current pane
+/// does (`Entity:ellipsis` + `Line:truncate`): a name that fits is returned
+/// untouched; a longer one is cut from the right and ends in "…" — for a file
+/// with an extension in "….ext", so the type stays readable ("lenz09-sozio….pdf").
+/// Directories keep their trailing "/" after the ellipsis ("very-long-na…/").
+/// The result never exceeds `max` characters. Width counts characters, not
+/// terminal cells (CJK/emoji are two cells; known limit, see TODO.md).
+///
+/// - Parameters:
+///   - name: The entry's file name (without a trailing "/").
+///   - isDir: Whether a "/" is appended for display.
+///   - max: Column width in characters; at least 2 ("…/" must fit).
+/// - Returns: The display name, at most `max` characters.
+public func truncateName(_ name: String, isDir: Bool, max: Int) -> String {
+    precondition(max >= 2, "column width must hold at least \"…/\", got \(max)")
+    let suffix = isDir ? "/" : ""
+    if name.count + suffix.count <= max { return name + suffix }
+    // Extension like Rust's Path::extension: after the last dot, but a
+    // leading dot (".bashrc") is not an extension.
+    var ellipsis = "…"
+    if !isDir, let dot = name.lastIndex(of: "."), dot != name.startIndex,
+       name.index(after: dot) != name.endIndex {
+        let withExt = "…" + name[dot...]
+        // A long extension that leaves no room for the stem falls back to "…".
+        if withExt.count + suffix.count < max { ellipsis = withExt }
+    }
+    let keep = Swift.max(0, max - ellipsis.count - suffix.count)
+    return String(name.prefix(keep)) + ellipsis + suffix
+}
+
 /// Format a modification date for the listing's date column, the same way
 /// yazi's `size_and_mtime` linemode does: today and yesterday by name (the
 /// Finder convention — recent work reads at a glance), the rest of this year

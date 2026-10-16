@@ -97,8 +97,10 @@ let folderListingCap = 500
 /// Alpha of the secondary text in listings (size/date column, "… and N more",
 /// the parent path behind a selected file): one dim for every listing.
 let listingDimAlpha = 0.5
-/// Names longer than this (in characters) push their date past the shared
-/// date column instead of widening it for every row.
+/// Width of the name column in characters: longer names are shortened with
+/// "…" like yazi does (`truncateName`), so the size/date column stays put —
+/// without the cut, a tab past the last stop wraps the column onto the next
+/// line. The full name is the row's tooltip.
 let folderListingNameColumn = 40
 
 /// Render loaded folder contents in the current theme. Does no I/O — safe to
@@ -119,25 +121,27 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
     if contents.entries.isEmpty {
         return NSAttributedString(string: "  (empty)", attributes: [.font: font, .foregroundColor: fg])
     }
-    // Date column: one tab stop just past the longest (capped) row, measured
-    // in the monospace font's advance — glyph + two spaces + name + "/".
-    let longest = contents.entries.map { $0.name.count + ($0.isDir ? 1 : 0) }.max() ?? 0
+    // Date column: one tab stop just past the longest display name (already
+    // cut to the column width), measured in the monospace font's advance —
+    // glyph + two spaces + name (+ "/").
+    let shown = contents.entries.map { truncateName($0.name, isDir: $0.isDir, max: folderListingNameColumn) }
+    let longest = shown.map { $0.count }.max() ?? 0
     let advance = ("M" as NSString).size(withAttributes: [.font: font]).width
     let para = NSMutableParagraphStyle()
-    para.tabStops = [NSTextTab(textAlignment: .left,
-                               location: CGFloat(3 + min(longest, folderListingNameColumn) + 3) * advance)]
+    para.tabStops = [NSTextTab(textAlignment: .left, location: CGFloat(3 + longest + 3) * advance)]
     let dim = fg.withAlphaComponent(listingDimAlpha)
     let now = Date()
     let out = NSMutableAttributedString()
-    for e in contents.entries {
+    for (e, name) in zip(contents.entries, shown) {
         let icon = e.isDir ? FileIcon(glyph: "\u{f07b}", color: blue)   // nf-fa-folder for dirs
                            : fileIcon(e.name, pal)
         let url = URL(fileURLWithPath: (dir as NSString).appendingPathComponent(e.name),
                       isDirectory: e.isDir)
-        let attrs: [NSAttributedString.Key: Any] =
+        var attrs: [NSAttributedString.Key: Any] =
             [.font: font, .foregroundColor: icon.color, .link: url, .paragraphStyle: para]
-        out.append(NSAttributedString(string: icon.glyph + "  " + e.name + (e.isDir ? "/" : ""),
-                                      attributes: attrs))
+        // A cut name shows in full when the mouse rests on the row.
+        if name != e.name + (e.isDir ? "/" : "") { attrs[.toolTip] = e.name }
+        out.append(NSAttributedString(string: icon.glyph + "  " + name, attributes: attrs))
         // Monospace: right-pad the size to 7 cells so the dates line up.
         let size = e.size.map(readableSize) ?? "-"
         let date = e.modified.map { listingDate($0, now: now) } ?? ""

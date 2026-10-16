@@ -158,6 +158,48 @@ final class ListingTests: XCTestCase {
         }
     }
 
+    func testTruncateNameLeavesFittingNamesAlone() {
+        XCTAssertEqual(truncateName("notes.md", isDir: false, max: 40), "notes.md")
+        XCTAssertEqual(truncateName("art", isDir: true, max: 40), "art/")
+        // Exactly the column width, "/" included, still fits.
+        XCTAssertEqual(truncateName(String(repeating: "a", count: 39), isDir: true, max: 40),
+                       String(repeating: "a", count: 39) + "/")
+    }
+
+    func testTruncateNameKeepsExtensionLikeYazi() {
+        let long = "lenz09-soziologie-der-zweierbeziehung-eine-einfhrung-ch01.pdf"
+        let cut = truncateName(long, isDir: false, max: 40)
+        XCTAssertEqual(cut, "lenz09-soziologie-der-zweierbeziehu….pdf")
+        XCTAssertEqual(cut.count, 40)
+        // archive.tar.gz → extension "gz", like Path::extension.
+        XCTAssertEqual(truncateName(String(repeating: "x", count: 50) + ".tar.gz", isDir: false, max: 20),
+                       String(repeating: "x", count: 16) + "….gz")
+    }
+
+    func testTruncateNameWithoutExtensionEndsInEllipsis() {
+        XCTAssertEqual(truncateName(String(repeating: "n", count: 50), isDir: false, max: 10),
+                       String(repeating: "n", count: 9) + "…")
+        // A leading dot is not an extension.
+        XCTAssertEqual(truncateName(".very-long-hidden-rc-file-name", isDir: false, max: 10),
+                       ".very-lon…")
+        // Directories keep their "/" after the ellipsis.
+        XCTAssertEqual(truncateName(String(repeating: "d", count: 50), isDir: true, max: 10),
+                       String(repeating: "d", count: 8) + "…/")
+    }
+
+    func testTruncateNameNeverExceedsWidth() {
+        for max in 2...12 {
+            for name in ["a.pdf", "abcdefgh.markdown", ".hidden", "x.", String(repeating: "q", count: 30)] {
+                XCTAssertLessThanOrEqual(truncateName(name, isDir: false, max: max).count, max,
+                                         "\(name) at \(max)")
+                XCTAssertLessThanOrEqual(truncateName(name, isDir: true, max: max).count, max,
+                                         "\(name)/ at \(max)")
+            }
+        }
+        // Extension wider than the column falls back to a bare ellipsis.
+        XCTAssertEqual(truncateName("abcdefgh.markdown", isDir: false, max: 8), "abcdefg…")
+    }
+
     func testReadableSizeMatchesYazi() {
         XCTAssertEqual(readableSize(0), "0B")
         XCTAssertEqual(readableSize(807), "807B")

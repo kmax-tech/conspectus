@@ -60,6 +60,9 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
     the tab's sort preference with every hover), Nerd Font glyphs, Catppuccin
     colors, size and modification date as a dimmed column — `today 14:32` /
     `yesterday 09:10`, `16.10. 14:32` this year, `15.01. 2024` before.
+    Names longer than 40 characters are cut with `…` like yazi cuts them
+    (`lenz09-soziologie-der-zweierbeziehu….pdf` — the extension stays), so
+    the column never wraps; the full name is the row's tooltip.
     Quick Look on a folder only shows its icon +
     metadata, so we render the look-ahead ourselves. **Clicking a row marks
     it in yazi** (`reveal`: yazi cds to the listed folder and puts the cursor

@@ -13,11 +13,13 @@ Auslöser, ohne Termin.*
 ## Notiert, nicht geplant
 
 - **Ordnerliste: Datumsspalte am rechten Rand** (2026-10-16). Die Spalte
-  Größe + Datum sitzt heute an einem Tab-Stop hinter dem längsten Namen
-  (`folderListingNameColumn`), weil `renderListing` die Pane-Breite nicht
-  kennt; yazi setzt sie an den rechten Rand. Lösung: rechtsbündiger Tab-Stop,
-  gesetzt in `Panel+Preview` beim Anwenden, wo die Text-View-Breite bekannt
-  ist, und neu gesetzt bei Resize. Bekannte Grenzen derselben Stelle:
+  Größe + Datum sitzt heute an einem Tab-Stop hinter dem längsten Namen,
+  Namen über 40 Zeichen (`folderListingNameColumn`) werden wie in yazi mit
+  „…" gekürzt, weil `renderListing` die Pane-Breite nicht kennt; yazi kürzt
+  erst an der Pane-Breite und setzt die Spalte an den rechten Rand. Lösung:
+  rechtsbündiger Tab-Stop und Kürzung an der Breite, gesetzt in
+  `Panel+Preview` beim Anwenden, wo die Text-View-Breite bekannt ist, und neu
+  gesetzt bei Resize. Bekannte Grenzen derselben Stelle:
   die Namensbreite zählt Zeichen, nicht Zellen (CJK/Emoji doppelt breit);
   „today" veraltet über Mitternacht, bis die Pane neu rendert (Hover oder
   Refresh). Auslöser: wenn die springende Spalte beim Ordnerwechsel stört.
