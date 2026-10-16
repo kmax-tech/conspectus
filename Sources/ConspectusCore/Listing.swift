@@ -1,18 +1,44 @@
 import AppKit
 
 // Pure logic behind the right pane's folder look-ahead listing: entry
-// ordering and the extension -> icon mapping. The rendering (fonts,
+// ordering, the date column format and the extension -> icon mapping. The rendering (fonts,
 // NSAttributedString, filesystem reads) stays in the app.
 
 /// One entry of a folder listing.
 public struct DirEntry: Equatable {
     public let name: String
     public let isDir: Bool
+    /// Modification date; nil if it could not be read (entry vanished
+    /// mid-enumeration) — the listing then leaves the date column blank.
+    public let modified: Date?
 
-    public init(name: String, isDir: Bool) {
+    public init(name: String, isDir: Bool, modified: Date? = nil) {
         self.name = name
         self.isDir = isDir
+        self.modified = modified
     }
+}
+
+/// Format a modification date for the listing's date column, in the `ls -l`
+/// convention yazi's `size_and_mtime` linemode uses too: a date in the same
+/// calendar year as `now` shows day, month and time ("16.10. 14:32"), an
+/// older (or future-year) one day, month and year ("15.01.2024"). German
+/// day-first order, matching the user's yazi config.
+///
+/// - Parameters:
+///   - date: The modification date to show.
+///   - now: Reference "today" (injectable for tests).
+///   - timeZone: Zone the date is shown in (default: the system's).
+public func listingDate(_ date: Date, now: Date = Date(),
+                        timeZone: TimeZone = .current) -> String {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = timeZone
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = timeZone
+    f.dateFormat = cal.component(.year, from: date) == cal.component(.year, from: now)
+        ? "dd.MM. HH:mm" : "dd.MM.yyyy"
+    return f.string(from: date)
 }
 
 /// Cap an already-sorted entry list for display: the first `limit` entries
@@ -56,8 +82,8 @@ public struct FolderContents: Equatable {
     }
 }
 
-/// Read a folder for the look-ahead listing: isDirectory bits bulk-fetched
-/// during enumeration (one getattrlistbulk kernel pass, no stat per entry),
+/// Read a folder for the look-ahead listing: isDirectory bits and
+/// modification dates bulk-fetched during enumeration (one getattrlistbulk kernel pass, no stat per entry),
 /// directories-first natural sort over all entries, then capped to `cap` for
 /// display. Safe to call off the main thread.
 ///
@@ -71,17 +97,19 @@ public func loadFolder(_ dir: String, cap: Int) -> FolderContents {
     do {
         urls = try FileManager.default.contentsOfDirectory(
             at: URL(fileURLWithPath: dir, isDirectory: true),
-            includingPropertiesForKeys: [.isDirectoryKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles])
     } catch {
         return FolderContents(entries: [], omitted: 0, error: error.localizedDescription)
     }
-    let all = urls.map {
-        // Deliberate try?: the key was prefetched, a miss means the entry
-        // vanished mid-enumeration — rendering it as a file is icon-level
+    let all = urls.map { url -> DirEntry in
+        // Deliberate try?: the keys were prefetched, a miss means the entry
+        // vanished mid-enumeration — rendering it as a dateless file is
         // cosmetics, not worth failing the whole listing.
-        DirEntry(name: $0.lastPathComponent,
-                 isDir: (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false)
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey])
+        return DirEntry(name: url.lastPathComponent,
+                        isDir: values?.isDirectory ?? false,
+                        modified: values?.contentModificationDate)
     }
     let capped = capEntries(sortEntries(all), limit: cap)
     return FolderContents(entries: capped.shown, omitted: capped.omitted)

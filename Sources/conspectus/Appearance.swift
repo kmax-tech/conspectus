@@ -87,11 +87,15 @@ func terminalFont(size overrideSize: Double? = nil) -> NSFont {
 
 // Directory look-ahead for the right pane: Quick Look only shows a folder's
 // icon + metadata, so for directories we render the contents ourselves —
-// folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type.
+// folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type,
+// modification date as a dimmed column behind the names.
 // Loading (ConspectusCore.loadFolder: bulk isDirectory keys, sort, cap)
 // happens off the main thread; only a screenful is rendered anyway, and
 // "… and N more" makes the cut visible.
 let folderListingCap = 500
+/// Names longer than this (in characters) push their date past the shared
+/// date column instead of widening it for every row.
+let folderListingNameColumn = 40
 
 /// Render loaded folder contents in the current theme. Does no I/O — safe to
 /// build off the main thread; TextKit layout happens when the result is
@@ -111,6 +115,15 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
     if contents.entries.isEmpty {
         return NSAttributedString(string: "  (empty)", attributes: [.font: font, .foregroundColor: fg])
     }
+    // Date column: one tab stop just past the longest (capped) row, measured
+    // in the monospace font's advance — glyph + two spaces + name + "/".
+    let longest = contents.entries.map { $0.name.count + ($0.isDir ? 1 : 0) }.max() ?? 0
+    let advance = ("M" as NSString).size(withAttributes: [.font: font]).width
+    let para = NSMutableParagraphStyle()
+    para.tabStops = [NSTextTab(textAlignment: .left,
+                               location: CGFloat(3 + min(longest, folderListingNameColumn) + 3) * advance)]
+    let dim = fg.withAlphaComponent(0.5)
+    let now = Date()
     let out = NSMutableAttributedString()
     for e in contents.entries {
         let icon = e.isDir ? FileIcon(glyph: "\u{f07b}", color: blue)   // nf-fa-folder for dirs
@@ -118,9 +131,13 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
         let url = URL(fileURLWithPath: (dir as NSString).appendingPathComponent(e.name),
                       isDirectory: e.isDir)
         let attrs: [NSAttributedString.Key: Any] =
-            [.font: font, .foregroundColor: icon.color, .link: url]
-        out.append(NSAttributedString(string: icon.glyph + "  " + e.name + (e.isDir ? "/" : "") + "\n",
+            [.font: font, .foregroundColor: icon.color, .link: url, .paragraphStyle: para]
+        out.append(NSAttributedString(string: icon.glyph + "  " + e.name + (e.isDir ? "/" : ""),
                                       attributes: attrs))
+        let date = e.modified.map { "\t" + listingDate($0, now: now) } ?? ""
+        out.append(NSAttributedString(string: date + "\n",
+                                      attributes: [.font: font, .foregroundColor: dim,
+                                                   .link: url, .paragraphStyle: para]))
     }
     if contents.omitted > 0 {
         out.append(NSAttributedString(string: "\n  … and \(contents.omitted) more entries\n",

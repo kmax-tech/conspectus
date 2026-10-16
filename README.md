@@ -56,7 +56,8 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
     everything else through Quick Look (same generators as Finder). See
     "Status / limits" for each.
   - **Folder** → a rendered contents listing (folders first, natural sort, Nerd
-    Font glyphs, Catppuccin colors). Quick Look on a folder only shows its icon +
+    Font glyphs, Catppuccin colors, modification date as a dimmed column —
+    `16.10. 14:32` this year, `15.01.2024` before). Quick Look on a folder only shows its icon +
     metadata, so we render the look-ahead ourselves. **Clicking a row hands
     the path to yazi**: a folder is entered (`cd`), a file is revealed (the
     cursor moves onto it) — which fires a hover and previews it, the same way

@@ -51,6 +51,33 @@ final class ListingTests: XCTestCase {
         XCTAssertEqual(r.omitted, 0)
     }
 
+    // listingDate: same year -> day, month, time; other year -> day, month, year.
+    private let utc = TimeZone(identifier: "UTC")!
+    private func date(_ iso: String) -> Date { ISO8601DateFormatter().date(from: iso)! }
+
+    func testListingDateSameYearShowsTime() {
+        XCTAssertEqual(listingDate(date("2026-10-16T14:32:00Z"), now: date("2026-12-31T23:00:00Z"),
+                                   timeZone: utc), "16.10. 14:32")
+    }
+
+    func testListingDateOlderYearShowsYear() {
+        XCTAssertEqual(listingDate(date("2024-01-15T12:00:00Z"), now: date("2026-10-16T00:00:00Z"),
+                                   timeZone: utc), "15.01.2024")
+    }
+
+    func testListingDateFutureYearShowsYear() {
+        // A clock-skewed file from next year must not pass for "this year".
+        XCTAssertEqual(listingDate(date("2027-03-01T08:00:00Z"), now: date("2026-10-16T00:00:00Z"),
+                                   timeZone: utc), "01.03.2027")
+    }
+
+    func testListingDateYearBoundaryFollowsTimeZone() {
+        // 2025-12-31 23:30 UTC is already 2026 in Berlin: same year as now there.
+        let berlin = TimeZone(identifier: "Europe/Berlin")!
+        XCTAssertEqual(listingDate(date("2025-12-31T23:30:00Z"), now: date("2026-06-01T00:00:00Z"),
+                                   timeZone: berlin), "01.01. 00:30")
+    }
+
     func testFileIconKnownExtensions() {
         XCTAssertEqual(fileIcon("paper.pdf", mocha).glyph, "\u{f1c1}")
         XCTAssertEqual(fileIcon("photo.jpg", mocha).glyph, "\u{f1c5}")
@@ -88,9 +115,18 @@ final class LoadFolderTests: XCTestCase {
         let c = loadFolder(tmp, cap: 500)
         XCTAssertNil(c.error)
         XCTAssertEqual(c.omitted, 0)
-        XCTAssertEqual(c.entries, [DirEntry(name: "zdir", isDir: true),
-                                   DirEntry(name: "a.txt", isDir: false),
-                                   DirEntry(name: "b.txt", isDir: false)])
+        // Real entries carry disk dates; compare name + isDir only.
+        XCTAssertEqual(c.entries.map(\.name), ["zdir", "a.txt", "b.txt"])
+        XCTAssertEqual(c.entries.map(\.isDir), [true, false, false])
+    }
+
+    func testCarriesModificationDates() throws {
+        let file = tmp + "/old.txt"
+        try "x".write(toFile: file, atomically: true, encoding: .utf8)
+        let stamp = Date(timeIntervalSince1970: 1_705_320_000)   // 2024-01-15 12:00 UTC
+        try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: file)
+        let c = loadFolder(tmp, cap: 500)
+        XCTAssertEqual(c.entries.first?.modified, stamp)
     }
 
     func testCapAppliesAfterSortSoDirsSurvive() throws {
@@ -99,7 +135,7 @@ final class LoadFolderTests: XCTestCase {
         }
         try FileManager.default.createDirectory(atPath: tmp + "/zz-dir", withIntermediateDirectories: true)
         let c = loadFolder(tmp, cap: 3)
-        XCTAssertEqual(c.entries.first, DirEntry(name: "zz-dir", isDir: true))
+        XCTAssertEqual(c.entries.first?.name, "zz-dir")
         XCTAssertEqual(c.entries.count, 3)
         XCTAssertEqual(c.omitted, 3)
     }
