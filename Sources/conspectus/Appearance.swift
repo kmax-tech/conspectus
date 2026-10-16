@@ -88,7 +88,8 @@ func terminalFont(size overrideSize: Double? = nil) -> NSFont {
 // Directory look-ahead for the right pane: Quick Look only shows a folder's
 // icon + metadata, so for directories we render the contents ourselves —
 // folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type,
-// modification date as a dimmed column behind the names.
+// size and modification date as a dimmed column behind the names (the same
+// "612.4K  16.10. 14:32" as the yazi size_and_mtime linemode).
 // Loading (ConspectusCore.loadFolder: bulk isDirectory keys, sort, cap)
 // happens off the main thread; only a screenful is rendered anyway, and
 // "… and N more" makes the cut visible.
@@ -134,8 +135,11 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
             [.font: font, .foregroundColor: icon.color, .link: url, .paragraphStyle: para]
         out.append(NSAttributedString(string: icon.glyph + "  " + e.name + (e.isDir ? "/" : ""),
                                       attributes: attrs))
-        let date = e.modified.map { "\t" + listingDate($0, now: now) } ?? ""
-        out.append(NSAttributedString(string: date + "\n",
+        // Monospace: right-pad the size to 7 cells so the dates line up.
+        let size = e.size.map(readableSize) ?? "-"
+        let date = e.modified.map { listingDate($0, now: now) } ?? ""
+        let meta = "\t" + String(repeating: " ", count: max(0, 7 - size.count)) + size + "  " + date
+        out.append(NSAttributedString(string: meta + "\n",
                                       attributes: [.font: font, .foregroundColor: dim,
                                                    .link: url, .paragraphStyle: para]))
     }

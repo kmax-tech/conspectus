@@ -62,13 +62,13 @@ final class ListingTests: XCTestCase {
 
     func testListingDateOlderYearShowsYear() {
         XCTAssertEqual(listingDate(date("2024-01-15T12:00:00Z"), now: date("2026-10-16T00:00:00Z"),
-                                   timeZone: utc), "15.01.2024")
+                                   timeZone: utc), "15.01.  2024")
     }
 
     func testListingDateFutureYearShowsYear() {
         // A clock-skewed file from next year must not pass for "this year".
         XCTAssertEqual(listingDate(date("2027-03-01T08:00:00Z"), now: date("2026-10-16T00:00:00Z"),
-                                   timeZone: utc), "01.03.2027")
+                                   timeZone: utc), "01.03.  2027")
     }
 
     func testListingDateYearBoundaryFollowsTimeZone() {
@@ -76,6 +76,16 @@ final class ListingTests: XCTestCase {
         let berlin = TimeZone(identifier: "Europe/Berlin")!
         XCTAssertEqual(listingDate(date("2025-12-31T23:30:00Z"), now: date("2026-06-01T00:00:00Z"),
                                    timeZone: berlin), "01.01. 00:30")
+    }
+
+    func testReadableSizeMatchesYazi() {
+        XCTAssertEqual(readableSize(0), "0B")
+        XCTAssertEqual(readableSize(807), "807B")
+        XCTAssertEqual(readableSize(1023), "1023B")
+        XCTAssertEqual(readableSize(1024), "1K")
+        XCTAssertEqual(readableSize(32 * 1024), "32K")
+        XCTAssertEqual(readableSize(626_893), "612.2K")
+        XCTAssertEqual(readableSize(2_936_013), "2.8M")
     }
 
     func testFileIconKnownExtensions() {
@@ -127,6 +137,12 @@ final class LoadFolderTests: XCTestCase {
         try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: file)
         let c = loadFolder(tmp, cap: 500)
         XCTAssertEqual(c.entries.first?.modified, stamp)
+        XCTAssertEqual(c.entries.first?.size, 1)
+    }
+
+    func testDirectoriesHaveNoSize() throws {
+        try FileManager.default.createDirectory(atPath: tmp + "/sub", withIntermediateDirectories: true)
+        XCTAssertNil(loadFolder(tmp, cap: 500).entries.first?.size)
     }
 
     func testCapAppliesAfterSortSoDirsSurvive() throws {

@@ -11,19 +11,42 @@ public struct DirEntry: Equatable {
     /// Modification date; nil if it could not be read (entry vanished
     /// mid-enumeration) — the listing then leaves the date column blank.
     public let modified: Date?
+    /// File size in bytes; nil for directories (shown as "-", like yazi) and
+    /// when it could not be read.
+    public let size: Int?
 
-    public init(name: String, isDir: Bool, modified: Date? = nil) {
+    public init(name: String, isDir: Bool, modified: Date? = nil, size: Int? = nil) {
         self.name = name
         self.isDir = isDir
         self.modified = modified
+        self.size = size
     }
+}
+
+/// Format a byte count for the listing's size column the way yazi's
+/// `ya.readable_size` does, so the pane and the yazi linemode read the same:
+/// binary units (1K = 1024 B), one decimal, a trailing ".0" dropped —
+/// "807B", "32K", "612.4K", "2.8M".
+public func readableSize(_ bytes: Int) -> String {
+    precondition(bytes >= 0, "size must be non-negative, got \(bytes)")
+    let units = ["B", "K", "M", "G", "T", "P", "E"]
+    var value = Double(bytes)
+    var unit = 0
+    while value >= 1024 && unit < units.count - 1 {
+        value /= 1024
+        unit += 1
+    }
+    var number = String(format: "%.1f", value)
+    if number.hasSuffix(".0") { number.removeLast(2) }
+    return number + units[unit]
 }
 
 /// Format a modification date for the listing's date column, in the `ls -l`
 /// convention yazi's `size_and_mtime` linemode uses too: a date in the same
 /// calendar year as `now` shows day, month and time ("16.10. 14:32"), an
-/// older (or future-year) one day, month and year ("15.01.2024"). German
-/// day-first order, matching the user's yazi config.
+/// older (or future-year) one day, month and year ("15.01.  2024", padded to
+/// the same 12 characters so day and month line up). German day-first order,
+/// matching the user's yazi config.
 ///
 /// - Parameters:
 ///   - date: The modification date to show.
@@ -37,7 +60,7 @@ public func listingDate(_ date: Date, now: Date = Date(),
     f.locale = Locale(identifier: "en_US_POSIX")
     f.timeZone = timeZone
     f.dateFormat = cal.component(.year, from: date) == cal.component(.year, from: now)
-        ? "dd.MM. HH:mm" : "dd.MM.yyyy"
+        ? "dd.MM. HH:mm" : "dd.MM.  yyyy"
     return f.string(from: date)
 }
 
@@ -82,7 +105,7 @@ public struct FolderContents: Equatable {
     }
 }
 
-/// Read a folder for the look-ahead listing: isDirectory bits and
+/// Read a folder for the look-ahead listing: isDirectory bits, sizes and
 /// modification dates bulk-fetched during enumeration (one getattrlistbulk kernel pass, no stat per entry),
 /// directories-first natural sort over all entries, then capped to `cap` for
 /// display. Safe to call off the main thread.
@@ -93,23 +116,26 @@ public struct FolderContents: Equatable {
 ///
 /// Side effects: reads the directory from disk.
 public func loadFolder(_ dir: String, cap: Int) -> FolderContents {
+    let listingKeys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
     let urls: [URL]
     do {
         urls = try FileManager.default.contentsOfDirectory(
             at: URL(fileURLWithPath: dir, isDirectory: true),
-            includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey],
+            includingPropertiesForKeys: listingKeys,
             options: [.skipsHiddenFiles])
     } catch {
         return FolderContents(entries: [], omitted: 0, error: error.localizedDescription)
     }
     let all = urls.map { url -> DirEntry in
         // Deliberate try?: the keys were prefetched, a miss means the entry
-        // vanished mid-enumeration — rendering it as a dateless file is
+        // vanished mid-enumeration — rendering it as a dateless, sizeless file is
         // cosmetics, not worth failing the whole listing.
-        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey])
+        let values = try? url.resourceValues(forKeys: Set(listingKeys))
+        let isDir = values?.isDirectory ?? false
         return DirEntry(name: url.lastPathComponent,
-                        isDir: values?.isDirectory ?? false,
-                        modified: values?.contentModificationDate)
+                        isDir: isDir,
+                        modified: values?.contentModificationDate,
+                        size: isDir ? nil : values?.fileSize)
     }
     let capped = capEntries(sortEntries(all), limit: cap)
     return FolderContents(entries: capped.shown, omitted: capped.omitted)
