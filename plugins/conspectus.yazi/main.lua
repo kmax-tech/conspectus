@@ -26,8 +26,10 @@
 --   3. Tab session: snapshot this pane's tabs on every cd and restore them
 --      when the app asks, so tabs survive ⌘R and app restarts.
 --   4. Navigation that asks the HOVERED entry, not the selection: the `entry`
---      below (`l`/`→` and `o`/`<Enter>`), and a left click on a folder row,
---      which enters it instead of only moving the cursor there.
+--      below (`l`/`→` and `o`/`<Enter>`), and Finder's mouse contract on the
+--      rows — a click marks (stock yazi), a double-click enters a folder or
+--      opens a file like Enter. yazi has no double-click; two clicks on the
+--      same row within the macOS interval ($CONSPECTUS_DOUBLE_CLICK) are one.
 --   5. A clickable path bar: the cwd in the pane's header is a breadcrumb, so
 --      the mouse can go UP as well as down (the columns only ever go down).
 
@@ -72,28 +74,98 @@ local hovered_is_dir = ya.sync(function()
 	return h ~= nil and h.cha.is_dir
 end)
 
--- Left click on a DIRECTORY row enters it, like Enter — yazi's own click only
--- reveals (moves the cursor there). Wraps the preset `Entity:click` instead of
+-- Open the hovered file the way `o` / Enter do: in IDE mode ($CONSPECTUS_NVIM
+-- = the middle nvim's --listen socket) send the selected/hovered text file(s)
+-- there as buffers, so several files pile up in one editor; otherwise yazi's
+-- normal opener. Selection semantics are Enter's: a pending selection opens
+-- as a batch. Shared by the keymap entry, the double-click and the app's
+-- `panesync-act open`.
+local function open_hovered()
+	local emit = ya.emit or ya.mgr_emit
+	local oks, sock = pcall(function() return os.getenv("CONSPECTUS_NVIM") end)
+	if oks and sock and #sock > 0 then
+		-- The socket may be stale (IDE pane closed since launch), so the
+		-- liveness test stays in the shell, next to the nvim call. A binary
+		-- file (PDF, image) is never sent there — nvim would show raw bytes —
+		-- but goes to the normal opener. The test looks at "$1" only (first
+		-- selected, else hovered): a mixed selection follows its first file.
+		emit("shell", { 'if [ -S "$CONSPECTUS_NVIM" ] && [ "$(file -b --mime-encoding -- "$1")" != binary ]; then nvim --server "$CONSPECTUS_NVIM" --remote "$@"; else ya emit open; fi' })
+	else
+		emit("open", {})
+	end
+end
+
+-- Run a `panesync-act` command on the hovered item: rename/remove are yazi's
+-- own, restricted to the hovered item; open is the shared opener above.
+local function run_act(cmd)
+	if cmd == "open" then
+		open_hovered()
+	else
+		(ya.emit or ya.mgr_emit)(cmd, { hovered = true })
+	end
+end
+
+-- Double-click interval in seconds: the macOS setting (System Settings →
+-- Mouse), handed over by the app as $CONSPECTUS_DOUBLE_CLICK
+-- (NSEvent.doubleClickInterval). Unset — a yazi the app did not launch, which
+-- never installs the click handler anyway — or unparsable falls back to
+-- macOS's own default of 0.5 s; the unparsable case is reported.
+local function double_click_interval()
+	local ok, v = pcall(function() return os.getenv("CONSPECTUS_DOUBLE_CLICK") end)
+	if not ok or v == nil or v == "" then return 0.5 end
+	local n = tonumber(v)
+	if not n or n <= 0 then
+		ya.notify({ title = "conspectus", timeout = 5, level = "warn",
+			content = "CONSPECTUS_DOUBLE_CLICK='" .. v .. "' is not a positive number — double-click uses 0.5 s" })
+		return 0.5
+	end
+	return n
+end
+
+-- Is a left press at `now` on `url` the second half of a double-click, given
+-- the previous press `last` ({ url, t } or nil)? Returns the verdict and the
+-- new `last`: nil after a double, so a triple-click starts over instead of
+-- firing twice. Pure.
+local function click_verdict(last, url, now, interval)
+	if last and last.url == url and now - last.t <= interval then
+		return true, nil
+	end
+	return false, { url = url, t = now }
+end
+
+-- Finder's mouse contract on the rows: a single click marks (the stock
+-- `Entity:click` reveals — moves the cursor there), a double-click acts —
+-- enters a folder, opens a file like Enter. Wraps the preset click instead of
 -- replacing it, so reveal, right-click-opens and middle-click keep working;
--- `enter` acts on the row the reveal just hovered (commands apply in emit
+-- `enter`/open act on the row the reveal just hovered (commands apply in emit
 -- order). Only inside conspectus, and only if the preset component is where we
 -- expect it — a yazi that moved it keeps its stock click behavior.
 --
--- Consequence worth knowing: clicking a pane merely to focus it also enters,
--- when the click happens to land on a folder row.
-local function install_dir_click()
+-- Quirk worth knowing: the app delivers its right-click to yazi as a
+-- synthesized LEFT click (cursor onto the row before the context menu), so a
+-- left click followed within the interval by a right-click on the same row
+-- counts as a double-click.
+local function install_double_click()
 	if type(Entity) ~= "table" or type(Entity.click) ~= "function" then
 		ya.notify({ title = "conspectus", timeout = 3, level = "warn",
-			content = "click-to-enter not installed — yazi's Entity:click is missing" })
+			content = "double-click not installed — yazi's Entity:click is missing" })
 		return
 	end
 	local base = Entity.click
+	local interval = double_click_interval()
+	local last = nil
 	Entity.click = function(self, event, up)
 		base(self, event, up)
 		if up or event.is_middle or event.is_right then return end
 		local f = self._file
-		if f and f.cha and f.cha.is_dir then
+		if not f then return end
+		local double
+		double, last = click_verdict(last, tostring(f.url), ya.time(), interval)
+		if not double then return end
+		if f.cha and f.cha.is_dir then
 			(ya.emit or ya.mgr_emit)("enter", {})
+		else
+			open_hovered()
 		end
 	end
 end
@@ -178,7 +250,7 @@ function M:setup()
 	-- pcall-guarded env reads in case the yazi sandbox withholds os.getenv.
 	local ok, fifo = pcall(function() return os.getenv("QLPEEK_FIFO") end)
 	if ok and fifo and #fifo > 0 then
-		install_dir_click()
+		install_double_click()
 		install_breadcrumb_click()
 		ps.sub("hover", function()
 			local path = get_hovered()
@@ -201,7 +273,7 @@ function M:setup()
 				local act = pending_act
 				pending_act = nil
 				if act.path == path then
-					(ya.emit or ya.mgr_emit)(act.cmd, { hovered = true })
+					run_act(act.cmd)
 				end
 			end
 		end)
@@ -376,10 +448,12 @@ function M:setup()
 				emit("reveal", { body })
 			end
 		end)
-		-- panesync-act: the app's right-click menu hands a file operation to
-		-- yazi instead of doing it itself — rename and trash stay yazi's (one
-		-- task system, one confirmation, one place that knows the selection).
-		-- Body "<peer> <rename|remove> <path>". The command runs on the
+		-- panesync-act: the app hands a file operation to yazi instead of
+		-- doing it itself — rename and trash (right-click menu) stay yazi's
+		-- (one task system, one confirmation, one place that knows the
+		-- selection), open (double-click on a listing row) goes through the
+		-- shared opener so IDE routing applies. Body
+		-- "<peer> <rename|remove|open> <path>". rename/remove run on the
 		-- HOVERED item only (`--hovered`), never on a selection the user left
 		-- elsewhere — and only once that item IS the path: if it is hovered
 		-- already (right-click in this pane), run now; otherwise reveal it
@@ -390,7 +464,7 @@ function M:setup()
 			if type(body) ~= "string" then return end
 			local target, cmd, path = body:match("^([LR]) (%a+) (.+)$")
 			if not target or target ~= peer then return end
-			if cmd ~= "rename" and cmd ~= "remove" then
+			if cmd ~= "rename" and cmd ~= "remove" and cmd ~= "open" then
 				ya.notify({ title = "conspectus", timeout = 3, level = "warn",
 					content = "unknown context action '" .. cmd .. "'" })
 				return
@@ -405,7 +479,7 @@ function M:setup()
 				return
 			end
 			if hovered == path then
-				emit(cmd, { hovered = true })
+				run_act(cmd)
 			else
 				pending_act = { cmd = cmd, path = path }
 				emit("reveal", { path })
@@ -530,17 +604,7 @@ function M:entry(job)
 	end
 
 	if mode == "open" then
-		local oks, sock = pcall(function() return os.getenv("CONSPECTUS_NVIM") end)
-		if oks and sock and #sock > 0 then
-			-- The socket may be stale (IDE pane closed since launch), so the
-			-- liveness test stays in the shell, next to the nvim call. A binary
-			-- file (PDF, image) is never sent there — nvim would show raw bytes —
-			-- but goes to the normal opener. The test looks at "$1" only (first
-			-- selected, else hovered): a mixed selection follows its first file.
-			emit("shell", { 'if [ -S "$CONSPECTUS_NVIM" ] && [ "$(file -b --mime-encoding -- "$1")" != binary ]; then nvim --server "$CONSPECTUS_NVIM" --remote "$@"; else ya emit open; fi' })
-		else
-			emit("open", {})
-		end
+		open_hovered()
 		return
 	end
 

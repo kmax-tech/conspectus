@@ -61,18 +61,23 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
     colors, size and modification date as a dimmed column — `today 14:32` /
     `yesterday 09:10`, `16.10. 14:32` this year, `15.01. 2024` before.
     Quick Look on a folder only shows its icon +
-    metadata, so we render the look-ahead ourselves. **Clicking a row hands
-    the path to yazi**: a folder is entered (`cd`), a file is revealed (the
-    cursor moves onto it) — which fires a hover and previews it, the same way
-    keyboard navigation does. Mimics yazi's own third column.
+    metadata, so we render the look-ahead ourselves. **Clicking a row marks
+    it in yazi** (`reveal`: yazi cds to the listed folder and puts the cursor
+    on the row — which fires a hover and previews it, the same way keyboard
+    navigation does); **double-clicking acts**: a folder is entered, a file
+    opens like `Enter`. Mimics yazi's own third column.
 - Because the right pane previews files *and* folders, yazi runs at 2 columns
   (its own 3rd preview column is hidden via the overlay `yazi.toml`). You
   navigate in the middle column and enter directories to descend.
-- **Clicking works the same way inside the yazi pane**: a left click on a
-  folder row enters it, exactly like `Enter`. Stock yazi only moves the cursor
-  there; the bundled plugin wraps yazi's `Entity:click` to add the `enter`
-  (right-click keeps its stock "reveal + open"). The flip side: a click meant
-  only to focus a pane also descends when it lands on a folder row.
+- **Finder's mouse contract inside the yazi pane too**: a left click marks
+  (moves the cursor — stock yazi), a double-click enters a folder or opens a
+  file like `Enter`. yazi has no double-click; the bundled plugin wraps
+  `Entity:click` and counts two clicks on the same row within the macOS
+  double-click interval (System Settings → Mouse, handed over as
+  `CONSPECTUS_DOUBLE_CLICK`). Right-click keeps its stock reveal. One quirk:
+  the app delivers a right-click to yazi as a left click (cursor onto the row
+  before the menu), so left-then-right on the same row within the interval
+  counts as a double-click.
 - **Going up is the path bar**: the cwd in a pane's header is a breadcrumb —
   click any segment to `cd` to that level, several levels in one click. The
   columns themselves only ever descend (the left column holds the *parent's*
@@ -239,7 +244,7 @@ dotfiles (`keybindings.md`); ⌘⌥-arrows remain as silent aliases. Trade-off
 (same as kitty): ⌥-arrows no longer reach the shell as word jumps —
 `M-b`/`M-f` and `C-a`/`C-e` still do. **Clicking** a pane focuses it too.
 A focused pane shows a subtle gray border (only when more than one
-focusable pane exists). The mouse can also *navigate*: a left click on a
+focusable pane exists). The mouse can also *navigate*: a double-click on a
 folder row enters that folder, and the **side buttons** (or **⌘[ / ⌘]** in the
 Go menu) step back and forward through that pane's directory history — enough
 to browse a tree without touching the keyboard. **⌘⌃→ / ⌘⌃←** widen / narrow the focused pane
@@ -390,8 +395,8 @@ the active instance automatically — no focus tracking involved. Note that
   generated to load your own init first. That plugin is the yazi-side half of
   conspectus: it pushes hovers into the FIFO, follows the app's `panesync-*`
   messages (row clicks, back/forward, the theme restart), keeps the tab session,
-  decides `l` / `o` / `Enter` from the *hovered* entry, and makes a left click
-  on a folder row enter it. Your
+  decides `l` / `o` / `Enter` from the *hovered* entry, and turns two clicks
+  on a row into Finder's double-click (enter / open). Your
   normal yazi is untouched — and a machine with **no yazi config at all**
   works too (yazi defaults + the bundled plugin). `theme.toml` switches to the
   catppuccin flavors only if they are installed; otherwise your own theme (or
@@ -405,7 +410,7 @@ the active instance automatically — no focus tracking involved. Note that
   `0.75` favours yazi); clamped to 0.25…0.75. The divider is still draggable,
   and the ratio scales when you resize the window.
 - Mouse back / forward: the side buttons (4 and 5) walk the **directory
-  history** of the pane under the pointer — together with click-to-enter that
+  history** of the pane under the pointer — together with double-click-to-enter that
   makes the mouse alone enough to browse a tree. yazi cannot see those buttons
   itself (crossterm reports left/middle/right only), so conspectus translates
   them into yazi's own `back`/`forward` over the DDS. The same two commands sit

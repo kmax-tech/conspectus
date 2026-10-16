@@ -208,6 +208,13 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// read on the main thread by `showFolder` before it hands off to the
     /// loader queue. Main thread only.
     var listingSort = ListingSort.default
+    /// The folder-listing row a single click just revealed, kept for the
+    /// double-click that may follow: the first click already re-renders the
+    /// pane (yazi hovers the row — the listing changes, or a file preview
+    /// replaces it), so the second click cannot be resolved against what is
+    /// under the mouse; it acts on this remembered row (`listingDoubleClick`).
+    /// nil when no click is pending. Main thread only.
+    var listingClick: ListingClick?
 
     /// Minimum pane extent (width in the horizontal split, height of the pane
     /// area in the outer split) — window resizes and divider drags must not
@@ -277,6 +284,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
         env["YAZI_ID"] = nil; env["YAZI_LEVEL"] = nil
+        // The macOS double-click interval (System Settings → Mouse), so the
+        // bundled plugin's double-click on yazi rows agrees with the rest of
+        // the desktop — yazi itself has no double-click.
+        env["CONSPECTUS_DOUBLE_CLICK"] = String(NSEvent.doubleClickInterval)
         for (k, v) in extraEnv { env[k] = v }
         // `run` overrides the global command (e.g. the ide editor pane runs nvim).
         let cmd = run ?? command

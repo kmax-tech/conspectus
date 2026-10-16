@@ -316,10 +316,15 @@ extension Panel {
     /// monitor grants focus but returns the event, so buttons in the PDF
     /// toolbar and text selection still work. Terminal panes already focus on
     /// click (SwiftTerm), so we only handle clicks that land in the preview.
+    /// The same monitor catches the second click of a double-click on a
+    /// folder-listing row (`listingDoubleClick`) and swallows it, so it does
+    /// not also land in whatever replaced the row after the first click.
     /// Side effects: installs a local leftMouseDown monitor.
     func startPreviewClickMonitor() {
         NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            guard let self = self, self.previewAttached,
+            guard let self = self else { return event }
+            if self.listingDoubleClick(event) { return nil }
+            guard self.previewAttached,
                   let hit = self.window?.contentView?.hitTest(event.locationInWindow),
                   hit.isDescendant(of: self.rightContainer),
                   !self.previewHasFocus(self.window?.firstResponder) else { return event }

@@ -104,13 +104,37 @@ extension Panel {
     }
 
     // MARK: NSTextViewDelegate — click a row in the folder listing.
-    // Both cases just hand the path to yazi and let the normal hover pipeline
-    // do the rest: a folder is entered (cd), a file is revealed (cursor moves
-    // onto it) — which fires a hover and previews it. Symmetric, no special
-    // preview handling here.
+    // Finder semantics, the same as in the yazi pane: a single click MARKS
+    // the row — `reveal` in yazi (cd to the listed folder, cursor onto the
+    // row), which fires a hover and previews it; a double-click ACTS — enters
+    // a folder, opens a file like Enter (`listingDoubleClick`). The single
+    // click is not held back to wait for a possible double: the double acts
+    // on the remembered row, so the first click costs no latency.
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
         guard let url = link as? URL else { return false }
-        sendToYazi(url.path, action: url.hasDirectoryPath ? "cd" : "reveal")
+        listingClick = ListingClick(path: url.path, isDir: url.hasDirectoryPath, at: Date())
+        sendToYazi(url.path, action: "reveal")
+        return true
+    }
+
+    /// Second click of a double-click in the preview area (from the
+    /// leftMouseDown monitor): acts on the row the first click revealed —
+    /// `cd` into a folder, `panesync-act open` for a file (yazi's opener with
+    /// the plugin's IDE routing, i.e. what Enter does in the pane). Only a
+    /// click within the system double-click interval of a listing click
+    /// counts; anything else is left alone. Returns true when it consumed the
+    /// click. Side effects: DDS publish; clears `listingClick`.
+    func listingDoubleClick(_ event: NSEvent) -> Bool {
+        guard event.clickCount == 2, let c = listingClick else { return false }
+        listingClick = nil
+        guard Date().timeIntervalSince(c.at) <= NSEvent.doubleClickInterval,
+              let hit = window?.contentView?.hitTest(event.locationInWindow),
+              hit.isDescendant(of: rightContainer) else { return false }
+        if c.isDir {
+            sendToYazi(c.path, action: "cd")
+        } else {
+            publishToYazi("panesync-act", body: "\(paneUnder(nil)) open \(c.path)")
+        }
         return true
     }
 
@@ -719,4 +743,12 @@ extension Panel {
 func readTextLeniently(_ path: String) -> String? {
     guard let data = FileManager.default.contents(atPath: path) else { return nil }
     return decodeText(data)
+}
+
+/// A folder-listing row a single click revealed, remembered for the
+/// double-click that may follow (see `Panel.listingClick`).
+struct ListingClick {
+    let path: String
+    let isDir: Bool
+    let at: Date
 }

@@ -709,6 +709,15 @@ continuously, so there are no pages to break.
 
 ## 2026-08-17 — Hover, not selection: `o`/`Enter` and click-to-enter in the plugin
 
+> **Superseded in part (2026-10-16):** click-to-enter was replaced by Finder's
+> contract — a click marks, a double-click enters/opens. yazi has no
+> double-click; the plugin counts two clicks on the same row within
+> `CONSPECTUS_DOUBLE_CLICK` (the macOS interval, exported by the app), see
+> `install_double_click` in `plugins/conspectus.yazi/main.lua`. The listing
+> in the preview pane acts on the *remembered* first click, because yazi's
+> reveal re-renders the pane before the second click lands. The wrapping
+> technique and the hover-not-selection point below still hold.
+
 **Problem:** Two navigation keys asked the shell `[ -d "$1" ]` whether to enter
 a directory. But yazi's `shell` passes the SELECTED files, falling back to the
 hovered one only when nothing is selected — so with a pending copy/cut, `Enter`
