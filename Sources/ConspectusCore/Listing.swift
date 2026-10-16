@@ -45,12 +45,12 @@ public func readableSize(_ bytes: Int) -> String {
 /// yazi's `size_and_mtime` linemode does: today and yesterday by name (the
 /// Finder convention — recent work reads at a glance), the rest of this year
 /// with the time, older or future years with the year (the `ls -l`
-/// convention). Always 13 characters, time or year flush right:
+/// convention). Always 15 characters, time or year flush right:
 ///
-///     heute   14:32
-///     gestern 09:10
-///     16.10.  14:32
-///     15.01.   2024
+///     today     14:32
+///     yesterday 09:10
+///     16.10.    14:32
+///     15.01.     2024
 ///
 /// - Parameters:
 ///   - date: The modification date to show.
@@ -69,12 +69,12 @@ public func listingDate(_ date: Date, now: Date = Date(),
     }
     // Force-unwrap: subtracting one day from a valid date always succeeds.
     let yesterday = cal.date(byAdding: .day, value: -1, to: now)!
-    if cal.isDate(date, inSameDayAs: now) { return "heute   " + format("HH:mm") }
-    if cal.isDate(date, inSameDayAs: yesterday) { return "gestern " + format("HH:mm") }
+    if cal.isDate(date, inSameDayAs: now) { return "today     " + format("HH:mm") }
+    if cal.isDate(date, inSameDayAs: yesterday) { return "yesterday " + format("HH:mm") }
     if cal.component(.year, from: date) == cal.component(.year, from: now) {
-        return format("dd.MM.  HH:mm")
+        return format("dd.MM.    HH:mm")
     }
-    return format("dd.MM.   yyyy")
+    return format("dd.MM.     yyyy")
 }
 
 /// Cap an already-sorted entry list for display: the first `limit` entries

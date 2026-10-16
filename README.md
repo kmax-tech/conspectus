@@ -57,7 +57,7 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
     "Status / limits" for each.
   - **Folder** → a rendered contents listing (folders first, natural sort, Nerd
     Font glyphs, Catppuccin colors, size and modification date as a dimmed
-    column — `heute 14:32` / `gestern 09:10`, `16.10. 14:32` this year,
+    column — `today 14:32` / `yesterday 09:10`, `16.10. 14:32` this year,
     `15.01. 2024` before). Quick Look on a folder only shows its icon +
     metadata, so we render the look-ahead ourselves. **Clicking a row hands
     the path to yazi**: a folder is entered (`cd`), a file is revealed (the
