@@ -51,31 +51,55 @@ final class ListingTests: XCTestCase {
         XCTAssertEqual(r.omitted, 0)
     }
 
-    // listingDate: same year -> day, month, time; other year -> day, month, year.
+    // listingDate: today/yesterday by name, this year with time, else year;
+    // always 13 characters.
     private let utc = TimeZone(identifier: "UTC")!
     private func date(_ iso: String) -> Date { ISO8601DateFormatter().date(from: iso)! }
 
+    func testListingDateTodayByName() {
+        XCTAssertEqual(listingDate(date("2026-10-16T08:05:00Z"), now: date("2026-10-16T14:00:00Z"),
+                                   timeZone: utc), "heute   08:05")
+    }
+
+    func testListingDateYesterdayByName() {
+        XCTAssertEqual(listingDate(date("2026-10-15T23:59:00Z"), now: date("2026-10-16T00:01:00Z"),
+                                   timeZone: utc), "gestern 23:59")
+    }
+
     func testListingDateSameYearShowsTime() {
-        XCTAssertEqual(listingDate(date("2026-10-16T14:32:00Z"), now: date("2026-12-31T23:00:00Z"),
-                                   timeZone: utc), "16.10. 14:32")
+        XCTAssertEqual(listingDate(date("2026-10-14T14:32:00Z"), now: date("2026-10-16T12:00:00Z"),
+                                   timeZone: utc), "14.10.  14:32")
     }
 
     func testListingDateOlderYearShowsYear() {
         XCTAssertEqual(listingDate(date("2024-01-15T12:00:00Z"), now: date("2026-10-16T00:00:00Z"),
-                                   timeZone: utc), "15.01.  2024")
+                                   timeZone: utc), "15.01.   2024")
     }
 
     func testListingDateFutureYearShowsYear() {
         // A clock-skewed file from next year must not pass for "this year".
         XCTAssertEqual(listingDate(date("2027-03-01T08:00:00Z"), now: date("2026-10-16T00:00:00Z"),
-                                   timeZone: utc), "01.03.  2027")
+                                   timeZone: utc), "01.03.   2027")
     }
 
-    func testListingDateYearBoundaryFollowsTimeZone() {
-        // 2025-12-31 23:30 UTC is already 2026 in Berlin: same year as now there.
+    func testListingDateDayBoundaryFollowsTimeZone() {
+        // 2026-10-15 22:30 UTC is already the 16th in Berlin: "today" there.
         let berlin = TimeZone(identifier: "Europe/Berlin")!
-        XCTAssertEqual(listingDate(date("2025-12-31T23:30:00Z"), now: date("2026-06-01T00:00:00Z"),
-                                   timeZone: berlin), "01.01. 00:30")
+        XCTAssertEqual(listingDate(date("2026-10-15T22:30:00Z"), now: date("2026-10-16T10:00:00Z"),
+                                   timeZone: berlin), "heute   00:30")
+    }
+
+    func testListingDateYesterdayAcrossYearBoundary() {
+        XCTAssertEqual(listingDate(date("2025-12-31T18:00:00Z"), now: date("2026-01-01T09:00:00Z"),
+                                   timeZone: utc), "gestern 18:00")
+    }
+
+    func testListingDateIsAlwaysThirteenWide() {
+        let now = date("2026-10-16T12:00:00Z")
+        for iso in ["2026-10-16T01:00:00Z", "2026-10-15T01:00:00Z",
+                    "2026-02-03T01:00:00Z", "1999-12-31T01:00:00Z"] {
+            XCTAssertEqual(listingDate(date(iso), now: now, timeZone: utc).count, 13, iso)
+        }
     }
 
     func testReadableSizeMatchesYazi() {

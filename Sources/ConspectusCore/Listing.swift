@@ -41,12 +41,16 @@ public func readableSize(_ bytes: Int) -> String {
     return number + units[unit]
 }
 
-/// Format a modification date for the listing's date column, in the `ls -l`
-/// convention yazi's `size_and_mtime` linemode uses too: a date in the same
-/// calendar year as `now` shows day, month and time ("16.10. 14:32"), an
-/// older (or future-year) one day, month and year ("15.01.  2024", padded to
-/// the same 12 characters so day and month line up). German day-first order,
-/// matching the user's yazi config.
+/// Format a modification date for the listing's date column, the same way
+/// yazi's `size_and_mtime` linemode does: today and yesterday by name (the
+/// Finder convention — recent work reads at a glance), the rest of this year
+/// with the time, older or future years with the year (the `ls -l`
+/// convention). Always 13 characters, time or year flush right:
+///
+///     heute   14:32
+///     gestern 09:10
+///     16.10.  14:32
+///     15.01.   2024
 ///
 /// - Parameters:
 ///   - date: The modification date to show.
@@ -59,9 +63,18 @@ public func listingDate(_ date: Date, now: Date = Date(),
     let f = DateFormatter()
     f.locale = Locale(identifier: "en_US_POSIX")
     f.timeZone = timeZone
-    f.dateFormat = cal.component(.year, from: date) == cal.component(.year, from: now)
-        ? "dd.MM. HH:mm" : "dd.MM.  yyyy"
-    return f.string(from: date)
+    func format(_ pattern: String) -> String {
+        f.dateFormat = pattern
+        return f.string(from: date)
+    }
+    // Force-unwrap: subtracting one day from a valid date always succeeds.
+    let yesterday = cal.date(byAdding: .day, value: -1, to: now)!
+    if cal.isDate(date, inSameDayAs: now) { return "heute   " + format("HH:mm") }
+    if cal.isDate(date, inSameDayAs: yesterday) { return "gestern " + format("HH:mm") }
+    if cal.component(.year, from: date) == cal.component(.year, from: now) {
+        return format("dd.MM.  HH:mm")
+    }
+    return format("dd.MM.   yyyy")
 }
 
 /// Cap an already-sorted entry list for display: the first `limit` entries
