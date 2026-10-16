@@ -12,6 +12,16 @@ Auslöser, ohne Termin.*
 
 ## Notiert, nicht geplant
 
+- **Ordnerliste: Datumsspalte am rechten Rand** (2026-10-16). Die Spalte
+  Größe + Datum sitzt heute an einem Tab-Stop hinter dem längsten Namen
+  (`folderListingNameColumn`), weil `renderListing` die Pane-Breite nicht
+  kennt; yazi setzt sie an den rechten Rand. Lösung: rechtsbündiger Tab-Stop,
+  gesetzt in `Panel+Preview` beim Anwenden, wo die Text-View-Breite bekannt
+  ist, und neu gesetzt bei Resize. Bekannte Grenzen derselben Stelle:
+  die Namensbreite zählt Zeichen, nicht Zellen (CJK/Emoji doppelt breit);
+  „heute" veraltet über Mitternacht, bis die Pane neu rendert (Hover oder
+  Refresh). Auslöser: wenn die springende Spalte beim Ordnerwechsel stört.
+
 - **Kontextmenü: fehlende Finder-Einträge** (2026-10-11). Tags (schreibbar
   über `URLResourceKey.tagNamesKey`, braucht aber eine Farbpunkt-UI),
   Komprimieren (`ditto -c -k --keepParent`), Duplizieren, Alias erzeugen

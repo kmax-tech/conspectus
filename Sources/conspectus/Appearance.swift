@@ -94,6 +94,9 @@ func terminalFont(size overrideSize: Double? = nil) -> NSFont {
 // happens off the main thread; only a screenful is rendered anyway, and
 // "… and N more" makes the cut visible.
 let folderListingCap = 500
+/// Alpha of the secondary text in listings (size/date column, "… and N more",
+/// the parent path behind a selected file): one dim for every listing.
+let listingDimAlpha = 0.5
 /// Names longer than this (in characters) push their date past the shared
 /// date column instead of widening it for every row.
 let folderListingNameColumn = 40
@@ -123,7 +126,7 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
     let para = NSMutableParagraphStyle()
     para.tabStops = [NSTextTab(textAlignment: .left,
                                location: CGFloat(3 + min(longest, folderListingNameColumn) + 3) * advance)]
-    let dim = fg.withAlphaComponent(0.5)
+    let dim = fg.withAlphaComponent(listingDimAlpha)
     let now = Date()
     let out = NSMutableAttributedString()
     for e in contents.entries {
@@ -146,7 +149,7 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
     if contents.omitted > 0 {
         out.append(NSAttributedString(string: "\n  … and \(contents.omitted) more entries\n",
                                       attributes: [.font: font,
-                                                   .foregroundColor: fg.withAlphaComponent(0.6)]))
+                                                   .foregroundColor: fg.withAlphaComponent(listingDimAlpha)]))
     }
     return out
 }
@@ -181,7 +184,7 @@ func renderSelectedListing(_ paths: [String]) -> NSAttributedString {
                                                    .link: url]))
         out.append(NSAttributedString(string: "   " + ns.deletingLastPathComponent + "\n",
                                       attributes: [.font: font,
-                                                   .foregroundColor: fg.withAlphaComponent(0.45)]))
+                                                   .foregroundColor: fg.withAlphaComponent(listingDimAlpha)]))
     }
     return out
 }
