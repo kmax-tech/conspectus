@@ -14,6 +14,7 @@ import ConspectusShield
 //   Panel+Notes.swift        PDF companion notes, ide auto-follow, nvim RPC
 //   Panel+Print.swift        ⌥⌘P — print what the preview renders
 //   Panel+Terminal.swift     bottom terminal panel, lazycvs, yazi re-theme, process lifecycle
+//   Panel+CVSBar.swift       the CVS line above a previewed file (revision, current?)
 //   Panel+History.swift      Go menu: back/forward, enclosing folder, reveal, tabs
 //   Panel+ContextMenu.swift  right-click file menu, ⌘C copies the file, Services
 //   Panel+CheatSheet.swift   shortcut bar content and the ⌘K panel
@@ -78,6 +79,14 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// Toolbar button in the PDF bar: opens the note (or a fresh sibling note)
     /// in the ide editor; its icon mirrors whether a note exists.
     var noteButton: NSButton!
+    /// The CVS line above a previewed file (`Panel+CVSBar`): strip + label,
+    /// shown only for files inside a checkout. `cvsRemoteInFlight` holds the
+    /// directories the preview itself is asking the server about, so one
+    /// hover storm never spawns a second cvs for the same directory. Main
+    /// thread only.
+    var cvsBar: NSView!
+    var cvsBarText: NSTextField!
+    var cvsRemoteInFlight: Set<String> = []
     var previewFocusRing: PassthroughBorderView!
     var focusObservation: NSKeyValueObservation?
     var folderScroll: NSScrollView!

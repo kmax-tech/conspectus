@@ -22,7 +22,7 @@ The thread through every rule: **nothing important should be implicit.**
   `Icon.swift`, and `Panel.swift` (state + lifecycle) with themed extensions
   (`Panel+Layout`, `Panel+Focus`, `Panel+Preview`, `Panel+PDFBar`,
   `Panel+Notes`, `Panel+Print`, `Panel+Terminal`, `Panel+History`,
-  `Panel+ContextMenu`, `Panel+CheatSheet`). UI, processes, FIFO — the
+  `Panel+ContextMenu`, `Panel+CheatSheet`, `Panel+CVSBar`). UI, processes, FIFO — the
   side-effect edge of the system. Top-level code stays in `main.swift` (Swift
   requires it); stored properties stay in `Panel.swift`.
 - `Sources/ConspectusShield/` — one ObjC function: the @try/@catch swizzle

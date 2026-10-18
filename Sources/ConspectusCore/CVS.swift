@@ -218,15 +218,24 @@ public func cvsStatuses(entries: CVSEntriesFile, onDisk: [DirEntry],
     return out
 }
 
+/// What `readCVSStatuses` knows about one checkout directory.
+public struct CVSDirectoryState {
+    /// Status of every entry on disk (see `cvsStatuses`).
+    public let statuses: [String: CVSFileStatus]
+    /// Entries lines that fit neither form — for the caller to warn about.
+    public let malformed: [String]
+    /// The parsed Entries, for callers that need a file's revision.
+    public let entries: CVSEntriesFile
+}
+
 /// Statuses of a directory read from disk; nil when `dir` is not a CVS
 /// checkout (no `CVS/Entries`), the normal case outside `~/cvsrepo`.
-/// Malformed Entries lines come back in `malformed` for the caller to warn
-/// about. Hidden files are included (`.cvsignore` itself is usually tracked).
+/// Hidden files are included (`.cvsignore` itself is usually tracked).
 ///
 /// Side effects: reads the directory, its `CVS/Entries`, `CVS/Entries.Log`,
 /// `.cvsignore`, `~/.cvsignore` and `$CVSIGNORE`, and — after a conflicted
 /// merge only — the merged file.
-public func readCVSStatuses(in dir: String) -> (statuses: [String: CVSFileStatus], malformed: [String])? {
+public func readCVSStatuses(in dir: String) -> CVSDirectoryState? {
     let ns = dir as NSString
     // Deliberate try?: no Entries is the normal "not a checkout" answer.
     guard let entriesText = try? String(contentsOfFile: ns.appendingPathComponent("CVS/Entries"),
@@ -259,9 +268,82 @@ public func readCVSStatuses(in dir: String) -> (statuses: [String: CVSFileStatus
         (try? String(contentsOfFile: ns.appendingPathComponent(name), encoding: .utf8))
             .map(containsConflictMarkers) ?? false
     }
-    return (cvsStatuses(entries: parsed, onDisk: onDisk, checkedOutSubdirs: subdirs, ignore: patterns,
-                        hasConflictMarkers: markers),
-            parsed.malformed)
+    return CVSDirectoryState(
+        statuses: cvsStatuses(entries: parsed, onDisk: onDisk, checkedOutSubdirs: subdirs, ignore: patterns,
+                              hasConflictMarkers: markers),
+        malformed: parsed.malformed, entries: parsed)
+}
+
+// MARK: - One file's line: "paper.tex  1.4 — current (checked today 10:32)"
+
+/// Everything the preview's CVS line is built from. `remote` is the cached
+/// server check of the file's directory (nil: none yet); `remoteEnabled`
+/// false means the server is never asked (CONSPECTUS_CVS_REMOTE=off).
+public struct CVSFileState: Equatable {
+    public let name: String
+    /// Entries revision ("1.4"; "0" when added); nil when not in CVS.
+    public let revision: String?
+    public let local: CVSFileStatus
+    public let remote: CVSRemoteResult?
+    public let remoteEnabled: Bool
+
+    public init(name: String, revision: String?, local: CVSFileStatus, remote: CVSRemoteResult?,
+                remoteEnabled: Bool) {
+        self.name = name
+        self.revision = revision
+        self.local = local
+        self.remote = remote
+        self.remoteEnabled = remoteEnabled
+    }
+}
+
+/// The line above a previewed file, in two parts so the caller can color
+/// the verdict: `head` = name + revision, `verdict` = the answer to "is this
+/// the current version?" with the server check's age. The verdict's
+/// `status` names what to color it like (`.clean` for "current").
+public struct CVSFileLine: Equatable {
+    public let head: String
+    public let verdict: String
+    public let status: CVSFileStatus
+}
+
+/// Build the line. The local state wins when it says more than the server
+/// (a modified file is "modified" whatever the server holds — that is also
+/// what `cvs -n update` prints); otherwise the server check answers, and
+/// its absence is said as such, never as "current".
+public func cvsFileLine(_ f: CVSFileState, now: Date, timeZone: TimeZone = .current) -> CVSFileLine {
+    let head = f.revision.map { "\(f.name)  \($0)" } ?? f.name
+    // The listing's date format, minus its column padding.
+    func checked(_ r: CVSRemoteResult) -> String {
+        "checked " + listingDate(r.checked, now: now, timeZone: timeZone)
+            .split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
+    }
+    switch f.local {
+    case .unknown: return CVSFileLine(head: head, verdict: "not in CVS", status: .unknown)
+    case .ignored: return CVSFileLine(head: head, verdict: "ignored by CVS", status: .ignored)
+    case .added: return CVSFileLine(head: head, verdict: "added, not committed", status: .added)
+    case .removed: return CVSFileLine(head: head, verdict: "removed, not committed", status: .removed)
+    case .conflict: return CVSFileLine(head: head, verdict: "conflict markers in the file", status: .conflict)
+    case .modified:
+        let server = f.remote.map { $0.error == nil ? " · server has nothing newer (\(checked($0)))" : "" } ?? ""
+        return CVSFileLine(head: head, verdict: "modified locally, not committed" + server, status: .modified)
+    case .needsUpdate:
+        let when = f.remote.map { " (\(checked($0)))" } ?? ""
+        return CVSFileLine(head: head, verdict: "newer on the server" + when, status: .needsUpdate)
+    case .clean:
+        guard f.remoteEnabled else {
+            return CVSFileLine(head: head, verdict: "unchanged locally; server not asked (CONSPECTUS_CVS_REMOTE=off)",
+                               status: .clean)
+        }
+        guard let r = f.remote else {
+            return CVSFileLine(head: head, verdict: "unchanged locally; server not checked yet", status: .clean)
+        }
+        if let err = r.error {
+            return CVSFileLine(head: head, verdict: "unchanged locally; server check failed (\(checked(r)): \(err))",
+                               status: .clean)
+        }
+        return CVSFileLine(head: head, verdict: "current (\(checked(r)))", status: .clean)
+    }
 }
 
 // MARK: - Server side: `cvs -n -q update -l`, cached per directory

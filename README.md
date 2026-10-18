@@ -100,6 +100,19 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
   update`; the folder listing in the pane shows `U` only for folders
   already entered (a hover never costs a server round trip); `CVS Update…`
   drops the folder's cache so the next fetch asks again.
+- **The CVS line above a previewed file** — for every preview kind inside
+  a checkout, a strip reads `paper.tex  1.4 — current (checked today
+  10:32)`: the direct answer to "am I looking at the current version?".
+  Verdicts, local state first (as `cvs -n update` ranks them): `newer on
+  the server (checked …)`, `modified locally, not committed · server has
+  nothing newer (…)`, `added, not committed`, `conflict markers in the
+  file`, `not in CVS`; and when the server has not answered, it says so —
+  `server not checked yet` (the fetcher's result lands within a second;
+  if it never comes, e.g. for a file reached through the pane's listing,
+  the preview runs the dry run itself after 0.8 s), `server check failed
+  (…)`, `server not asked (CONSPECTUS_CVS_REMOTE=off)`. Never "current"
+  without a good check. Outside a checkout the strip is gone and the
+  preview has the whole pane.
 - **CVS Update… (`⌥⌘U`, Go menu; also in the context menu next to "Open in
   lazycvs")** — the server half the signs leave out: the terminal panel runs
   `cvs -n -q update -d` in the folder yazi is in (recursive, as cvs is),

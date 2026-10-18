@@ -44,6 +44,8 @@ extension Panel {
         buildImagePreview()
         rightContainer.addSubview(imageView)
         rightContainer.addSubview(folderScroll)
+        buildCVSBar()
+        rightContainer.addSubview(cvsBar)
         previewFocusRing = PassthroughBorderView(frame: rightContainer.bounds)
         previewFocusRing.autoresizingMask = [.width, .height]
         rightContainer.addSubview(previewFocusRing)   // last -> stays on top
