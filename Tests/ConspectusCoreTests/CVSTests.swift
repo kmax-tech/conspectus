@@ -166,4 +166,47 @@ final class CVSTests: XCTestCase {
         XCTAssertEqual(read.statuses["CVS"], .ignored)
         XCTAssertEqual(read.malformed, ["bad"])
     }
+
+    // MARK: Server side
+
+    func testDryRunParserTakesOnlyUpdateAndPatchLines() {
+        let out = "M a.txt\nU c.txt\nP sub dir.tex\nC b.txt\n? new\nA n.txt\nU\n"
+        XCTAssertEqual(parseCVSDryRun(out), ["c.txt", "sub dir.tex"])
+        XCTAssertEqual(parseCVSDryRun(""), [])
+    }
+
+    func testRemoteResultRoundTripsAndRejectsDamage() {
+        let r = CVSRemoteResult(checked: march4, needsUpdate: ["b.tex", "a.tex"])
+        XCTAssertEqual(r.serialized(), "checked\t1709543100\nneeds-update\ta.tex\nneeds-update\tb.tex\n")
+        XCTAssertEqual(CVSRemoteResult.parse(r.serialized()), r)
+        let e = CVSRemoteResult(checked: march4, needsUpdate: [], error: "ssh: connect timed out")
+        XCTAssertEqual(CVSRemoteResult.parse(e.serialized()), e)
+        XCTAssertNil(CVSRemoteResult.parse(""), "no checked line")
+        XCTAssertNil(CVSRemoteResult.parse("needs-update\tx\n"), "checked line missing")
+        XCTAssertNil(CVSRemoteResult.parse("checked\t1\nbogus\ty\n"), "unknown field")
+        XCTAssertNil(CVSRemoteResult.parse("checked\tsoon\n"), "bad timestamp")
+    }
+
+    func testRemoteFreshnessUsesShortTTLForErrors() {
+        let ok = CVSRemoteResult(checked: march4, needsUpdate: [])
+        let bad = CVSRemoteResult(checked: march4, needsUpdate: [], error: "x")
+        XCTAssertTrue(ok.isFresh(now: march4 + 299, ttl: 300, errorTTL: 60))
+        XCTAssertFalse(ok.isFresh(now: march4 + 300, ttl: 300, errorTTL: 60))
+        XCTAssertTrue(bad.isFresh(now: march4 + 59, ttl: 300, errorTTL: 60))
+        XCTAssertFalse(bad.isFresh(now: march4 + 60, ttl: 300, errorTTL: 60))
+    }
+
+    func testRemoteCacheRoundTripIsKeyedByDirectory() throws {
+        let cache = tmp + "/cache"
+        let r = CVSRemoteResult(checked: march4, needsUpdate: ["a.tex"])
+        try writeCVSRemoteCache(r, for: "/some/dir", cacheDir: cache)
+        XCTAssertEqual(readCVSRemoteCache(for: "/some/dir", cacheDir: cache), r)
+        XCTAssertNil(readCVSRemoteCache(for: "/other/dir", cacheDir: cache))
+        XCTAssertNotEqual(cvsRemoteCachePath(for: "/a", cacheDir: cache), cvsRemoteCachePath(for: "/b", cacheDir: cache))
+        // A file under the right name but for another path (hash collision,
+        // or a hand-edited file) is treated as absent.
+        try ("dir\t/not/this\n" + r.serialized()).write(toFile: cvsRemoteCachePath(for: "/some/dir", cacheDir: cache),
+                                                        atomically: true, encoding: .utf8)
+        XCTAssertNil(readCVSRemoteCache(for: "/some/dir", cacheDir: cache))
+    }
 }

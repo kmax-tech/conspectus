@@ -331,6 +331,97 @@ if let i = CommandLine.arguments.firstIndex(of: "--cvs-status") {
 
 let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/conspectus")
 
+/// Server check of a checkout directory for the `U` signs: how long a result
+/// is reused before the server is asked again (CONSPECTUS_CVS_REMOTE,
+/// seconds, default 300; `off` never asks the server — the signs then stay
+/// local). The dry run takes ~0.25 s over a kept-alive ssh connection, so a
+/// short TTL is affordable; the TTL is what keeps a folder you hop in and
+/// out of from being asked every time. A failed check is reused for
+/// `cvsRemoteErrorTTL` only.
+let cvsRemoteTTL: TimeInterval? = {
+    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_CVS_REMOTE"] ?? "300"
+    if raw.lowercased() == "off" { return nil }
+    guard let secs = Int(raw), secs >= 0 else {
+        warn("conspectus: CONSPECTUS_CVS_REMOTE must be a non-negative integer (seconds) or off (got '\(raw)') — using 300")
+        return 300
+    }
+    return TimeInterval(secs)
+}()
+let cvsRemoteErrorTTL: TimeInterval = 60
+/// Longest wait for one `cvs -n -q update -l`: a server that does not
+/// answer (VPN down, ssh asking for a password nobody can type) must not
+/// block yazi's fetcher thread for good. Generous, because the first call
+/// of a session also opens the ssh connection.
+let cvsRemoteTimeout: TimeInterval = 20
+let cvsRemoteCacheDir = (cacheDir as NSString).appendingPathComponent("cvs-remote")
+
+/// Headless server check: `conspectus --cvs-remote <dir>` prints the
+/// directory's `CVSRemoteResult` (see its `serialized` format) — from the
+/// cache while fresh, else from a fresh `cvs -n -q update -l` run in `dir`,
+/// which is then cached. The bundled cvs.yazi fetcher calls this after the
+/// local `--cvs-status`. Prints nothing (exit 0) with CONSPECTUS_CVS_REMOTE
+/// off; a failed run is still a result (`error\t…`), exit 0 — the caller
+/// shows it, the exit code is for a broken call, not a broken server.
+if let i = CommandLine.arguments.firstIndex(of: "--cvs-remote") {
+    guard i + 1 < CommandLine.arguments.count else { die("conspectus: --cvs-remote needs a directory") }
+    let dir = CommandLine.arguments[i + 1]
+    guard let ttl = cvsRemoteTTL else { exit(0) }
+    let result: CVSRemoteResult
+    if let cached = readCVSRemoteCache(for: dir, cacheDir: cvsRemoteCacheDir),
+       cached.isFresh(now: Date(), ttl: ttl, errorTTL: cvsRemoteErrorTTL) {
+        result = cached
+    } else {
+        result = runCVSDryRun(in: dir)
+        do {
+            try writeCVSRemoteCache(result, for: dir, cacheDir: cvsRemoteCacheDir)
+        } catch {
+            warn("conspectus: cannot write \(cvsRemoteCacheDir): \(error.localizedDescription)")
+        }
+    }
+    FileHandle.standardOutput.write(Data(result.serialized().utf8))
+    exit(0)
+}
+
+/// Run `cvs -n -q update -l` in `dir` (via PATH, so the Homebrew cvs is
+/// found from the login shell yazi runs in) and parse the `U`/`P` lines. Any
+/// failure — no cvs, timeout, `[update aborted]`, non-zero exit without
+/// output — becomes the result's `error`, never an exception: the fetcher
+/// shows it. Exit 1 with output is cvs's "something would conflict", not a
+/// failure. Side effects: spawns cvs, which talks to the CVS server.
+func runCVSDryRun(in dir: String) -> CVSRemoteResult {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    p.arguments = ["cvs", "-n", "-q", "update", "-l"]
+    p.currentDirectoryURL = URL(fileURLWithPath: dir, isDirectory: true)
+    let out = Pipe(), err = Pipe()
+    p.standardOutput = out; p.standardError = err
+    p.standardInput = FileHandle.nullDevice   // never a password prompt that waits
+    let started = Date()
+    do { try p.run() } catch {
+        return CVSRemoteResult(checked: started, needsUpdate: [], error: "cannot run cvs: \(error.localizedDescription)")
+    }
+    let done = DispatchGroup()
+    done.enter()
+    DispatchQueue.global().async { p.waitUntilExit(); done.leave() }
+    // Read both pipes before waiting: a chatty cvs must not fill a pipe and stall.
+    var stdoutData = Data(), stderrData = Data()
+    let readers = DispatchGroup()
+    readers.enter(); DispatchQueue.global().async { stdoutData = out.fileHandleForReading.readDataToEndOfFile(); readers.leave() }
+    readers.enter(); DispatchQueue.global().async { stderrData = err.fileHandleForReading.readDataToEndOfFile(); readers.leave() }
+    if done.wait(timeout: .now() + cvsRemoteTimeout) == .timedOut {
+        p.terminate()
+        return CVSRemoteResult(checked: started, needsUpdate: [], error: "cvs did not answer within \(Int(cvsRemoteTimeout)) s")
+    }
+    readers.wait()
+    let stdout = String(decoding: stdoutData, as: UTF8.self)
+    let stderr = String(decoding: stderrData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    if stderr.contains("aborted]") || (p.terminationStatus != 0 && stdout.isEmpty) {
+        let reason = stderr.isEmpty ? "cvs exit \(p.terminationStatus)" : stderr.split(separator: "\n").last.map(String.init) ?? stderr
+        return CVSRemoteResult(checked: started, needsUpdate: [], error: reason)
+    }
+    return CVSRemoteResult(checked: started, needsUpdate: parseCVSDryRun(stdout))
+}
+
 // One FIFO per instance: a shared path let any new launch (second window,
 // test run) unlink the running instance's FIFO and permanently wedge its
 // reader in a blocking open() on the orphaned inode — previews then never

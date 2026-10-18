@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 // CVS working-copy logic: checkout detection for the context menu's "Open in
 // lazycvs", and the per-file status signs (M, A, R, C, ?) shown in yazi's
@@ -40,6 +41,10 @@ public enum CVSFileStatus: String, CaseIterable {
     case unknown
     /// On disk, not in Entries, matched by a cvsignore pattern.
     case ignored
+    /// The server holds a newer revision (`U`/`P` in `cvs -n update`) — the
+    /// one state that needs the server; it comes from `parseCVSDryRun`, is
+    /// cached (`CVSRemoteResult`) and overlays the local states.
+    case needsUpdate = "needs-update"
     /// Checked out and unchanged.
     case clean
 
@@ -52,6 +57,7 @@ public enum CVSFileStatus: String, CaseIterable {
         case .removed: return "R"
         case .conflict: return "C"
         case .unknown: return "?"
+        case .needsUpdate: return "U"
         case .ignored, .clean: return ""
         }
     }
@@ -256,4 +262,103 @@ public func readCVSStatuses(in dir: String) -> (statuses: [String: CVSFileStatus
     return (cvsStatuses(entries: parsed, onDisk: onDisk, checkedOutSubdirs: subdirs, ignore: patterns,
                         hasConflictMarkers: markers),
             parsed.malformed)
+}
+
+// MARK: - Server side: `cvs -n -q update -l`, cached per directory
+
+/// Files of one directory the server has newer revisions of (`U` update, `P`
+/// patch in a dry run). Everything else the dry run prints (`M A R C ?`) is
+/// local and already covered by `cvsStatuses`; it is ignored here.
+/// `-l` keeps it to the directory itself, so names carry no slash.
+public func parseCVSDryRun(_ stdout: String) -> Set<String> {
+    var out = Set<String>()
+    for line in stdout.split(separator: "\n") {
+        guard line.count > 2, line.hasPrefix("U ") || line.hasPrefix("P ") else { continue }
+        out.insert(String(line.dropFirst(2)))
+    }
+    return out
+}
+
+/// One server check of a directory, as cached on disk and printed by
+/// `conspectus --cvs-remote`. A failed check (server unreachable, timeout)
+/// is a result too — cached briefly so a dead server is not asked for every
+/// directory — and carries `error` instead of names.
+public struct CVSRemoteResult: Equatable {
+    public let checked: Date
+    public let needsUpdate: Set<String>
+    public let error: String?
+
+    public init(checked: Date, needsUpdate: Set<String>, error: String? = nil) {
+        self.checked = checked
+        self.needsUpdate = needsUpdate
+        self.error = error
+    }
+
+    /// Wire and cache format, one field per line: `checked\t<unix seconds>`,
+    /// then either `error\t<message>` or `needs-update\t<name>` per file.
+    public func serialized() -> String {
+        var lines = ["checked\t\(Int(checked.timeIntervalSince1970))"]
+        if let error = error { lines.append("error\t\(error)") }
+        lines += needsUpdate.sorted().map { "needs-update\t\($0)" }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Inverse of `serialized`; nil for anything that does not start with a
+    /// `checked` line or holds an unknown field — a damaged cache file is
+    /// treated as absent by the caller, never half-read.
+    public static func parse(_ text: String) -> CVSRemoteResult? {
+        var checked: Date?
+        var names = Set<String>()
+        var error: String?
+        for line in text.split(separator: "\n") {
+            let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2 else { return nil }
+            switch parts[0] {
+            case "checked":
+                guard checked == nil, let secs = Int(parts[1]) else { return nil }
+                checked = Date(timeIntervalSince1970: TimeInterval(secs))
+            case "error": error = String(parts[1])
+            case "needs-update": names.insert(String(parts[1]))
+            default: return nil
+            }
+        }
+        guard let at = checked else { return nil }
+        return CVSRemoteResult(checked: at, needsUpdate: names, error: error)
+    }
+
+    /// Still worth showing at `now`: a good check within `ttl`, a failed one
+    /// within `errorTTL` (short — the server may be back).
+    public func isFresh(now: Date, ttl: TimeInterval, errorTTL: TimeInterval) -> Bool {
+        now.timeIntervalSince(checked) < (error == nil ? ttl : errorTTL)
+    }
+}
+
+/// Cache file for a directory's server check: one file per directory under
+/// `cacheDir`, named by a hash of the path (paths are long and hold `/`);
+/// the file itself starts with the path so it stays inspectable.
+public func cvsRemoteCachePath(for dir: String, cacheDir: String) -> String {
+    let digest = SHA256.hash(data: Data(dir.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
+    return (cacheDir as NSString).appendingPathComponent(digest)
+}
+
+/// Read a directory's cached server check; nil when there is none or it is
+/// unreadable (both the normal case before the first check). Side effects:
+/// reads the cache file.
+public func readCVSRemoteCache(for dir: String, cacheDir: String) -> CVSRemoteResult? {
+    let path = cvsRemoteCachePath(for: dir, cacheDir: cacheDir)
+    // Deliberate try?: no cache yet is the normal case.
+    guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+    // First line is the directory (see `writeCVSRemoteCache`); a collision
+    // between two paths would show up here, so it is checked, not assumed.
+    guard let nl = text.firstIndex(of: "\n"), text[..<nl] == "dir\t" + dir else { return nil }
+    return CVSRemoteResult.parse(String(text[text.index(after: nl)...]))
+}
+
+/// Write a directory's server check to its cache file. Throws on an
+/// unwritable cache dir — the caller reports it. Side effects: creates
+/// `cacheDir`, writes the file.
+public func writeCVSRemoteCache(_ result: CVSRemoteResult, for dir: String, cacheDir: String) throws {
+    try FileManager.default.createDirectory(atPath: cacheDir, withIntermediateDirectories: true)
+    try ("dir\t" + dir + "\n" + result.serialized())
+        .write(toFile: cvsRemoteCachePath(for: dir, cacheDir: cacheDir), atomically: true, encoding: .utf8)
 }

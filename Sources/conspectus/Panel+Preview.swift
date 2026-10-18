@@ -727,7 +727,15 @@ extension Panel {
             // nil outside a CVS checkout — the listing then has no sign column.
             let cvs = readCVSStatuses(in: path)
             for line in cvs?.malformed ?? [] { warn("conspectus: \(path)/CVS/Entries: unparseable line: \(line)") }
-            let listing = renderListing(contents, in: path, cvs: cvs?.statuses)
+            // Server side from the cache only (the yazi fetcher fills it when a
+            // folder is entered) — a hover must never cost a server round trip.
+            var statuses = cvs?.statuses
+            if statuses != nil, let ttl = cvsRemoteTTL,
+               let remote = readCVSRemoteCache(for: path, cacheDir: cvsRemoteCacheDir),
+               remote.isFresh(now: Date(), ttl: ttl, errorTTL: cvsRemoteErrorTTL) {
+                for name in remote.needsUpdate { statuses?[name] = .needsUpdate }
+            }
+            let listing = renderListing(contents, in: path, cvs: statuses)
             DispatchQueue.main.async {
                 // Re-check: a newer hover may have won while we rendered.
                 guard self.isCurrentListing(gen) else { return }

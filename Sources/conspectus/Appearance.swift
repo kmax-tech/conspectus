@@ -179,6 +179,7 @@ func cvsSignColor(_ status: CVSFileStatus, _ pal: Palette) -> NSColor {
     case .added: return nsColor(pal.ansi[2])               // green
     case .removed, .conflict: return nsColor(pal.ansi[1])  // red
     case .unknown: return nsColor(pal.ansi[5])             // magenta
+    case .needsUpdate: return nsColor(pal.ansi[4])         // blue
     case .ignored, .clean: return nsColor(pal.fg)          // blank cell anyway
     }
 }

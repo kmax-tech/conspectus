@@ -84,6 +84,22 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
   `~/.cvsignore`, `$CVSIGNORE`, the directory's `.cvsignore`), never from the
   server — so it cannot show "needs update", nor honor the server's
   `CVSROOT/cvsignore`. Directories get no roll-up of their contents' state.
+- **`U` — newer on the server**, the one sign that needs the server, and
+  the one that answers "am I looking at the current version?". Entering a
+  checkout folder makes the fetcher run `conspectus --cvs-remote <dir>` as
+  a second phase, after the local signs are on screen: one `cvs -n -q
+  update -l` in that folder (`-l`: no subfolders), ~0.25 s over a kept-alive
+  ssh connection (`ControlMaster` in `~/.ssh/config`; ~0.7 s when it has to
+  connect), 20 s timeout. The answer is cached per folder under
+  `~/.cache/conspectus/cvs-remote/` for **`CONSPECTUS_CVS_REMOTE`** seconds
+  (default 300; `off` never asks the server, the signs stay local), a
+  failed check for 60 s. The first failed check of a yazi session shows a
+  notification ("server check failed — no U signs"), later ones stay
+  silent. Limits: `U` is as old as the cache says; a file you modified
+  locally that is also newer on the server shows `M`, as in `cvs -n
+  update`; the folder listing in the pane shows `U` only for folders
+  already entered (a hover never costs a server round trip); `CVS Update…`
+  drops the folder's cache so the next fetch asks again.
 - **CVS Update… (`⌥⌘U`, Go menu; also in the context menu next to "Open in
   lazycvs")** — the server half the signs leave out: the terminal panel runs
   `cvs -n -q update -d` in the folder yazi is in (recursive, as cvs is),

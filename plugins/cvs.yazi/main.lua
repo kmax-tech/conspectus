@@ -8,18 +8,50 @@
 -- nothing and spawns nothing. Inside, it runs `$CONSPECTUS_BIN --cvs-status
 -- <dir>` — the status logic lives once, in ConspectusCore (CVS.swift), and
 -- the pane's folder listing uses the same code. Offline: Entries + mtimes +
--- cvsignore, no server round trip, so no "needs update" sign.
+-- cvsignore — plus a second, server-side phase below.
 --
 -- Signs are the letters `cvs -n update` prints: M modified, A added,
 -- R removed, C conflict, ? unknown; clean and ignored files get a blank
 -- placeholder so the column stays aligned inside a checkout.
+--
+-- Second phase, same fetch: `--cvs-remote <dir>` asks the server (one
+-- `cvs -n -q update -l`, ~0.25 s over a kept-alive ssh connection, cached
+-- for CONSPECTUS_CVS_REMOTE seconds) and overlays `U` on the files the
+-- server has newer revisions of — the answer to "am I looking at the
+-- current version?". The local signs are already on screen while that
+-- runs. A failed check (server unreachable) is reported once per session.
 
-local SIGNS = { modified = "M", added = "A", removed = "R", conflict = "C", unknown = "?" }
+local SIGNS = { modified = "M", added = "A", removed = "R", conflict = "C", unknown = "?",
+	["needs-update"] = "U" }
 
 -- Statuses of one directory, keyed by entry name; replaces what was there.
 local add = ya.sync(function(st, dir, statuses)
 	st.dirs[dir] = statuses
 	ui.render()
+end)
+
+-- Overlay the server's answer on a directory still on record (a directory
+-- left meanwhile has been removed; nothing to overlay then).
+local add_remote = ya.sync(function(st, dir, names)
+	local statuses = st.dirs[dir]
+	if not statuses then
+		return
+	end
+	for _, name in ipairs(names) do
+		statuses[name] = "needs-update"
+	end
+	ui.render()
+end)
+
+-- The first failed server check of this yazi session is shown; later ones
+-- are not (a dead VPN would otherwise nag on every directory). Returns
+-- whether to notify.
+local first_remote_error = ya.sync(function(st)
+	if st.remote_error_shown then
+		return false
+	end
+	st.remote_error_shown = true
+	return true
 end)
 
 -- Forget a directory that is (no longer) a checkout.
@@ -39,6 +71,7 @@ local function setup(st, opts)
 		removed = ui.Style():fg("red"),
 		conflict = ui.Style():fg("red"):bold(),
 		unknown = ui.Style():fg("magenta"),
+		["needs-update"] = ui.Style():fg("blue"),
 	}
 
 	Linemode:children_add(function(self)
@@ -96,6 +129,31 @@ local function fetch(_, job)
 		statuses[name] = code
 	end
 	add(dir, statuses)
+
+	-- Phase two: the server. Blocks only this fetcher thread; the local
+	-- signs above are already rendered.
+	local remote, rerr = Command(bin):arg({ "--cvs-remote", dir }):output()
+	if not remote then
+		return true, Err("cvs.yazi: cannot spawn `%s --cvs-remote`, error: %s", bin, rerr)
+	end
+	if not remote.status.success then
+		return true, Err("cvs.yazi: `%s --cvs-remote` failed: %s", bin, remote.stderr)
+	end
+	local names = {}
+	for line in remote.stdout:gmatch("[^\n]+") do
+		local field, value = line:match("^([%w%-]+)\t(.*)$")
+		if field == "needs-update" then
+			names[#names + 1] = value
+		elseif field == "error" then
+			if first_remote_error() then
+				ya.notify { title = "cvs.yazi", content = "server check failed — no U signs: " .. value,
+					timeout = 6, level = "warn" }
+			end
+		elseif field ~= "checked" then
+			return true, Err("cvs.yazi: unexpected --cvs-remote line: %s", line)
+		end
+	end
+	add_remote(dir, names)
 	-- false: not cached, so the next fetch (files changed, re-entered) refreshes.
 	return false
 end

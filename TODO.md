@@ -26,9 +26,13 @@ Auslöser, ohne Termin.*
 
 - **CVS-Status: was die Offline-Variante nicht kann** (2026-10-18; gebaut
   sind M/A/R/C/? in yazi und in der Ordnervorschau, siehe README). Offen:
-  (a) „needs update" als Zeichen bräuchte `cvs -n -q update` im Hintergrund,
-  gecacht — vorerst auf Anfrage über ⌥⌘U (CVS Update…) bzw. lazycvs, das den
-  Server ebenfalls nur auf Anlass fragt (Start, Aufklappen, `s`);
+  (a) „needs update" ist seit 2026-10-18 das `U`-Zeichen: `cvs -n -q update
+  -l` pro betretenem Ordner im Fetcher, Cache 300 s (`CONSPECTUS_CVS_REMOTE`);
+  gemessen 0,24 s warm / 0,69 s kalt. Offen daran: die Ordnervorschau rechts
+  zeigt `U` nur aus dem Cache (kein Serveraufruf pro Hover) — bei Bedarf ein
+  entprellter Aufruf nach ~300 ms Ruhe; eine Zeile über dem Dateiinhalt
+  („1.4 — current, checked 10:32" / „server has newer") wäre die direkte
+  Antwort auf „sehe ich die aktuelle Fassung?";
   (b) Ordner zeigen keinen Sammelstatus ihres Inhalts (git.yazi rollt hoch;
   für CVS hieße das einen rekursiven Lauf); (c) im echten Fenster noch
   anzusehen: Ausrichtung neben den git.yazi-Platzhaltern. Auslöser: wenn

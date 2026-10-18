@@ -126,6 +126,10 @@ extension Panel {
             return
         }
         closeBottomTerminal()
+        // The panel's run supersedes the cached server check; drop it so the
+        // next fetch asks again (an update changes exactly what it recorded).
+        // Deliberate try?: no cache file yet is the normal case.
+        try? FileManager.default.removeItem(atPath: cvsRemoteCachePath(for: dir, cacheDir: cvsRemoteCacheDir))
         startBottomTerminal(script: cvsUpdateScript, args: [dir],
                             height: outerSplit.frame.height * lazycvsPanelShare)
     }
