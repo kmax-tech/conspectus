@@ -37,8 +37,11 @@ if [[ -d $src ]]; then
   fi
 fi
 
-# The bundled glue plugin, straight from the repo.
+# The bundled plugins, straight from the repo: the glue, and cvs.yazi (CVS
+# status signs; it calls this build's binary as `--cvs-status`, found via
+# CONSPECTUS_BIN).
 ln -sfn "$REPO/plugins/conspectus.yazi" "$ov/plugins/conspectus.yazi"
+ln -sfn "$REPO/plugins/cvs.yazi" "$ov/plugins/cvs.yazi"
 
 # init.lua: the user's init first (its require()s resolve against the overlay,
 # where the user's plugins are symlinked), then the bundled plugin. The
@@ -49,6 +52,7 @@ ln -sfn "$REPO/plugins/conspectus.yazi" "$ov/plugins/conspectus.yazi"
   [[ -f "$src/init.lua" ]] && echo "dofile(\"$src/init.lua\")"
   echo 'require("session"):setup { sync_yanked = true }'
   echo 'require("conspectus"):setup()'
+  echo 'require("cvs"):setup()'
 } > "$ov/init.lua"
 
 # theme.toml: follow the system light/dark appearance via the catppuccin
@@ -74,8 +78,10 @@ case "$cols" in
   2|3) ;;
   *) echo "conspectus: CONSPECTUS_COLUMNS must be 2 or 3 (got '$cols') — using 2" >&2; cols=2 ;;
 esac
+# Always a generated file (never a symlink), because cvs.yazi's fetchers are
+# appended below.
 if [[ $split_mode -eq 1 || $cols -eq 3 ]]; then
-  [[ -f "$src/yazi.toml" ]] && ln -sfn "$src/yazi.toml" "$ov/yazi.toml"
+  if [[ -f "$src/yazi.toml" ]]; then cat "$src/yazi.toml" > "$ov/yazi.toml"; else : > "$ov/yazi.toml"; fi
 else
   if [[ -f "$src/yazi.toml" ]]; then
     awk '
@@ -90,5 +96,23 @@ else
   fi
 fi
 
+# cvs.yazi as a fetcher for files and directories, like git.yazi. Appended
+# array-of-tables entries; a user yazi.toml that defines `prepend_fetchers`
+# as an inline array instead would clash here (yazi then refuses the config).
+cat >> "$ov/yazi.toml" <<'TOML'
+
+# conspectus: cvs.yazi — CVS status signs (bundled, see plugins/cvs.yazi)
+[[plugin.prepend_fetchers]]
+url = "*"
+run = "cvs"
+group = "cvs"
+
+[[plugin.prepend_fetchers]]
+url = "*/"
+run = "cvs"
+group = "cvs"
+TOML
+
 export YAZI_CONFIG_HOME="$ov"
+export CONSPECTUS_BIN="$BIN"
 exec "$BIN" "$@"

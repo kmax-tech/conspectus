@@ -108,7 +108,12 @@ let folderListingNameColumn = 40
 /// applied to the text view on main. Every row carries a .link with its URL
 /// (directory-flag set accordingly): clicking a folder navigates yazi there,
 /// clicking a file previews it in the Quick Look pane.
-func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedString {
+///
+/// `cvs` (from `readCVSStatuses`, nil outside a checkout) adds a sign column
+/// in front of the icons — the letters of `cvs -n update` (M, A, R, C, ?), as
+/// cvs.yazi shows them in yazi; clean and ignored rows keep a blank cell.
+func renderListing(_ contents: FolderContents, in dir: String,
+                   cvs: [String: CVSFileStatus]? = nil) -> NSAttributedString {
     let pal = activePalette()
     let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
     let font = terminalFont()
@@ -128,7 +133,9 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
     let longest = shown.map { $0.count }.max() ?? 0
     let advance = ("M" as NSString).size(withAttributes: [.font: font]).width
     let para = NSMutableParagraphStyle()
-    para.tabStops = [NSTextTab(textAlignment: .left, location: CGFloat(3 + longest + 3) * advance)]
+    let signCells = cvs == nil ? 0 : 2
+    para.tabStops = [NSTextTab(textAlignment: .left,
+                               location: CGFloat(signCells + 3 + longest + 3) * advance)]
     let dim = fg.withAlphaComponent(listingDimAlpha)
     let now = Date()
     let out = NSMutableAttributedString()
@@ -141,6 +148,13 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
             [.font: font, .foregroundColor: icon.color, .link: url, .paragraphStyle: para]
         // A cut name shows in full when the mouse rests on the row.
         if name != e.name + (e.isDir ? "/" : "") { attrs[.toolTip] = e.name }
+        if let cvs = cvs {
+            let status = cvs[e.name] ?? .clean
+            let sign = status.sign.isEmpty ? " " : status.sign
+            var signAttrs = attrs
+            signAttrs[.foregroundColor] = cvsSignColor(status, pal)
+            out.append(NSAttributedString(string: sign + " ", attributes: signAttrs))
+        }
         out.append(NSAttributedString(string: icon.glyph + "  " + name, attributes: attrs))
         // Monospace: right-pad the size to 7 cells so the dates line up.
         let size = e.size.map(readableSize) ?? "-"
@@ -156,6 +170,17 @@ func renderListing(_ contents: FolderContents, in dir: String) -> NSAttributedSt
                                                    .foregroundColor: fg.withAlphaComponent(listingDimAlpha)]))
     }
     return out
+}
+
+/// Color of a CVS sign in the listing — the same hues cvs.yazi uses in yazi.
+func cvsSignColor(_ status: CVSFileStatus, _ pal: Palette) -> NSColor {
+    switch status {
+    case .modified: return nsColor(pal.ansi[3])            // yellow
+    case .added: return nsColor(pal.ansi[2])               // green
+    case .removed, .conflict: return nsColor(pal.ansi[1])  // red
+    case .unknown: return nsColor(pal.ansi[5])             // magenta
+    case .ignored, .clean: return nsColor(pal.fg)          // blank cell anyway
+    }
 }
 
 /// Render yazi's selection (⌘L) as a clickable list in the folder-listing

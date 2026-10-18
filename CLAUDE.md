@@ -12,8 +12,9 @@ The thread through every rule: **nothing important should be implicit.**
 - `Sources/ConspectusCore/` — unit-testable logic without AppKit state or
   SwiftTerm: start-dir resolution, palettes/hex parsing, icon mapping,
   listing order, the keymap parser, ANSI parsing, note lookup, typography,
-  tips. Mostly pure; the few functions that read the filesystem
-  (`loadFolder`, `resolveNote`, `cvsWorkingDir`, `isDirectory`) say so in
+  tips, offline CVS status. Mostly pure; the few functions that read the
+  filesystem (`loadFolder`, `resolveNote`, `cvsWorkingDir`, `readCVSStatuses`,
+  `isDirectory`) say so in
   their doc comment and return data, never mutate app state.
 - `Sources/conspectus/` — the AppKit shell: `main.swift` (bootstrap, env
   vars, FIFO sentinels), `Appearance.swift` (theming/rendering),
@@ -31,6 +32,9 @@ The thread through every rule: **nothing important should be implicit.**
   injects the bundled plugin).
 - `plugins/conspectus.yazi/` — bundled yazi glue (hover → FIFO, panesync-cd
   follower); makes the repo self-contained, no external plugin or binary.
+- `plugins/cvs.yazi/` — bundled CVS-status fetcher; calls
+  `conspectus --cvs-status` (`$CONSPECTUS_BIN`), so the status logic stays
+  in `ConspectusCore`.
 
 New pure logic goes into `ConspectusCore`; AppKit/process glue stays in the
 executable. That boundary is what keeps the important parts testable.

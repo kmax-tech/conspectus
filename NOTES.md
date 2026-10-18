@@ -3,6 +3,26 @@
 Solved hard problems — the *why* the code can't show. Keep entries short:
 problem, solution, gotcha.
 
+## 2026-10-18 — CVS status without the server: compare strings, read markers
+
+**Problem:** Per-file CVS signs on every directory yazi enters; `cvs -n
+update` asks the server (seconds, network), so it cannot run per directory.
+
+**Solution:** Everything except "needs update" is in the working copy.
+`CVS/Entries` holds each file's checkout mtime as an asctime string in UTC;
+CVS calls a file modified when `asctime(gmtime(mtime))` differs from that
+string — a string compare, so `cvsTimestamp` builds exactly that string
+(`strftime "%a %b %e …"`, the day space-padded: `Mon Mar  4`) instead of
+parsing dates. Revision `0` = added, `-…` = removed, not in Entries =
+unknown unless a cvsignore pattern (fnmatch) matches.
+
+**Gotcha:** After a conflicted merge the timestamp reads `Result of
+merge+<asctime>`, and an *edited* file is still `C` as long as it holds
+`<<<<<<< ` / `=======` / `>>>>>>> ` lines — cvs scans the content. Checked
+against `cvs -n -q update` on a throwaway local repository. The built-in
+ignore list is taken from the installed binary (`strings $(which cvs)`):
+Homebrew's 1.12 adds `._*`.
+
 ## 2026-10-14 — Latin-1 files: decode ourselves, feed bat via stdin
 
 **Problem:** Text previews of legacy files (CVS repo: Latin-1 TeX) showed `�`

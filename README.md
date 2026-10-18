@@ -68,7 +68,22 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
     it in yazi** (`reveal`: yazi cds to the listed folder and puts the cursor
     on the row — which fires a hover and previews it, the same way keyboard
     navigation does); **double-clicking acts**: a folder is entered, a file
-    opens like `Enter`. Mimics yazi's own third column.
+    opens like `Enter`. Mimics yazi's own third column. Inside a CVS
+    checkout the rows carry **CVS status signs** in front of the icons, the
+    same as yazi's (next bullet).
+- **CVS status signs, like git.yazi's**: in a CVS checkout (a directory with
+  `CVS/Entries`) yazi's file list and the folder listing show the letters
+  `cvs -n update` prints — `M` modified, `A` added, `R` removed, `C`
+  conflict, `?` unknown; clean and ignored files get a blank cell. The
+  bundled `plugins/cvs.yazi` is a yazi fetcher (runs asynchronously as yazi
+  enters a directory, spawns nothing outside a checkout) that calls
+  `conspectus --cvs-status <dir>` — the binary the launcher hands over as
+  `CONSPECTUS_BIN` — so yazi and the pane share one implementation
+  (`ConspectusCore/CVS.swift`). **Offline**: read from `CVS/Entries` (+
+  `Entries.Log`), mtimes, conflict markers and the cvsignore lists (built-in,
+  `~/.cvsignore`, `$CVSIGNORE`, the directory's `.cvsignore`), never from the
+  server — so it cannot show "needs update", nor honor the server's
+  `CVSROOT/cvsignore`. Directories get no roll-up of their contents' state.
 - Because the right pane previews files *and* folders, yazi runs at 2 columns
   (its own 3rd preview column is hidden via the overlay `yazi.toml`). You
   navigate in the middle column and enter directories to descend.

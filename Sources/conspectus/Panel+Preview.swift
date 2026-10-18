@@ -724,7 +724,10 @@ extension Panel {
             let contents = loadFolder(path, cap: folderListingCap, sort: sort)
             // Navigated on already? Skip the attributed-string build entirely.
             guard self.isCurrentListing(gen) else { return }
-            let listing = renderListing(contents, in: path)
+            // nil outside a CVS checkout — the listing then has no sign column.
+            let cvs = readCVSStatuses(in: path)
+            for line in cvs?.malformed ?? [] { warn("conspectus: \(path)/CVS/Entries: unparseable line: \(line)") }
+            let listing = renderListing(contents, in: path, cvs: cvs?.statuses)
             DispatchQueue.main.async {
                 // Re-check: a newer hover may have won while we rendered.
                 guard self.isCurrentListing(gen) else { return }
