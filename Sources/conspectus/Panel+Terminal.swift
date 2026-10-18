@@ -114,6 +114,25 @@ extension Panel {
         openLazycvs(in: dir, at: path)
     }
 
+    /// CVS Update… (⌥⌘U on the dir yazi is in, or the context menu on an
+    /// item's checkout dir): the terminal panel runs `cvsUpdateScript` in
+    /// `dir` — a dry run first, the real update only after a `y`. An open
+    /// panel is replaced, like for lazycvs. Outside a checkout: beep + stderr,
+    /// nothing runs. Side effects: kills a running panel shell, spawns zsh/cvs.
+    func openCVSUpdate(in dir: String) {
+        guard cvsWorkingDir(for: dir) != nil else {
+            NSSound.beep()
+            warn("conspectus: CVS Update — \(dir) is not in a CVS checkout (no CVS/Root)")
+            return
+        }
+        closeBottomTerminal()
+        startBottomTerminal(script: cvsUpdateScript, args: [dir],
+                            height: outerSplit.frame.height * lazycvsPanelShare)
+    }
+
+    /// ⌥⌘U — CVS Update… for the directory the active yazi pane is in.
+    @objc func cvsUpdateHere() { openCVSUpdate(in: currentYaziDir()) }
+
     /// Start the panel's login zsh with `script`; `args` arrive as $1, $2, …
     /// (positional, so paths are never spliced into shell source). Side
     /// effects: adds the panel, relayouts, spawns the process, takes focus.
@@ -284,3 +303,33 @@ extension Panel {
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 }
+
+/// The panel script behind CVS Update… ($1 = the directory). Recursive from
+/// there, as cvs is by default. Step one is the dry run `cvs -n -q update -d`
+/// — one line per file that differs locally or on the server (`U`/`P` =
+/// newer on the server, `M`, `A`, `R`, `C`, `?`), streamed while it runs;
+/// step two, only after `y`, the real `cvs -q update -d -P` (flags as
+/// lazycvs uses them: new dirs come along, empty ones are pruned). cvs exits
+/// 1 already when a file would conflict, so a non-zero status alone only
+/// gets a visible note; an aborted cvs (`[update aborted]`: server
+/// unreachable, no login) stops before the question. Any key closes the
+/// panel at the end.
+private let cvsUpdateScript = """
+    cd "$1" || { read -k1 "?(any key closes)"; exit 1 }
+    close() { echo; read -k1 "?(any key closes)"; exit $1 }
+    print -P "%B$ cvs -n -q update -d%b   in ${PWD/#$HOME/~}"
+    log=$(mktemp -t conspectus-cvs) || close 1
+    cvs -n -q update -d 2>&1 | tee "$log"; s=${pipestatus[1]}
+    if grep -q 'update aborted]' "$log"; then print "\ncvs failed (exit $s) — nothing updated"; rm -f "$log"; close $s; fi
+    (( s != 0 )) && print "\n(cvs exit $s: conflicts or warnings above)"
+    if [[ ! -s $log ]]; then print "Up to date: no local or server changes."; rm -f "$log"; close 0; fi
+    rm -f "$log"
+    echo
+    if read -q "?Update now (cvs -q update -d -P)? [y/N] "; then
+        echo; print -P "%B$ cvs -q update -d -P%b"
+        cvs -q update -d -P; s=$?
+        (( s != 0 )) && print "\n(cvs exit $s: conflicts or errors above)"
+        close $s
+    fi
+    close 0
+    """

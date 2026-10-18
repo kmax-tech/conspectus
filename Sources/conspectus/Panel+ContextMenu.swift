@@ -166,6 +166,7 @@ extension Panel: NSServicesMenuRequestor {
         // Only inside a CVS checkout — elsewhere lazycvs has nothing to show.
         if let dir = cvsWorkingDir(for: path) {
             add("Open in lazycvs", #selector(contextLazycvs(_:)), ContextTarget(path: path, peer: peer, app: nil, dir: dir))
+            add("CVS Update…", #selector(contextCVSUpdate(_:)), ContextTarget(path: path, peer: peer, app: nil, dir: dir))
         }
         menu.addItem(.separator())
         add("Copy Path", #selector(contextCopyPath(_:)), me)
@@ -290,6 +291,15 @@ extension Panel: NSServicesMenuRequestor {
             warn("conspectus: lazycvs item without a working dir — ignored"); return
         }
         openLazycvs(in: dir, at: t.path)
+    }
+
+    /// CVS Update…: dry run + confirmed update in the item's checkout dir
+    /// (the folder itself, or a file's folder). Side effects: see `openCVSUpdate`.
+    @objc func contextCVSUpdate(_ sender: Any?) {
+        guard let t = target(of: sender), let dir = t.dir else {
+            warn("conspectus: CVS Update item without a working dir — ignored"); return
+        }
+        openCVSUpdate(in: dir)
     }
 
     /// Compile and run one AppleScript; failures (no Automation permission,

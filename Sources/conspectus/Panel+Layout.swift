@@ -494,6 +494,13 @@ extension Panel {
         reveal.keyEquivalentModifierMask = [.command, .option]
         reveal.target = self
         goMenu.addItem(reveal)
+        // ⌥⌘U — CVS dry run + confirmed update for the folder yazi is in;
+        // a menu key, so it works from every pane (no yazi keymap needed).
+        let cvsUpdate = NSMenuItem(title: "CVS Update…", action: #selector(cvsUpdateHere),
+                                   keyEquivalent: "u")
+        cvsUpdate.keyEquivalentModifierMask = [.command, .option]
+        cvsUpdate.target = self
+        goMenu.addItem(cvsUpdate)
         goMenu.addItem(NSMenuItem.separator())
         addTabItems(goMenu)
         goItem.submenu = goMenu

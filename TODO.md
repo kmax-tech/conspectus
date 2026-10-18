@@ -26,7 +26,9 @@ Auslöser, ohne Termin.*
 
 - **CVS-Status: was die Offline-Variante nicht kann** (2026-10-18; gebaut
   sind M/A/R/C/? in yazi und in der Ordnervorschau, siehe README). Offen:
-  (a) „needs update" nur per `cvs -n -q update` im Hintergrund, gecacht;
+  (a) „needs update" als Zeichen bräuchte `cvs -n -q update` im Hintergrund,
+  gecacht — vorerst auf Anfrage über ⌥⌘U (CVS Update…) bzw. lazycvs, das den
+  Server ebenfalls nur auf Anlass fragt (Start, Aufklappen, `s`);
   (b) Ordner zeigen keinen Sammelstatus ihres Inhalts (git.yazi rollt hoch;
   für CVS hieße das einen rekursiven Lauf); (c) im echten Fenster noch
   anzusehen: Ausrichtung neben den git.yazi-Platzhaltern. Auslöser: wenn

@@ -84,6 +84,15 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
   `~/.cvsignore`, `$CVSIGNORE`, the directory's `.cvsignore`), never from the
   server — so it cannot show "needs update", nor honor the server's
   `CVSROOT/cvsignore`. Directories get no roll-up of their contents' state.
+- **CVS Update… (`⌥⌘U`, Go menu; also in the context menu next to "Open in
+  lazycvs")** — the server half the signs leave out: the terminal panel runs
+  `cvs -n -q update -d` in the folder yazi is in (recursive, as cvs is),
+  streaming one line per file that differs — `U`/`P` newer on the server,
+  `M` `A` `R` `C` `?` local. Then it asks `Update now? [y/N]`; only `y` runs
+  `cvs -q update -d -P`. cvs exits 1 already when a file would conflict, so
+  that gets a note, not a stop; an aborted cvs (server unreachable) stops
+  before the question. Any key closes the panel. Outside a checkout the key
+  beeps.
 - Because the right pane previews files *and* folders, yazi runs at 2 columns
   (its own 3rd preview column is hidden via the overlay `yazi.toml`). You
   navigate in the middle column and enter directories to descend.

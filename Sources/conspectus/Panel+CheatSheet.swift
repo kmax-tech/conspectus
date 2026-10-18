@@ -83,6 +83,8 @@ let cheatSheetGroups: [CheatSheetGroup] = [
                     ("⌘↑", "enclosing folder (Go menu) — one level up, like in Finder"),
                     ("⌥⌘R", "reveal in Finder (dir opens, file is selected) — VS Code's key;"),
                     ("", "  in a bare terminal yazi the same move is E f"),
+                    ("⌥⌘U", "CVS Update… for yazi's folder: dry run (cvs -n -q update -d) in the"),
+                    ("", "  terminal panel, the real update only after y; also in the context menu"),
                     ("⌥⌘P", "print the previewed file (File menu) — macOS print dialog;"),
                     ("", "  PDF page-for-page, image to a page, source/markdown paginated"),
                     ("⌘⇧[ / ⌘⇧]", "previous / next yazi tab (the kitty/WezTerm tab chord)"),
