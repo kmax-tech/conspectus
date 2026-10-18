@@ -24,6 +24,18 @@ Auslöser, ohne Termin.*
   „today" veraltet über Mitternacht, bis die Pane neu rendert (Hover oder
   Refresh). Auslöser: wenn die springende Spalte beim Ordnerwechsel stört.
 
+- **CVS-Status pro Datei beim Navigieren, wie git.yazi** (2026-10-18).
+  Zwei Stufen: (a) lokal aus `CVS/Entries`, ohne Server — modified = mtime
+  ≠ Entries-Zeitstempel (UTC; geprüft an
+  `~/cvsrepo/university-ka-in-progress/.project`), added = Revision `0`,
+  removed = `-…`, unknown = fehlt in Entries, missing = Eintrag ohne Datei;
+  (b) needs-update/Konflikt nur per `cvs -n -q update` im Hintergrund,
+  gecacht. Ort: zuerst ein `cvs.yazi`-Fetcher nach dem Muster von git.yazi
+  (`~/.config/yazi/yazi.toml`), dieselbe Zeichenspalte; danach optional ein
+  Entries-Parser in `ConspectusCore` neben `CVS.swift` für die
+  Ordnervorschau. Ungeprüft: `+` im Zeitstempelfeld bei Konflikt.
+  Auslöser: auf Ansage.
+
 - **Kontextmenü: fehlende Finder-Einträge** (2026-10-11). Tags (schreibbar
   über `URLResourceKey.tagNamesKey`, braucht aber eine Farbpunkt-UI),
   Komprimieren (`ditto -c -k --keepParent`), Duplizieren, Alias erzeugen
