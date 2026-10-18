@@ -312,6 +312,23 @@ if let i = CommandLine.arguments.firstIndex(of: "--icon"), i + 1 < CommandLine.a
     exit(0)
 }
 
+// Headless CVS status: `conspectus --cvs-status <dir>` prints one
+// `<status>\t<name>` line per entry that is not clean (status = a
+// CVSFileStatus raw value) and exits; nothing for a clean directory or one
+// outside any checkout. The bundled cvs.yazi fetcher reads this, so yazi's
+// signs and the pane's folder listing come from the same ConspectusCore code.
+if let i = CommandLine.arguments.firstIndex(of: "--cvs-status") {
+    guard i + 1 < CommandLine.arguments.count else { die("conspectus: --cvs-status needs a directory") }
+    let dir = CommandLine.arguments[i + 1]
+    if let read = readCVSStatuses(in: dir) {
+        for line in read.malformed { warn("conspectus: \(dir)/CVS/Entries: unparseable line: \(line)") }
+        let out = read.statuses.filter { $0.value != .clean }.sorted { $0.key < $1.key }
+            .map { "\($0.value.rawValue)\t\($0.key)\n" }.joined()
+        FileHandle.standardOutput.write(Data(out.utf8))
+    }
+    exit(0)
+}
+
 let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/conspectus")
 
 // One FIFO per instance: a shared path let any new launch (second window,
