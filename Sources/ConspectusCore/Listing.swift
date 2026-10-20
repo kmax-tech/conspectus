@@ -118,14 +118,14 @@ public func truncateName(_ name: String, isDir: Bool, max: Int) -> String {
 }
 
 /// Format a modification date for the listing's date column, the same way
-/// yazi's `size_and_mtime` linemode does: today and yesterday by name ("yester",
+/// yazi's `size_and_mtime` linemode does: today and yesterday by name ("y-day",
 /// the Finder convention — recent work reads at a glance; abbreviated so the
 /// day field is as wide as "16.10." and the columns sit close), the rest of this year
 /// with the time, older or future years with the year (the `ls -l`
 /// convention). Always 12 characters, time or year flush right:
 ///
 ///     today  14:32
-///     yester 09:10
+///     y-day  09:10
 ///     16.10. 14:32
 ///     15.01.  2024
 ///
@@ -147,7 +147,7 @@ public func listingDate(_ date: Date, now: Date = Date(),
     // Force-unwrap: subtracting one day from a valid date always succeeds.
     let yesterday = cal.date(byAdding: .day, value: -1, to: now)!
     if cal.isDate(date, inSameDayAs: now) { return "today  " + format("HH:mm") }
-    if cal.isDate(date, inSameDayAs: yesterday) { return "yester " + format("HH:mm") }
+    if cal.isDate(date, inSameDayAs: yesterday) { return "y-day  " + format("HH:mm") }
     if cal.component(.year, from: date) == cal.component(.year, from: now) {
         return format("dd.MM. HH:mm")
     }

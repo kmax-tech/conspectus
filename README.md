@@ -59,7 +59,7 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
     (the `,` keys — `, t`, `, m`, `, s` … — reach the pane; the plugin sends
     the tab's sort preference with every hover), Nerd Font glyphs, Catppuccin
     colors, size and modification date as a dimmed column — `today 14:32` /
-    `yester 09:10`, `16.10. 14:32` this year, `15.01. 2024` before (day field
+    `y-day 09:10`, `16.10. 14:32` this year, `15.01. 2024` before (day field
     as wide as `16.10.`, so the columns sit close).
     Names longer than 40 characters are cut with `…` like yazi cuts them
     (`lenz09-soziologie-der-zweierbeziehu….pdf` — the extension stays), so

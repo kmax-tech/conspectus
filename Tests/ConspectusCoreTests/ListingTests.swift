@@ -119,7 +119,7 @@ final class ListingTests: XCTestCase {
 
     func testListingDateYesterdayByName() {
         XCTAssertEqual(listingDate(date("2026-10-15T23:59:00Z"), now: date("2026-10-16T00:01:00Z"),
-                                   timeZone: utc), "yester 23:59")
+                                   timeZone: utc), "y-day  23:59")
     }
 
     func testListingDateSameYearShowsTime() {
@@ -147,7 +147,7 @@ final class ListingTests: XCTestCase {
 
     func testListingDateYesterdayAcrossYearBoundary() {
         XCTAssertEqual(listingDate(date("2025-12-31T18:00:00Z"), now: date("2026-01-01T09:00:00Z"),
-                                   timeZone: utc), "yester 18:00")
+                                   timeZone: utc), "y-day  18:00")
     }
 
     func testListingDateIsAlwaysTwelveWide() {
