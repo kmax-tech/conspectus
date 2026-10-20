@@ -333,7 +333,7 @@ repository, so stopping there scans everything);
 quitting lazycvs closes the panel, an lcvs error stays visible above a shell
 (an lcvs build without `-follow` fails here too: `lcvs build`); an open panel
 is replaced; from the keyboard: yazi's
-`E C` in the dotfiles keymap, which beeps outside a checkout), **Copy Path** / **Copy
+`E C` in the dotfiles keymap, via the bundled plugin's `lazycvs` mode, which beeps outside a checkout), **Copy Path** / **Copy
 Name**, and **Rename…** / **Move to Trash**. The last two run *inside yazi* (`rename` / `remove --hovered` on the
 clicked item, never on a selection you left elsewhere), so there is one task
 system and one confirmation. In a yazi pane the right-click first moves yazi's

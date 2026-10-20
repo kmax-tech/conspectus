@@ -3,6 +3,29 @@
 Solved hard problems — the *why* the code can't show. Keep entries short:
 problem, solution, gotcha.
 
+## 2026-10-20 — A blocking yazi shell must not trigger a pane resize
+
+**Problem:** `E C` (lazycvs) quit the whole app; the context menu's "Open
+in lazycvs" was fine, and the FIFO handler was innocent (a hand-written
+`@LAZYCVS:` line opened the panel). No crash report: the app exited with
+status 0.
+
+**Solution:** The keymap ran `shell … --block`, which hands the terminal to
+its child; when the child exits yazi re-probes the terminal (DA1 query) before
+redrawing. The FIFO message made the app open the terminal panel, i.e. resize
+the yazi pane, right inside that probe — its `read` returned EINTR, yazi
+treated it as fatal and quit (yazi.log: `Terminal failed to respond to DA1 …
+Interrupted system call`), and the left pane quitting is the app's exit
+signal. Now the keymap's outer shell never blocks: inside the app it emits
+`plugin conspectus lazycvs` (the plugin writes the FIFO from Lua, hovered
+item), in a bare terminal it emits a *second*, blocking shell for `lcvs`.
+
+**Gotcha:** The same holds for any future `--block` binding whose side effect
+reaches the app: the app must not relayout the yazi pane while yazi is
+resuming. Reproduce with real keystrokes (osascript) — `ya emit-to` could not
+address the pane (yazi's DDS ids are not pids), and a plain FIFO write skips
+the block/resume window entirely.
+
 ## 2026-10-18 — CVS status without the server: compare strings, read markers
 
 **Problem:** Per-file CVS signs on every directory yazi enters; `cvs -n

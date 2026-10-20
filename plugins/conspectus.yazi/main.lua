@@ -95,6 +95,32 @@ local function open_hovered()
 	end
 end
 
+-- `E C` inside conspectus: lazycvs for the HOVERED item, via the app's
+-- FIFO (`@LAZYCVS:<path>`) — the app opens lazycvs in its terminal panel,
+-- the same action as the context menu's "Open in lazycvs"; outside a
+-- checkout the app beeps and says why. Written from Lua, NOT from a
+-- `shell … --block` in the keymap (the original form): a blocking shell
+-- hands the terminal to its child and yazi re-probes the terminal (DA1
+-- query) when it resumes; the app's reaction to the message — opening the
+-- panel resizes the yazi pane — lands exactly in that probe, its read fails
+-- with EINTR, yazi exits, and the app closes with its left pane. A plain
+-- terminal yazi (no FIFO) never gets here: the keymap runs lcvs itself.
+local function lazycvs_hovered()
+	local ok, fifo = pcall(function() return os.getenv("QLPEEK_FIFO") end)
+	if not (ok and fifo and #fifo > 0) then
+		ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+			content = "lazycvs: no conspectus FIFO — this mode only works inside the app" })
+		return
+	end
+	local path = get_hovered()
+	if not path then
+		ya.notify({ title = "conspectus", timeout = 3, level = "warn",
+			content = "lazycvs: nothing hovered" })
+		return
+	end
+	fifo_write(fifo, "@LAZYCVS:" .. path)
+end
+
 -- Run a `panesync-act` command on the hovered item: rename/remove are yazi's
 -- own, restricted to the hovered item; open is the shared opener above.
 local function run_act(cmd)
@@ -584,6 +610,9 @@ end
 --             nvim's --listen socket) send the selected/hovered text file(s) there
 --             as buffers, so several files pile up in one editor; otherwise
 --             the normal opener.
+--   "lazycvs" `E C`: lazycvs for the hovered item in the app's terminal
+--             panel (`lazycvs_hovered` above) — a directory too, so this
+--             mode is decided before the enter-a-directory rule.
 --
 -- Invoked as `ya emit plugin conspectus [open]` from the keymap — note that
 -- `ya emit` passes arguments as a list, WITHOUT the `--` separator that the
@@ -592,6 +621,10 @@ end
 function M:entry(job)
 	local emit = ya.emit or ya.mgr_emit
 	local mode = job and job.args and job.args[1]
+	if mode == "lazycvs" then
+		lazycvs_hovered()
+		return
+	end
 	if mode ~= nil and mode ~= "" and mode ~= "open" then
 		ya.notify({ title = "conspectus", timeout = 3, level = "warn",
 			content = "unknown plugin mode '" .. tostring(mode) .. "' — treating it as l/→" })
