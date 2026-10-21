@@ -254,8 +254,9 @@ extension Panel {
                 self.showPreviewMessage("""
                     \((path as NSString).lastPathComponent)
 
-                    Preview is off for this location
-                    (CONSPECTUS_PREVIEW_SKIP_DIRS; ⌘⇧P to preview here anyway).
+                    File preview is off here (network location) —
+                    folders still show. Press ⌘⇧P to show file contents
+                    in this folder (CONSPECTUS_PREVIEW_SKIP_DIRS).
                     """)
             }
             // Folders stay useful on a skipped mount — a listing is one capped
