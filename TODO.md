@@ -19,7 +19,12 @@ Auslöser, ohne Termin.*
   Offen: ob `alt_open` im eigenen lazycvs-Config auf `qlpeek send $FILE`
   wechselt (dann landet die Revision im Vorschau-Panel, aber `Ctrl-o`
   auf Textdateien geht nicht mehr an Emacs) oder ein kleines Skript nach
-  Dateityp verteilt. Auslöser: erste echte Bild-/PDF-Historie.
+  Dateityp verteilt. Entschieden (2026-10-21): keine Opener-Tabelle in
+  lazycvs (lazygit hat auch nur einen Befehl; das Routing lebt in der
+  Shell). Falls das Skript je nach Tab oder Revision unterscheiden muss:
+  lazycvs gibt dem Opener Kontext als Umgebungsvariablen (`LAZYCVS_TAB`,
+  `LAZYCVS_REV`), kein Config-Format. Auslöser: erste echte
+  Bild-/PDF-Historie.
 
 - **Ordnerliste: Datumsspalte am rechten Rand** (2026-10-16). Die Spalte
   Größe + Datum sitzt heute an einem Tab-Stop hinter dem längsten Namen,
