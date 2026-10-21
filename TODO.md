@@ -12,6 +12,15 @@ Auslöser, ohne Termin.*
 
 ## Notiert, nicht geplant
 
+- **lazycvs: Revision einer Binärdatei (PDF, Bild) ansehen** (2026-10-21,
+  gebaut in `~/projects/lazycvs`: History-Tab `o` / `Ctrl-o` öffnen die
+  Revision unter dem Cursor als Temp-Datei; Extraktion läuft byte-genau
+  über einen stdout-only-Lauf; Dateien ohne `-kb` werden rot gemeldet).
+  Offen: ob `alt_open` im eigenen lazycvs-Config auf `qlpeek send $FILE`
+  wechselt (dann landet die Revision im Vorschau-Panel, aber `Ctrl-o`
+  auf Textdateien geht nicht mehr an Emacs) oder ein kleines Skript nach
+  Dateityp verteilt. Auslöser: erste echte Bild-/PDF-Historie.
+
 - **Ordnerliste: Datumsspalte am rechten Rand** (2026-10-16). Die Spalte
   Größe + Datum sitzt heute an einem Tab-Stop hinter dem längsten Namen,
   Namen über 40 Zeichen (`folderListingNameColumn`) werden wie in yazi mit

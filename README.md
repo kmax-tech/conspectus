@@ -153,7 +153,11 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
   `plugins/conspectus.yazi` does this, writing the FIFO straight from Lua.
 
 Any other TUI can drive the preview by writing an absolute path to
-`$QLPEEK_FIFO` when its cursor moves.
+`$QLPEEK_FIFO` when its cursor moves. The `qlpeek send` script does exactly
+that when the variable is set, so a tool running in the terminal panel
+with `qlpeek send <file>` as its opener lands in the preview pane: lazycvs
+with `alt_open = "qlpeek send $FILE"` shows an old revision of a PDF or an
+image there on `Ctrl-o` in its History tab.
 
 ## Requirements & works best with
 
