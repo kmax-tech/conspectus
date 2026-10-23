@@ -257,6 +257,7 @@ extension Panel {
         }
         yankState = state.paths.isEmpty ? nil : state
         styleHintBar()
+        pasteboardFollowsMenuCopy(state)
     }
 
     /// Show/hide the shortcut bar per the persisted preference and lay the

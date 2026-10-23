@@ -343,7 +343,9 @@ Name**, **Copy** / **Cut** / **Paste** (Paste only while yazi's yank buffer
 holds something; its title names the count and the target folder), **New
 File…** / **New Folder…**, and **Rename…** / **Move to Trash**. All file
 operations run *inside yazi*, so there is one task system, one confirmation
-and one yank buffer (`p` in either pane pastes what the menu copied):
+and one yank buffer (`p` in either pane pastes what the menu copied; Copy also puts the files
+on the macOS pasteboard, so ⌘V in Finder pastes them too — Cut stays in yazi,
+since Finder has no cut on the pasteboard):
 rename and trash act on the clicked item (`--hovered`, never on a selection
 you left elsewhere); copy / cut are yazi's `yank` — the clicked item, or the
 whole selection if you right-clicked a selected file, and refused with a

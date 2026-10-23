@@ -212,6 +212,10 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// and if the session plugin restores one, its event refills this.
     /// Main thread only.
     var yankState: YankState?
+    /// When the context menu's Copy was clicked; the next copy-mode `@YANK:`
+    /// within `menuCopyPasteboardWait` also goes onto the macOS pasteboard
+    /// (see `contextYank`). nil = no menu copy pending. Main thread only.
+    var menuCopyPending: Date?
     /// Yazi's sort preference as last announced over the FIFO (`@SORT:`), the
     /// order the folder listing uses. Set on the main thread by `sortChanged`,
     /// read on the main thread by `showFolder` before it hands off to the

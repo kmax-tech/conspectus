@@ -39,6 +39,12 @@ struct PendingContextMenu {
 /// to the last hovered path. yazi answers a click in a few ms; this is slack.
 let contextMenuHoverWait: TimeInterval = 0.3
 
+/// How long after the context menu's Copy a copy-mode yank announcement still
+/// counts as its answer (and goes onto the macOS pasteboard). yazi answers in
+/// milliseconds; the bound keeps a refused Copy (other files selected) from
+/// turning a later keyboard `y` into a pasteboard write.
+let menuCopyPasteboardWait: TimeInterval = 2
+
 extension Panel: NSServicesMenuRequestor {
     /// Watch for right-clicks in the window and open the context menu for the
     /// file under the pointer. Swallows the event where it handles it (the
@@ -363,6 +369,18 @@ extension Panel: NSServicesMenuRequestor {
         logEvent("copied \(paths.count) file(s) to the pasteboard")
     }
 
+    /// The yank announcement after a context-menu Copy: put its files on
+    /// the pasteboard (Finder semantics). Only a copy-mode, non-empty buffer
+    /// within `menuCopyPasteboardWait` counts; any announcement disarms.
+    /// Side effects: pasteboard, clears `menuCopyPending`.
+    func pasteboardFollowsMenuCopy(_ state: YankState) {
+        guard let since = menuCopyPending else { return }
+        menuCopyPending = nil
+        guard !state.isCut, !state.paths.isEmpty,
+              Date().timeIntervalSince(since) <= menuCopyPasteboardWait else { return }
+        copyFilesToPasteboard(state.paths)
+    }
+
     /// `@SELECTED` answer from yazi: a one-shot consumer (⌘C) takes it,
     /// otherwise it is ⌘L's list in the preview.
     func selectedArrived(_ paths: [String]) {
@@ -408,7 +426,16 @@ extension Panel: NSServicesMenuRequestor {
     /// publish.
     @objc func contextRename(_ sender: Any?) { yaziAct("rename", sender) }
     @objc func contextTrash(_ sender: Any?) { yaziAct("remove", sender) }
-    @objc func contextYank(_ sender: Any?) { yaziAct("copy", sender) }
+    /// Copy also reaches Finder: yazi announces what it yanked (`@YANK:`,
+    /// the clicked item or the selection), and that answer goes onto the
+    /// macOS pasteboard as file URLs (`pasteboardFollowsMenuCopy`), so ⌘V in
+    /// Finder pastes it. Cut stays yazi-only — Finder has no cut on the
+    /// pasteboard (it moves with ⌥⌘V at paste time). Side effects: DDS
+    /// publish, arms `menuCopyPending`.
+    @objc func contextYank(_ sender: Any?) {
+        menuCopyPending = Date()
+        yaziAct("copy", sender)
+    }
     @objc func contextCut(_ sender: Any?) { yaziAct("cut", sender) }
     @objc func contextPaste(_ sender: Any?) { yaziAct("paste", sender) }
     @objc func contextNewFile(_ sender: Any?) { yaziAct("newfile", sender) }
