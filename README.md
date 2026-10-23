@@ -339,9 +339,17 @@ quitting lazycvs closes the panel, an lcvs error stays visible above a shell
 (an lcvs build without `-follow` fails here too: `lcvs build`); an open panel
 is replaced; from the keyboard: yazi's
 `E C` in the dotfiles keymap, via the bundled plugin's `lazycvs` mode, which beeps outside a checkout), **Copy Path** / **Copy
-Name**, and **Rename…** / **Move to Trash**. The last two run *inside yazi* (`rename` / `remove --hovered` on the
-clicked item, never on a selection you left elsewhere), so there is one task
-system and one confirmation. In a yazi pane the right-click first moves yazi's
+Name**, **Copy** / **Cut** / **Paste** (Paste only while yazi's yank buffer
+holds something; its title names the count and the target folder), **New
+File…** / **New Folder…**, and **Rename…** / **Move to Trash**. All file
+operations run *inside yazi*, so there is one task system, one confirmation
+and one yank buffer (`p` in either pane pastes what the menu copied):
+rename and trash act on the clicked item (`--hovered`, never on a selection
+you left elsewhere); copy / cut are yazi's `yank` — the clicked item, or the
+whole selection if you right-clicked a selected file, and refused with a
+notice if other files are selected; paste and new file / folder (yazi's
+`create`, prompting for the name) act in the folder containing the clicked
+item. In a yazi pane the right-click first moves yazi's
 cursor onto the row, like a left click, then opens the menu for the file yazi
 reports as hovered. Not offered (yet): Tags, Compress, Duplicate, Make Alias.
 

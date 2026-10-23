@@ -15,9 +15,10 @@ import UniformTypeIdentifiers
 //   · a row of the folder listing in the preview pane — the row's own path;
 //   · the preview itself — the previewed file.
 //
-// File OPERATIONS stay yazi's: rename and trash go over the DDS and run on
-// the hovered item only, so there is one task system, one confirmation and
-// one place that knows about selections. Finder entries deliberately left
+// File OPERATIONS stay yazi's: rename, trash, copy / cut / paste and new
+// file / folder go over the DDS and run where yazi stands on the clicked item,
+// so there is one task system, one confirmation, one yank buffer and one
+// place that knows about selections. Finder entries deliberately left
 // out for now (TODO.md): Tags, Compress, Duplicate, Make Alias.
 //
 // Also here, because it is the same Finder-semantics territory: ⌘C in a yazi
@@ -169,9 +170,17 @@ extension Panel: NSServicesMenuRequestor {
             add("CVS Update…", #selector(contextCVSUpdate(_:)), ContextTarget(path: path, peer: peer, app: nil, dir: dir))
         }
         menu.addItem(.separator())
+        add("Copy", #selector(contextYank(_:)), me)
+        add("Cut", #selector(contextCut(_:)), me)
+        if let yank = yankState {
+            add(pasteTitle(yank, into: (path as NSString).deletingLastPathComponent), #selector(contextPaste(_:)), me)
+        }
+        menu.addItem(.separator())
         add("Copy Path", #selector(contextCopyPath(_:)), me)
         add("Copy Name", #selector(contextCopyName(_:)), me)
         menu.addItem(.separator())
+        add("New File…", #selector(contextNewFile(_:)), me)
+        add("New Folder…", #selector(contextNewFolder(_:)), me)
         add("Rename…", #selector(contextRename(_:)), me)
         add("Move to Trash", #selector(contextTrash(_:)), me)
         return menu
@@ -381,11 +390,29 @@ extension Panel: NSServicesMenuRequestor {
         if !pb.setString(s, forType: .string) { warn("conspectus: clipboard refused \(s)") }
     }
 
-    /// Rename / Move to Trash run INSIDE yazi (`panesync-act`): the plugin
-    /// reveals the path and runs the command on the hovered item only, once
-    /// the hover really is that item. Side effects: DDS publish.
+    /// The Paste item's title: what yazi's buffer holds and where it lands —
+    /// the folder containing the clicked item, where yazi stands after the
+    /// reveal. A cut buffer moves, so it says so.
+    func pasteTitle(_ yank: YankState, into dir: String) -> String {
+        let n = yank.paths.count
+        let items = "\(n) \(n == 1 ? "Item" : "Items")"
+        let folder = FileManager.default.displayName(atPath: dir)
+        return yank.isCut ? "Move \(items) into “\(folder)”" : "Paste \(items) into “\(folder)”"
+    }
+
+    /// File operations run INSIDE yazi (`panesync-act`): the plugin reveals
+    /// the path and runs the command once the hover really is that item —
+    /// rename / trash / copy / cut on that item, new file / folder and paste
+    /// in the folder containing it (where yazi then stands). Copy / cut fill
+    /// yazi's yank buffer, so `p` in either pane pastes. Side effects: DDS
+    /// publish.
     @objc func contextRename(_ sender: Any?) { yaziAct("rename", sender) }
     @objc func contextTrash(_ sender: Any?) { yaziAct("remove", sender) }
+    @objc func contextYank(_ sender: Any?) { yaziAct("copy", sender) }
+    @objc func contextCut(_ sender: Any?) { yaziAct("cut", sender) }
+    @objc func contextPaste(_ sender: Any?) { yaziAct("paste", sender) }
+    @objc func contextNewFile(_ sender: Any?) { yaziAct("newfile", sender) }
+    @objc func contextNewFolder(_ sender: Any?) { yaziAct("newdir", sender) }
 
     func yaziAct(_ command: String, _ sender: Any?) {
         guard let t = target(of: sender) else { return }

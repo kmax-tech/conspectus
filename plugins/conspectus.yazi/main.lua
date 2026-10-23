@@ -20,7 +20,7 @@
 --      `panesync-restart` (re-theme after light↔dark and ⌘R; refused over
 --      the FIFO as `@RESTART_REFUSED:…` while the pane is busy),
 --      `panesync-selected` (⌘L asks for the selection, answered over the
---      FIFO), `panesync-act` (the right-click menu's rename/trash, run on
+--      FIFO), `panesync-act` (the right-click menu's file operations, run on
 --      the hovered item), plus `conspectus-open` from the shell. Guarded by $CONSPECTUS_PEER, which only conspectus sets, so a
 --      plain terminal yazi never follows.
 --   3. Tab session: snapshot this pane's tabs on every cd and restore them
@@ -48,7 +48,7 @@ end
 
 -- A file operation the app's context menu asked for (`panesync-act`) that
 -- waits for its path to become the hovered item — see the handler below.
--- { cmd = "rename"|"remove", path = "<abs path>" } or nil.
+-- { cmd = <one of act_commands>, path = "<abs path>" } or nil.
 local pending_act = nil
 
 local get_hovered = ya.sync(function()
@@ -121,15 +121,57 @@ local function lazycvs_hovered()
 	fifo_write(fifo, "@LAZYCVS:" .. path)
 end
 
--- Run a `panesync-act` command on the hovered item: rename/remove are yazi's
--- own, restricted to the hovered item; open is the shared opener above.
+-- Copy / cut for the context menu. yazi's `yank` takes the selection when
+-- there is one (it has no `--hovered`), so: no selection → the hovered item;
+-- hovered item inside the selection → the whole selection (Finder's rule for
+-- a right-click on a selected item); hovered item outside it → refuse and
+-- say why, never yank files the user did not click. Sync context (cx).
+local function yank_hovered(cut)
+	local h = cx.active.current.hovered
+	if not h then
+		ya.notify({ title = "conspectus", timeout = 3, level = "warn", content = "copy/cut: nothing hovered" })
+		return
+	end
+	local hovered, any, inside = tostring(h.url), false, false
+	for _, url in pairs(cx.active.selected) do
+		any = true
+		if tostring(url) == hovered then inside = true end
+	end
+	if any and not inside then
+		ya.notify({ title = "conspectus", timeout = 5, level = "warn",
+			content = "copy/cut: other files are selected — clear the selection (Esc) or right-click a selected file" })
+		return
+	end
+	(ya.emit or ya.mgr_emit)("yank", cut and { cut = true } or {})
+end
+
+-- Run a `panesync-act` command where the context menu asked for it:
+-- rename/remove are yazi's own, restricted to the hovered item; copy/cut fill
+-- the yank buffer (see yank_hovered); newfile/newdir/paste act in the current
+-- folder (the clicked item's parent after the reveal); open is the shared
+-- opener above.
 local function run_act(cmd)
+	local emit = ya.emit or ya.mgr_emit
 	if cmd == "open" then
 		open_hovered()
+	elseif cmd == "copy" or cmd == "cut" then
+		yank_hovered(cmd == "cut")
+	elseif cmd == "newfile" then
+		emit("create", {})
+	elseif cmd == "newdir" then
+		emit("create", { dir = true })
+	elseif cmd == "paste" then
+		emit("paste", {})
 	else
-		(ya.emit or ya.mgr_emit)(cmd, { hovered = true })
+		emit(cmd, { hovered = true })
 	end
 end
+
+-- The commands `panesync-act` accepts (see run_act).
+local act_commands = {
+	rename = true, remove = true, open = true,
+	copy = true, cut = true, paste = true, newfile = true, newdir = true,
+}
 
 -- Double-click interval in seconds: the macOS setting (System Settings →
 -- Mouse), handed over by the app as $CONSPECTUS_DOUBLE_CLICK
@@ -478,8 +520,9 @@ function M:setup()
 		-- doing it itself — rename and trash (right-click menu) stay yazi's
 		-- (one task system, one confirmation, one place that knows the
 		-- selection), open (double-click on a listing row) goes through the
-		-- shared opener so IDE routing applies. Body
-		-- "<peer> <rename|remove|open> <path>". rename/remove run on the
+		-- shared opener so IDE routing applies; copy/cut/paste and new
+		-- file/folder likewise (see run_act). Body
+		-- "<peer> <command> <path>". rename/remove run on the
 		-- HOVERED item only (`--hovered`), never on a selection the user left
 		-- elsewhere — and only once that item IS the path: if it is hovered
 		-- already (right-click in this pane), run now; otherwise reveal it
@@ -490,7 +533,7 @@ function M:setup()
 			if type(body) ~= "string" then return end
 			local target, cmd, path = body:match("^([LR]) (%a+) (.+)$")
 			if not target or target ~= peer then return end
-			if cmd ~= "rename" and cmd ~= "remove" and cmd ~= "open" then
+			if not act_commands[cmd] then
 				ya.notify({ title = "conspectus", timeout = 3, level = "warn",
 					content = "unknown context action '" .. cmd .. "'" })
 				return
