@@ -45,6 +45,11 @@ let contextMenuHoverWait: TimeInterval = 0.3
 /// turning a later keyboard `y` into a pasteboard write.
 let menuCopyPasteboardWait: TimeInterval = 2
 
+/// Tag marking a File menu item (menu bar) as acting on the item under
+/// yazi's cursor at click time, not on a target fixed when the menu was
+/// built (context-menu items carry theirs in `representedObject`).
+let fileMenuItemTag = 0xF11E
+
 extension Panel: NSServicesMenuRequestor {
     /// Watch for right-clicks in the window and open the context menu for the
     /// file under the pointer. Swallows the event where it handles it (the
@@ -240,7 +245,10 @@ extension Panel: NSServicesMenuRequestor {
 
     // MARK: actions — each reads its target from the item, warns on failure.
 
+    /// The item an action works on: a context-menu item carries it; a File
+    /// menu item (`fileMenuItemTag`) means the item under yazi's cursor now.
     func target(of sender: Any?) -> ContextTarget? {
+        if let item = sender as? NSMenuItem, item.tag == fileMenuItemTag { return cursorTarget() }
         guard let t = (sender as? NSMenuItem)?.representedObject as? ContextTarget else {
             warn("conspectus: context menu item without a target — ignored"); return nil
         }
@@ -335,6 +343,71 @@ extension Panel: NSServicesMenuRequestor {
         var error: NSDictionary?
         script.executeAndReturnError(&error)
         if let error = error { warn("conspectus: \(what) failed: \(error)") }
+    }
+
+    // MARK: File menu — the context menu's file operations in the menu bar.
+
+    /// Add the context menu's file operations to the menu bar's File menu,
+    /// Finder-style, so they are findable (and searchable via Help) without a
+    /// right-click. Deliberately no key equivalents: yazi already has y / x /
+    /// p / a / r / d, and ⌘C / ⌘X / ⌘V stay Edit's. Items act on the item
+    /// under yazi's cursor in the last-used pane at click time (`target(of:)`,
+    /// `fileMenuItemTag`); Paste is enabled and titled by `validateMenuItem`.
+    /// Side effects: adds items to `menu`.
+    func addFileOperationItems(_ menu: NSMenu) {
+        func add(_ title: String, _ action: Selector) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.tag = fileMenuItemTag
+            menu.addItem(item)
+        }
+        add("Open", #selector(contextOpen(_:)))
+        add("Reveal in Finder", #selector(contextReveal(_:)))
+        add("Get Info", #selector(contextGetInfo(_:)))
+        if NSWorkspace.shared.urlForApplication(withBundleIdentifier: alfredBundleID) != nil {   // see contextMenu
+            add("Alfred Actions…", #selector(contextAlfred(_:)))
+            add("Alfred Actions for Enclosing Folder…", #selector(alfredActionsForFolder(_:)))
+        }
+        menu.addItem(.separator())
+        add("New File…", #selector(contextNewFile(_:)))
+        add("New Folder…", #selector(contextNewFolder(_:)))
+        menu.addItem(.separator())
+        add("Copy Item", #selector(contextYank(_:)))
+        add("Cut Item", #selector(contextCut(_:)))
+        add("Paste Items", #selector(contextPaste(_:)))
+        add("Copy Path", #selector(contextCopyPath(_:)))
+        add("Copy Name", #selector(contextCopyName(_:)))
+        menu.addItem(.separator())
+        add("Rename…", #selector(contextRename(_:)))
+        add("Move to Trash", #selector(contextTrash(_:)))
+    }
+
+    /// What a File menu item acts on: the item under yazi's cursor (the last
+    /// hover) in the last-used yazi pane, or the folder yazi is in when
+    /// nothing was hovered yet — the same fallback as a right-click on the
+    /// preview.
+    func cursorTarget() -> ContextTarget {
+        ContextTarget(path: lastPath ?? currentYaziDir(), peer: paneUnder(nil), app: nil)
+    }
+
+    /// File → Alfred Actions for Enclosing Folder…: Alfred's panel for the
+    /// folder the cursor item lies in (folder-only actions such as "Create
+    /// new file here"). Side effects: see `contextAlfred`.
+    @objc func alfredActionsForFolder(_ sender: Any?) {
+        guard let t = target(of: sender) else { return }
+        let dir = (t.path as NSString).deletingLastPathComponent
+        runAppleScript(alfredActionsScript(paths: [dir]), what: "Alfred actions for \(dir)")
+    }
+
+    /// Menu validation for items targeting the panel: only File's Paste
+    /// changes — enabled while yazi's yank buffer holds something, titled
+    /// like the context menu's (count + target folder). Everything else stays
+    /// enabled, as before validation existed. Side effects: sets the title.
+    @objc func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        guard item.tag == fileMenuItemTag, item.action == #selector(contextPaste(_:)) else { return true }
+        guard let yank = yankState else { item.title = "Paste Items"; return false }
+        item.title = pasteTitle(yank, into: currentYaziDir())
+        return true
     }
 
     // MARK: ⌘C — Finder semantics in a yazi pane.

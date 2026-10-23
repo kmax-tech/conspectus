@@ -358,11 +358,14 @@ extension Panel {
         appMenu.addItem(NSMenuItem(title: "Quit Conspectus", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appItem.submenu = appMenu
 
-        // File menu: one item, but it belongs where macOS keeps printing.
-        // ⌥⌘P (not the standard ⌘P): ⌘P pins the preview and ⌘⇧P is the
-        // per-folder preview switch — both older, both in muscle memory.
+        // File menu: the context menu's file operations (Finder keeps them
+        // here too), then printing, where macOS keeps it. ⌥⌘P (not the
+        // standard ⌘P): ⌘P pins the preview and ⌘⇧P is the per-folder
+        // preview switch — both older, both in muscle memory.
         let fileItem = NSMenuItem(); main.addItem(fileItem)
         let fileMenu = NSMenu(title: "File")
+        addFileOperationItems(fileMenu)
+        fileMenu.addItem(NSMenuItem.separator())
         let printItem = NSMenuItem(title: "Print Previewed File…", action: #selector(printPreviewFile),
                                    keyEquivalent: "p")
         printItem.keyEquivalentModifierMask = [.command, .option]
@@ -513,6 +516,17 @@ extension Panel {
         goMenu.addItem(NSMenuItem.separator())
         addTabItems(goMenu)
         goItem.submenu = goMenu
+
+        // Help menu: registered as NSApp.helpMenu, so macOS adds its search
+        // field — typing finds every menu item above, file operations
+        // included. The cheat sheet sits here as well (⌘K is in View).
+        let helpItem = NSMenuItem(); main.addItem(helpItem)
+        let helpMenu = NSMenu(title: "Help")
+        let helpCheat = NSMenuItem(title: "Keyboard Cheat Sheet", action: #selector(toggleCheatSheet), keyEquivalent: "")
+        helpCheat.target = self
+        helpMenu.addItem(helpCheat)
+        helpItem.submenu = helpMenu
+        NSApp.helpMenu = helpMenu
 
         NSApp.mainMenu = main
     }

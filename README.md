@@ -359,6 +359,14 @@ item. In a yazi pane the right-click first moves yazi's
 cursor onto the row, like a left click, then opens the menu for the file yazi
 reports as hovered. Not offered (yet): Tags, Compress, Duplicate, Make Alias.
 
+The same file operations sit in the menu bar's **File** menu, Finder-style
+(Open, Reveal in Finder, Get Info, Alfred Actions… and …for Enclosing Folder,
+New File… / New Folder…, Copy / Cut / Paste Items, Copy Path / Name, Rename…,
+Move to Trash), acting on the item under yazi's cursor in the pane you used
+last. They deliberately have no shortcuts — yazi's own keys (`y` `x` `p` `a`
+`r` `d`) are the keyboard path, and ⌘C / ⌘X / ⌘V stay Edit's. The **Help**
+menu's search field (⇧⌘/) finds any menu item by typing, these included.
+
 **Selecting text:** click into the preview to focus it, then drag to select
 and **⌘C** to copy — in the PDF view and in the text/markdown preview alike
 (**⌘A** selects all). ⌘C / ⌘V also copy/paste in the terminal panes.
