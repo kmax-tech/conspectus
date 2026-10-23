@@ -169,6 +169,13 @@ extension Panel: NSServicesMenuRequestor {
         // machine without Alfred, so no warning, just no item (deliberate).
         if NSWorkspace.shared.urlForApplication(withBundleIdentifier: alfredBundleID) != nil {
             add("Alfred Actions…", #selector(contextAlfred(_:)), me)
+            // For a file, also its folder: folder-only actions ("Create new
+            // file here") never show for the file itself.
+            if !isDir {
+                let parent = (path as NSString).deletingLastPathComponent
+                add("Alfred Actions for “\(FileManager.default.displayName(atPath: parent))”…",
+                    #selector(contextAlfred(_:)), ContextTarget(path: parent, peer: peer, app: nil))
+            }
         }
         // Only inside a CVS checkout — elsewhere lazycvs has nothing to show.
         if let dir = cvsWorkingDir(for: path) {

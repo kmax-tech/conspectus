@@ -325,7 +325,9 @@ Finder**, **Get Info** (Finder's info window, via Apple Events — macOS asks
 once for Automation permission), **Share**, **Services** (incl. Quick Actions
 that take files), **Alfred Actions…** (Alfred's Universal Actions panel for
 the file, via its AppleScript `action` command; only shown with Alfred
-installed), **Open in lazycvs** (only inside a CVS checkout, i.e. next to a
+installed — for a file also **Alfred Actions for “folder”…**, the panel for
+the folder it lies in, so folder-only actions such as a "Create new file
+here" workflow are reachable from a file too), **Open in lazycvs** (only inside a CVS checkout, i.e. next to a
 `CVS/Root` marker: the terminal panel opens at half the window height running
 `lcvs <item>` in that directory — the dotfiles shim around lazycvs, which lands
 on the clicked item; while it runs, **lazycvs follows yazi**: every directory
