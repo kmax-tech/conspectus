@@ -344,7 +344,7 @@ is replaced; from the keyboard: yazi's
 Name**, **Copy** / **Cut** / **Paste** (Paste only while yazi's yank buffer
 holds something; its title names the count and the target folder — next to
 it **Show Clipboard (N)** lists the buffer in the preview, clickable like ⌘L's
-selection list), **New
+selection list; also **⇧⌘L**, below), **New
 File…** / **New Folder…**, and **Rename…** / **Move to Trash**. All file
 operations run *inside yazi*, so there is one task system, one confirmation
 and one yank buffer (`p` in either pane pastes what the menu copied; Copy also puts the files
@@ -416,7 +416,10 @@ answer in the preview pane as a clickable list in the folder-listing style —
 icon and name per row, the parent directory dimmed behind it, since a
 selection spans directories. Clicking a row reveals that file in yazi (a
 directory row cds there). The list is a peek, not a mode: the next hover
-replaces it.
+replaces it. **⇧⌘L** (View → Show Yazi Clipboard in Preview) shows the
+same list for yazi's yank buffer — everything `y` / `x` or the context menu's
+Copy / Cut put there, not just the first name the shortcut bar names; it
+reads the app's `@YANK:` mirror, no round trip.
 
 **Tip of the day** rotates through a curated pool of yazi and conspectus keys
 (`ConspectusCore/Tips.swift`), one per calendar day, deterministic — the same

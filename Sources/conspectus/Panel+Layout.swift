@@ -423,6 +423,12 @@ extension Panel {
                                       action: #selector(requestSelectedList), keyEquivalent: "l")
         selectedList.target = self
         viewMenu.addItem(selectedList)
+        // ⇧⌘L: the same list for yazi's yank buffer (what y / x / the context
+        // menu's Copy / Cut hold) — the bar only names the first file.
+        let yankList = NSMenuItem(title: "Show Yazi Clipboard in Preview",
+                                  action: #selector(showYankList(_:)), keyEquivalent: "L")
+        yankList.target = self
+        viewMenu.addItem(yankList)
         let ideToggle = NSMenuItem(title: "Toggle Editor Pane (nvim)", action: #selector(toggleEditorPane), keyEquivalent: "i")
         ideToggle.target = self
         viewMenu.addItem(ideToggle)

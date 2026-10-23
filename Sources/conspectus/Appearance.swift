@@ -192,12 +192,12 @@ func cvsSignColor(_ status: CVSFileStatus, _ pal: Palette) -> NSColor {
 /// directory cds yazi there, clicking a file reveals it. Paths keep yazi's
 /// selection order. Does filesystem stats (isDirectory per path) — call off
 /// the main thread like `renderListing`'s loader.
-func renderSelectedListing(_ paths: [String], heading: String) -> NSAttributedString {
+func renderSelectedListing(_ paths: [String], heading: String, emptyNote: String) -> NSAttributedString {
     let pal = activePalette()
     let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
     let font = terminalFont()
     if paths.isEmpty {
-        return NSAttributedString(string: "  (nothing selected — Space or v marks files in yazi)",
+        return NSAttributedString(string: "  (\(emptyNote))",
                                   attributes: [.font: font, .foregroundColor: fg])
     }
     let out = NSMutableAttributedString()
