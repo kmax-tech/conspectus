@@ -187,6 +187,7 @@ extension Panel: NSServicesMenuRequestor {
         add("Cut", #selector(contextCut(_:)), me)
         if let yank = yankState {
             add(pasteTitle(yank, into: (path as NSString).deletingLastPathComponent), #selector(contextPaste(_:)), me)
+            add("Show Clipboard (\(yank.paths.count))", #selector(contextShowClipboard(_:)), me)
         }
         menu.addItem(.separator())
         add("Copy Path", #selector(contextCopyPath(_:)), me)
@@ -445,6 +446,18 @@ extension Panel: NSServicesMenuRequestor {
     }
     @objc func contextCut(_ sender: Any?) { yaziAct("cut", sender) }
     @objc func contextPaste(_ sender: Any?) { yaziAct("paste", sender) }
+    /// Show Clipboard: yazi's yank buffer as a clickable list in the preview
+    /// pane, like ⌘L's selection list (the shortcut bar only shows the first
+    /// name). Read from the app's mirror, no round trip to yazi. Side
+    /// effects: swaps the preview cover.
+    @objc func contextShowClipboard(_ sender: Any?) {
+        guard let yank = yankState else {
+            warn("conspectus: Show Clipboard with an empty yank buffer — ignored"); return
+        }
+        let verb = yank.isCut ? "cut — paste moves them" : "copied — paste copies them"
+        showSelectedList(yank.paths, heading: "\(yank.paths.count) \(verb) (yazi clipboard)")
+    }
+
     @objc func contextNewFile(_ sender: Any?) { yaziAct("newfile", sender) }
     @objc func contextNewFolder(_ sender: Any?) { yaziAct("newdir", sender) }
 

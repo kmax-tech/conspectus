@@ -342,7 +342,9 @@ quitting lazycvs closes the panel, an lcvs error stays visible above a shell
 is replaced; from the keyboard: yazi's
 `E C` in the dotfiles keymap, via the bundled plugin's `lazycvs` mode, which beeps outside a checkout), **Copy Path** / **Copy
 Name**, **Copy** / **Cut** / **Paste** (Paste only while yazi's yank buffer
-holds something; its title names the count and the target folder), **New
+holds something; its title names the count and the target folder — next to
+it **Show Clipboard (N)** lists the buffer in the preview, clickable like ⌘L's
+selection list), **New
 File…** / **New Folder…**, and **Rename…** / **Move to Trash**. All file
 operations run *inside yazi*, so there is one task system, one confirmation
 and one yank buffer (`p` in either pane pastes what the menu copied; Copy also puts the files

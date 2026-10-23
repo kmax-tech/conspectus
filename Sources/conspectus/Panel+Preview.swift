@@ -687,9 +687,12 @@ extension Panel {
     /// (cover the Quick Look view, never hide it), same off-main rendering
     /// (the renderer stats every path), same generation guard (a hover racing
     /// in afterwards wins — the list is a peek, not a mode).
+    /// `heading` names the list (default: the selection); the context
+    /// menu's Show Clipboard passes the yank buffer's.
     /// Side effects: swaps the visible preview cover.
-    func showSelectedList(_ paths: [String]) {
-        logEvent("showSelectedList (\(paths.count) selected)")
+    func showSelectedList(_ paths: [String], heading: String? = nil) {
+        let heading = heading ?? "\(paths.count) selected"
+        logEvent("showSelectedList (\(heading))")
         stopWatchingPreviewFile()   // no single file to watch, like a folder
         hideAllCovers()
         lastTextPath = nil
@@ -697,7 +700,7 @@ extension Panel {
         let gen = bumpListingGeneration()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let listing = renderSelectedListing(paths)
+            let listing = renderSelectedListing(paths, heading: heading)
             DispatchQueue.main.async {
                 guard self.isCurrentListing(gen) else { return }
                 self.folderText.textStorage?.setAttributedString(listing)

@@ -184,14 +184,15 @@ func cvsSignColor(_ status: CVSFileStatus, _ pal: Palette) -> NSColor {
     }
 }
 
-/// Render yazi's selection (⌘L) as a clickable list in the folder-listing
-/// style: icon + name per row, the parent directory dimmed behind it (the
+/// Render a list of files — yazi's selection (⌘L) or its yank buffer (the
+/// context menu's Show Clipboard), named by `heading` — as a clickable list
+/// in the folder-listing style: icon + name per row, the parent directory dimmed behind it (the
 /// selection spans directories, so the name alone would not say WHERE the file
 /// is). Rows carry the same .link contract as the folder listing — clicking a
 /// directory cds yazi there, clicking a file reveals it. Paths keep yazi's
 /// selection order. Does filesystem stats (isDirectory per path) — call off
 /// the main thread like `renderListing`'s loader.
-func renderSelectedListing(_ paths: [String]) -> NSAttributedString {
+func renderSelectedListing(_ paths: [String], heading: String) -> NSAttributedString {
     let pal = activePalette()
     let fg = nsColor(pal.fg), blue = nsColor(pal.ansi[4])
     let font = terminalFont()
@@ -200,7 +201,7 @@ func renderSelectedListing(_ paths: [String]) -> NSAttributedString {
                                   attributes: [.font: font, .foregroundColor: fg])
     }
     let out = NSMutableAttributedString()
-    out.append(NSAttributedString(string: "  \(paths.count) selected\n\n",
+    out.append(NSAttributedString(string: "  \(heading)\n\n",
                                   attributes: [.font: font,
                                                .foregroundColor: nsColor(pal.ansi[3])]))
     for path in paths {
