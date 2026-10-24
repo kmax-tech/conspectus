@@ -263,6 +263,16 @@ final class LoadFolderTests: XCTestCase {
         XCTAssertNotNil(c.entries.first?.created)
     }
 
+    func testLoadFolderFollowsASymlinkToTheFolder() throws {
+        try "x".write(toFile: tmp + "/a.txt", atomically: true, encoding: .utf8)
+        let link = NSTemporaryDirectory() + "conspectus-listing-link-" + UUID().uuidString
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: tmp)
+        defer { try? FileManager.default.removeItem(atPath: link) }
+        let c = loadFolder(link, cap: 500)
+        XCTAssertNil(c.error, "contentsOfDirectory(at:) must see the folder behind the link")
+        XCTAssertEqual(c.entries.map(\.name), ["a.txt"])
+    }
+
     func testLoadFolderHonoursSort() throws {
         try "x".write(toFile: tmp + "/a.txt", atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(atPath: tmp + "/zdir", withIntermediateDirectories: true)

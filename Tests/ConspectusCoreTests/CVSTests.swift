@@ -167,6 +167,17 @@ final class CVSTests: XCTestCase {
         XCTAssertEqual(read.malformed, ["bad"])
     }
 
+    func testReadStatusesThroughASymlinkToTheCheckout() throws {
+        try "x".write(toFile: tmp + "/a.tex", atomically: true, encoding: .utf8)
+        try "/a.tex/1.1/Mon Mar  4 09:05:00 2024//\n"
+            .write(toFile: tmp + "/CVS/Entries", atomically: true, encoding: .utf8)
+        let link = NSTemporaryDirectory() + "conspectus-cvs-link-" + UUID().uuidString
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: tmp)
+        defer { try? FileManager.default.removeItem(atPath: link) }
+        let read = try XCTUnwrap(readCVSStatuses(in: link), "a symlink to a checkout is that checkout")
+        XCTAssertEqual(read.statuses["a.tex"], .modified, "the directory behind the link is enumerated")
+    }
+
     // MARK: Server side
 
     func testDryRunParserTakesOnlyUpdateAndPatchLines() {

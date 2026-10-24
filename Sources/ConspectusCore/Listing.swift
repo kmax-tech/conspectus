@@ -232,6 +232,17 @@ public struct FolderContents: Equatable {
 /// no stat per entry), ordered by `sort` (see `sortEntries`) over all
 /// entries, then capped to `cap` for display. Safe to call off the main thread.
 ///
+/// The URL to enumerate a directory with, symlinks resolved. Needed because
+/// `FileManager.contentsOfDirectory(at:)` refuses a symlink to a directory
+/// when the URL was built with `isDirectory: true` (ENOTDIR, "Not a
+/// directory"), so a folder reached through a link (`~/work/areas/x ->
+/// ~/cvsrepo/...`) would otherwise list as empty or as an error.
+///
+/// Side effects: reads the link chain from disk.
+func directoryURL(_ path: String) -> URL {
+    URL(fileURLWithPath: path, isDirectory: true).resolvingSymlinksInPath()
+}
+
 /// A read failure is returned as `error` rather than thrown — the folder
 /// vanishing mid-hover is an expected race, and the caller renders the error
 /// into the pane (visible, not swallowed).
@@ -243,7 +254,7 @@ public func loadFolder(_ dir: String, cap: Int, sort: ListingSort = .default) ->
     let urls: [URL]
     do {
         urls = try FileManager.default.contentsOfDirectory(
-            at: URL(fileURLWithPath: dir, isDirectory: true),
+            at: directoryURL(dir),
             includingPropertiesForKeys: listingKeys,
             options: [.skipsHiddenFiles])
     } catch {

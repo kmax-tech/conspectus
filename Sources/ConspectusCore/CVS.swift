@@ -231,6 +231,7 @@ public struct CVSDirectoryState {
 /// Statuses of a directory read from disk; nil when `dir` is not a CVS
 /// checkout (no `CVS/Entries`), the normal case outside `~/cvsrepo`.
 /// Hidden files are included (`.cvsignore` itself is usually tracked).
+/// `dir` may be a symlink to the checkout (see `directoryURL`).
 ///
 /// Side effects: reads the directory, its `CVS/Entries`, `CVS/Entries.Log`,
 /// `.cvsignore`, `~/.cvsignore` and `$CVSIGNORE`, and — after a conflicted
@@ -250,7 +251,7 @@ public func readCVSStatuses(in dir: String) -> CVSDirectoryState? {
     // Deliberate try?: a directory that vanished between the Entries read and
     // now simply has no entries to mark.
     let urls = (try? FileManager.default.contentsOfDirectory(
-        at: URL(fileURLWithPath: dir, isDirectory: true), includingPropertiesForKeys: keys)) ?? []
+        at: directoryURL(dir), includingPropertiesForKeys: keys)) ?? []
     var subdirs = Set<String>()
     let onDisk = urls.map { url -> DirEntry in
         // Deliberate try?: prefetched keys; a miss means the entry vanished.

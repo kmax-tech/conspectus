@@ -869,3 +869,20 @@ deeper — the cap counts from the cwd.
 before the skip — deliberate, it is the user's explicit call. And a truly
 dead mount is unfixable client-side: even `df`/`stat` hang then; only
 `umount -f` helps. The skip list protects the app, not the mount.
+
+## 2026-10-24 — A symlink to a folder lists as empty (ENOTDIR)
+
+**Problem:** `conspectus --cvs-status ~/work/areas/passwords/cvs-webis-organization`
+(a symlink into `~/cvsrepo`) printed nothing — no signs in yazi — while the
+real path printed `modified …`. `CVS/Entries` was read fine through the link;
+only the directory enumeration came back empty, hidden behind a `try? … ?? []`.
+
+**Solution:** `FileManager.contentsOfDirectory(at:)` fails with POSIX 20
+("Not a directory") when the URL is a symlink built with `isDirectory: true`.
+`directoryURL(_:)` in `ConspectusCore/Listing.swift` resolves the link first;
+`loadFolder` and `readCVSStatuses` both go through it.
+
+**Gotcha:** the `try?` with the "directory vanished" comment was honest about
+the race it meant but also swallowed this. A negative result ("no signs") is a
+claim — test it once against a file you know is modified.
+
