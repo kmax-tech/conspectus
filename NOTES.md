@@ -886,3 +886,23 @@ only the directory enumeration came back empty, hidden behind a `try? … ?? []`
 the race it meant but also swallowed this. A negative result ("no signs") is a
 claim — test it once against a file you know is modified.
 
+## 2026-10-24 — main.swift globals initialize in order: a CLI block must not use a `let` below it
+
+**Problem:** `conspectus --git-remote <repo>` crashed with SIGSEGV in
+`Dictionary.isEmpty` inside `runGitRemoteCheck`, while the no-upstream
+path (which returns before the fetch) worked. The function read
+`gitBatchEnvironment`, a top-level `let` in main.swift.
+
+**Solution:** main.swift is a script: top-level `let`s are initialized in
+textual order as the file executes, and the `--git-remote` block `exit(0)`s
+before the lines below it ever run. A global function called from such a
+block may only touch globals defined *above* the block. The constant moved
+up next to `gitRemoteTTL`; the comment there says why.
+
+**Gotcha:** the compiler does not warn — a global in main.swift is
+`static`-like storage read through an unchecked pointer, so the symptom is
+a null dereference at a random-looking place, not an error message. The
+`--cvs-remote` block only worked because its constants happen to sit above
+it. Rule of thumb: constants for headless CLI blocks go into the constants
+section at the top; functions can live anywhere.
+

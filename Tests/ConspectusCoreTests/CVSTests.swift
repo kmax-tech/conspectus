@@ -224,7 +224,7 @@ final class CVSTests: XCTestCase {
     // MARK: The preview's line
 
     private func line(_ local: CVSFileStatus, remote: CVSRemoteResult?, enabled: Bool = true,
-                      revision: String? = "1.4") -> CVSFileLine {
+                      revision: String? = "1.4") -> VCSFileLine {
         cvsFileLine(CVSFileState(name: "paper.tex", revision: revision, local: local, remote: remote,
                                  remoteEnabled: enabled), now: march4 + 3600, timeZone: TimeZone(identifier: "UTC")!)
     }
@@ -232,7 +232,7 @@ final class CVSTests: XCTestCase {
     func testLineSaysCurrentOnlyWithAGoodServerCheck() {
         let ok = CVSRemoteResult(checked: march4, needsUpdate: [])
         XCTAssertEqual(line(.clean, remote: ok),
-                       CVSFileLine(head: "paper.tex  1.4", verdict: "current (checked today 09:05)", status: .clean))
+                       VCSFileLine(head: "paper.tex  1.4", verdict: "current (checked today 09:05)", status: .clean))
         XCTAssertEqual(line(.clean, remote: nil).verdict, "unchanged locally; server not checked yet")
         XCTAssertEqual(line(.clean, remote: nil, enabled: false).verdict,
                        "unchanged locally; server not asked (CONSPECTUS_CVS_REMOTE=off)")
@@ -249,7 +249,7 @@ final class CVSTests: XCTestCase {
         XCTAssertEqual(line(.modified, remote: nil).verdict, "modified locally, not committed")
         XCTAssertEqual(line(.conflict, remote: ok).status, .conflict)
         XCTAssertEqual(line(.unknown, remote: ok, revision: nil),
-                       CVSFileLine(head: "paper.tex", verdict: "not in CVS", status: .unknown))
+                       VCSFileLine(head: "paper.tex", verdict: "not in CVS", status: .unknown))
         XCTAssertEqual(line(.added, remote: nil, revision: "0").head, "paper.tex  0")
     }
 }

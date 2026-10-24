@@ -114,28 +114,36 @@ extension Panel {
         openLazycvs(in: dir, at: path)
     }
 
-    /// CVS Update… (⌥⌘U on the dir yazi is in, or the context menu on an
-    /// item's checkout dir): the terminal panel runs `cvsUpdateScript` in
-    /// `dir` — a dry run first, the real update only after a `y`. An open
-    /// panel is replaced, like for lazycvs. Outside a checkout: beep + stderr,
-    /// nothing runs. Side effects: kills a running panel shell, spawns zsh/cvs.
-    func openCVSUpdate(in dir: String) {
-        guard cvsWorkingDir(for: dir) != nil else {
+    /// VCS Update… (⌥⌘U on the dir yazi is in, or the context menu on an
+    /// item's checkout or repository dir): the terminal panel runs
+    /// `cvsUpdateScript` in a CVS checkout — dry run first, the real update
+    /// only after a `y` — or `gitUpdateScript` in a git repository — fetch
+    /// and the incoming log first, `git pull --ff-only` only after a `y`. A
+    /// directory that is both is answered as CVS, like the line. An open
+    /// panel is replaced, like for lazycvs. Outside both: beep + stderr,
+    /// nothing runs. Side effects: kills a running panel shell, drops the
+    /// cached server check (the run supersedes it, and an update changes
+    /// exactly what it recorded), spawns zsh with cvs or git.
+    func openVCSUpdate(in dir: String) {
+        let script: String, key: String, cache: String
+        if cvsWorkingDir(for: dir) != nil {
+            (script, key, cache) = (cvsUpdateScript, dir, cvsRemoteCacheDir)
+        } else if let root = gitWorkingDir(for: dir) {
+            (script, key, cache) = (gitUpdateScript, root, gitRemoteCacheDir)
+        } else {
             NSSound.beep()
-            warn("conspectus: CVS Update — \(dir) is not in a CVS checkout (no CVS/Root)")
+            warn("conspectus: VCS Update — \(dir) is neither a CVS checkout (no CVS/Root) nor in a git repository")
             return
         }
         closeBottomTerminal()
-        // The panel's run supersedes the cached server check; drop it so the
-        // next fetch asks again (an update changes exactly what it recorded).
         // Deliberate try?: no cache file yet is the normal case.
-        try? FileManager.default.removeItem(atPath: cvsRemoteCachePath(for: dir, cacheDir: cvsRemoteCacheDir))
-        startBottomTerminal(script: cvsUpdateScript, args: [dir],
+        try? FileManager.default.removeItem(atPath: remoteCachePath(for: key, cacheDir: cache))
+        startBottomTerminal(script: script, args: [key],
                             height: outerSplit.frame.height * lazycvsPanelShare)
     }
 
-    /// ⌥⌘U — CVS Update… for the directory the active yazi pane is in.
-    @objc func cvsUpdateHere() { openCVSUpdate(in: currentYaziDir()) }
+    /// ⌥⌘U — VCS Update… for the directory the active yazi pane is in.
+    @objc func vcsUpdateHere() { openVCSUpdate(in: currentYaziDir()) }
 
     /// Start the panel's login zsh with `script`; `args` arrive as $1, $2, …
     /// (positional, so paths are never spliced into shell source). Side
@@ -333,6 +341,44 @@ private let cvsUpdateScript = """
         echo; print -P "%B$ cvs -q update -d -P%b"
         cvs -q update -d -P; s=$?
         (( s != 0 )) && print "\n(cvs exit $s: conflicts or errors above)"
+        close $s
+    fi
+    close 0
+    """
+
+/// The panel script behind VCS Update… in a git repository ($1 = the
+/// repository root). Step one: `git fetch` (a human may answer a prompt
+/// here, unlike the line's batch fetch), then the local changes, the
+/// ahead/behind counts against the upstream branch and the incoming
+/// commits with their files (`git log --stat HEAD..@{u}`); step two, only
+/// after `y`, `git pull --ff-only` — never a merge commit from a panel: if
+/// the branch has diverged, git says so and nothing moves. No upstream or a
+/// failed fetch stops before the question. Any key closes the panel.
+private let gitUpdateScript = """
+    cd "$1" || { read -k1 "?(any key closes)"; exit 1 }
+    close() { echo; read -k1 "?(any key closes)"; exit $1 }
+    print -P "%B$ git fetch%b   in ${PWD/#$HOME/~}"
+    if ! up=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>&1); then
+        print "no upstream branch: $up"; close 1
+    fi
+    git fetch 2>&1 || { print "\ngit fetch failed — nothing updated"; close 1 }
+    counts=$(git rev-list --left-right --count 'HEAD...@{u}') || close 1
+    ahead=${counts%%[[:space:]]*}; behind=${counts##*[[:space:]]}
+    changes=$(git status --short)
+    [[ -n $changes ]] && { print "\nLocal changes, not committed:"; print -r -- "$changes" }
+    if (( behind == 0 )); then
+        if (( ahead > 0 )); then print "\nUp to date with $up; $ahead commit(s) to push."
+        else print "\nUp to date with $up."; fi
+        close 0
+    fi
+    echo
+    print -P "%B$ git log --stat HEAD..$up%b   ($behind commit(s) behind)"
+    git --no-pager log --stat --format='%h %ad %an  %s' --date=short "HEAD..$up"
+    echo
+    if read -q "?Pull now (git pull --ff-only)? [y/N] "; then
+        echo; print -P "%B$ git pull --ff-only%b"
+        git pull --ff-only; s=$?
+        (( s != 0 )) && print "\n(git exit $s: local commits or changes in the way — see above)"
         close $s
     fi
     close 0

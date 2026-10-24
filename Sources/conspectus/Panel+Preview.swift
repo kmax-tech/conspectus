@@ -229,7 +229,7 @@ extension Panel {
         }
         imageView?.layer?.backgroundColor = nsColor(pal.bg).cgColor   // letterbox
         stylePDFBar()   // bar + pdf letterbox follow the palette too
-        styleCVSBar()
+        styleVCSBar()
     }
 
     func update(_ path: String) {
@@ -383,7 +383,7 @@ extension Panel {
     /// tail). Exactly one cover shows.
     func requestFilePreview(_ path: String, generation gen: Int) {
         watchPreviewFile(path)   // live-refresh this file if it's edited on disk
-        updateCVSBar(for: path, generation: gen)   // "is this the current version?" above the file
+        updateVCSBar(for: path, generation: gen)   // "is this the current version?" above the file
         // A different file replaces the previewed PDF → its note is no longer
         // the active one (the PDF branch below re-resolves for a new PDF).
         if activeNote != nil, activeNote?.pdf != path {
@@ -667,7 +667,7 @@ extension Panel {
         folderText.textStorage?.setAttributedString(attr)
         folderText.scroll(NSPoint.zero)
         hideAllCovers()
-        setCVSBarVisible(false)
+        setVCSBarVisible(false)
         folderScroll.isHidden = false   // cover the always-alive Quick Look view
     }
 
@@ -724,7 +724,7 @@ extension Panel {
         logEvent("showFolder \(path)")
         stopWatchingPreviewFile()   // a directory has no single file to watch
         hideAllCovers()
-        setCVSBarVisible(false)     // the line is per file; the listing has its sign column
+        setVCSBarVisible(false)     // the line is per file; the listing has its sign column
         lastTextPath = nil
         folderScroll.isHidden = false   // opaque — covers the always-alive preview
         let sort = listingSort   // read on main; the loader queue gets a copy

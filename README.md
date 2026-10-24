@@ -114,15 +114,42 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
   (…)`, `server not asked (CONSPECTUS_CVS_REMOTE=off)`. Never "current"
   without a good check. Outside a checkout the strip is gone and the
   preview has the whole pane.
-- **CVS Update… (`⌥⌘U`, Go menu; also in the context menu next to "Open in
-  lazycvs")** — the server half the signs leave out: the terminal panel runs
+- **The git line, same strip** — inside a git repository the line reads
+  `admin-passwords.kdbx  efc8c72 30.09. 2025 — current (fetched today
+  16:01)`: name, last commit touching the file, and the verdict. Local
+  state from git itself (`status --porcelain`, mapped onto the same
+  vocabulary: untracked = `not in git`, `ignored by git`, `added`, `deleted`,
+  `modified locally, not committed`, `merge conflict`); the server part from
+  one `git fetch` per **repository** (not per folder), cached under
+  `~/.cache/conspectus/git-remote/` for **`CONSPECTUS_GIT_REMOTE`** seconds
+  (default 300; `off` never fetches), a failed one for 60 s. The fetch runs
+  with no way to wait for a human (`GIT_TERMINAL_PROMPT=0`, ssh in
+  BatchMode): a remote that needs a prompt fails fast and the line says
+  `fetch failed (…)`. The answer is **per file**: `newer on origin/master —
+  3 commits behind` only when the incoming commits touch this file
+  (`git diff --name-only HEAD...@{u}`); otherwise `current (fetched …) ·
+  origin/master is 3 commits ahead, not this file`, plus `· 2 commits to
+  push` when you are ahead. `no upstream branch` is a failed check. A CVS
+  checkout inside a git repository is answered as CVS. `conspectus
+  --git-remote <repo>` prints the cached or fresh check from a shell. No
+  sign column for git in yazi or the listing: git.yazi already shows the
+  local letters, and "newer upstream" is answered in the line.
+- **VCS Update… (`⌥⌘U`, Go menu; also in the context menu: "CVS Update…"
+  next to "Open in lazycvs", "Git Update…" in a git repository)** — the
+  server half the signs leave out. In a CVS checkout the terminal panel runs
   `cvs -n -q update -d` in the folder yazi is in (recursive, as cvs is),
   streaming one line per file that differs — `U`/`P` newer on the server,
   `M` `A` `R` `C` `?` local. Then it asks `Update now? [y/N]`; only `y` runs
   `cvs -q update -d -P`. cvs exits 1 already when a file would conflict, so
   that gets a note, not a stop; an aborted cvs (server unreachable) stops
-  before the question. Any key closes the panel. Outside a checkout the key
-  beeps.
+  before the question. In a git repository the panel runs `git fetch`
+  (here a credential prompt can be answered), lists uncommitted local
+  changes, then the incoming commits with their files (`git log --stat
+  HEAD..origin/master`) and asks `Pull now (git pull --ff-only)? [y/N]` —
+  never a merge from a panel: a diverged branch is reported and nothing
+  moves; up to date (with the commits-to-push count) closes without a
+  question. Any key closes the panel. Outside a checkout or repository the
+  key beeps.
 - Because the right pane previews files *and* folders, yazi runs at 2 columns
   (its own 3rd preview column is hidden via the overlay `yazi.toml`). You
   navigate in the middle column and enter directories to descend.

@@ -339,15 +339,7 @@ let cacheDir = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/co
 /// short TTL is affordable; the TTL is what keeps a folder you hop in and
 /// out of from being asked every time. A failed check is reused for
 /// `cvsRemoteErrorTTL` only.
-let cvsRemoteTTL: TimeInterval? = {
-    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_CVS_REMOTE"] ?? "300"
-    if raw.lowercased() == "off" { return nil }
-    guard let secs = Int(raw), secs >= 0 else {
-        warn("conspectus: CONSPECTUS_CVS_REMOTE must be a non-negative integer (seconds) or off (got '\(raw)') — using 300")
-        return 300
-    }
-    return TimeInterval(secs)
-}()
+let cvsRemoteTTL: TimeInterval? = remoteTTL(env: "CONSPECTUS_CVS_REMOTE")
 let cvsRemoteErrorTTL: TimeInterval = 60
 /// Longest wait for one `cvs -n -q update -l`: a server that does not
 /// answer (VPN down, ssh asking for a password nobody can type) must not
@@ -355,6 +347,32 @@ let cvsRemoteErrorTTL: TimeInterval = 60
 /// of a session also opens the ssh connection.
 let cvsRemoteTimeout: TimeInterval = 20
 let cvsRemoteCacheDir = (cacheDir as NSString).appendingPathComponent("cvs-remote")
+
+/// The git twin: how long one `git fetch` of a repository answers the line
+/// above its files (CONSPECTUS_GIT_REMOTE, seconds, default 300; `off`
+/// never fetches). One fetch per repository, not per folder — the cache is
+/// keyed by the repository root.
+let gitRemoteTTL: TimeInterval? = remoteTTL(env: "CONSPECTUS_GIT_REMOTE")
+let gitRemoteTimeout: TimeInterval = 20
+let gitRemoteCacheDir = (cacheDir as NSString).appendingPathComponent("git-remote")
+/// git with no way to wait for a human: no credential prompt
+/// (GIT_TERMINAL_PROMPT), no ssh passphrase prompt (BatchMode) — a
+/// repository that needs one fails fast and the line says so. Defined up
+/// here with the other constants: main.swift initializes globals in order,
+/// and the `--git-remote` block below runs before anything after it.
+let gitBatchEnvironment = ["GIT_TERMINAL_PROMPT": "0", "GIT_SSH_COMMAND": "ssh -oBatchMode=yes"]
+
+/// A server-check TTL from the environment: seconds, `off` for nil (never
+/// ask), default 300; a bad value warns once and falls back to 300.
+func remoteTTL(env name: String) -> TimeInterval? {
+    let raw = ProcessInfo.processInfo.environment[name] ?? "300"
+    if raw.lowercased() == "off" { return nil }
+    guard let secs = Int(raw), secs >= 0 else {
+        warn("conspectus: \(name) must be a non-negative integer (seconds) or off (got '\(raw)') — using 300")
+        return 300
+    }
+    return TimeInterval(secs)
+}
 
 /// Headless server check: `conspectus --cvs-remote <dir>` prints the
 /// directory's `CVSRemoteResult` (see its `serialized` format) — from the
@@ -383,44 +401,165 @@ if let i = CommandLine.arguments.firstIndex(of: "--cvs-remote") {
     exit(0)
 }
 
-/// Run `cvs -n -q update -l` in `dir` (via PATH, so the Homebrew cvs is
-/// found from the login shell yazi runs in) and parse the `U`/`P` lines. Any
+/// Headless git twin: `conspectus --git-remote <repo-root>` prints the
+/// repository's `GitRemoteResult` (see its `serialized` format) — from the
+/// cache while fresh, else from a fresh `git fetch` + diff against the
+/// upstream, which is then cached. Nothing (exit 0) with
+/// CONSPECTUS_GIT_REMOTE off; a failed check is still a result (`error\t…`).
+/// No yazi fetcher calls this (git.yazi shows the local signs); it exists
+/// for scripts and for checking the preview's line from a shell.
+if let i = CommandLine.arguments.firstIndex(of: "--git-remote") {
+    guard i + 1 < CommandLine.arguments.count else { die("conspectus: --git-remote needs a repository directory") }
+    let root = CommandLine.arguments[i + 1]
+    guard let ttl = gitRemoteTTL else { exit(0) }
+    let result: GitRemoteResult
+    if let cached = readGitRemoteCache(for: root, cacheDir: gitRemoteCacheDir),
+       cached.isFresh(now: Date(), ttl: ttl, errorTTL: cvsRemoteErrorTTL) {
+        result = cached
+    } else {
+        result = runGitRemoteCheck(in: root)
+        do {
+            try writeGitRemoteCache(result, for: root, cacheDir: gitRemoteCacheDir)
+        } catch {
+            warn("conspectus: cannot write \(gitRemoteCacheDir): \(error.localizedDescription)")
+        }
+    }
+    FileHandle.standardOutput.write(Data(result.serialized().utf8))
+    exit(0)
+}
+
+/// What one finished command left behind.
+struct CommandResult {
+    let status: Int32
+    let stdout: String
+    /// Trimmed.
+    let stderr: String
+}
+
+/// Why `runCommand` could not deliver a result: the process never started,
+/// or it did not finish within the timeout (and was terminated).
+enum CommandFailure: Error, CustomStringConvertible {
+    case cannotRun(String)
+    case timedOut(TimeInterval)
+
+    var description: String {
+        switch self {
+        case .cannotRun(let why): return "cannot run: \(why)"
+        case .timedOut(let secs): return "no answer within \(Int(secs)) s"
+        }
+    }
+}
+
+/// Run `args` (via PATH: `/usr/bin/env`, so Homebrew tools are found from
+/// the login shell yazi runs in) in `dir`, with stdin closed — never a
+/// password prompt that waits — and `extraEnvironment` on top of ours.
+/// Both pipes are drained while waiting, so a chatty command cannot stall
+/// on a full pipe. A non-zero exit is a result, not an error; the caller
+/// reads `status`. Side effects: spawns the process; terminates it on
+/// timeout.
+func runCommand(_ args: [String], in dir: String, timeout: TimeInterval,
+                extraEnvironment: [String: String] = [:]) throws -> CommandResult {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    p.arguments = args
+    p.currentDirectoryURL = URL(fileURLWithPath: dir, isDirectory: true)
+    if !extraEnvironment.isEmpty {
+        p.environment = ProcessInfo.processInfo.environment.merging(extraEnvironment) { $1 }
+    }
+    let out = Pipe(), err = Pipe()
+    p.standardOutput = out; p.standardError = err
+    p.standardInput = FileHandle.nullDevice
+    do { try p.run() } catch { throw CommandFailure.cannotRun(error.localizedDescription) }
+    let done = DispatchGroup()
+    done.enter()
+    DispatchQueue.global().async { p.waitUntilExit(); done.leave() }
+    var stdoutData = Data(), stderrData = Data()
+    let readers = DispatchGroup()
+    readers.enter(); DispatchQueue.global().async { stdoutData = out.fileHandleForReading.readDataToEndOfFile(); readers.leave() }
+    readers.enter(); DispatchQueue.global().async { stderrData = err.fileHandleForReading.readDataToEndOfFile(); readers.leave() }
+    if done.wait(timeout: .now() + timeout) == .timedOut {
+        p.terminate()
+        throw CommandFailure.timedOut(timeout)
+    }
+    readers.wait()
+    return CommandResult(status: p.terminationStatus,
+                         stdout: String(decoding: stdoutData, as: UTF8.self),
+                         stderr: String(decoding: stderrData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
+}
+
+/// The last line of a command's stderr, or a generic exit note — the one
+/// line a verdict has room for.
+func lastLine(of r: CommandResult, tool: String) -> String {
+    r.stderr.split(separator: "\n").last.map(String.init) ?? "\(tool) exit \(r.status)"
+}
+
+/// Run `cvs -n -q update -l` in `dir` and parse the `U`/`P` lines. Any
 /// failure — no cvs, timeout, `[update aborted]`, non-zero exit without
 /// output — becomes the result's `error`, never an exception: the fetcher
 /// shows it. Exit 1 with output is cvs's "something would conflict", not a
 /// failure. Side effects: spawns cvs, which talks to the CVS server.
 func runCVSDryRun(in dir: String) -> CVSRemoteResult {
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    p.arguments = ["cvs", "-n", "-q", "update", "-l"]
-    p.currentDirectoryURL = URL(fileURLWithPath: dir, isDirectory: true)
-    let out = Pipe(), err = Pipe()
-    p.standardOutput = out; p.standardError = err
-    p.standardInput = FileHandle.nullDevice   // never a password prompt that waits
     let started = Date()
-    do { try p.run() } catch {
-        return CVSRemoteResult(checked: started, needsUpdate: [], error: "cannot run cvs: \(error.localizedDescription)")
+    let r: CommandResult
+    do {
+        r = try runCommand(["cvs", "-n", "-q", "update", "-l"], in: dir, timeout: cvsRemoteTimeout)
+    } catch {
+        return CVSRemoteResult(checked: started, needsUpdate: [], error: "cvs: \(error)")
     }
-    let done = DispatchGroup()
-    done.enter()
-    DispatchQueue.global().async { p.waitUntilExit(); done.leave() }
-    // Read both pipes before waiting: a chatty cvs must not fill a pipe and stall.
-    var stdoutData = Data(), stderrData = Data()
-    let readers = DispatchGroup()
-    readers.enter(); DispatchQueue.global().async { stdoutData = out.fileHandleForReading.readDataToEndOfFile(); readers.leave() }
-    readers.enter(); DispatchQueue.global().async { stderrData = err.fileHandleForReading.readDataToEndOfFile(); readers.leave() }
-    if done.wait(timeout: .now() + cvsRemoteTimeout) == .timedOut {
-        p.terminate()
-        return CVSRemoteResult(checked: started, needsUpdate: [], error: "cvs did not answer within \(Int(cvsRemoteTimeout)) s")
+    if r.stderr.contains("aborted]") || (r.status != 0 && r.stdout.isEmpty) {
+        return CVSRemoteResult(checked: started, needsUpdate: [], error: lastLine(of: r, tool: "cvs"))
     }
-    readers.wait()
-    let stdout = String(decoding: stdoutData, as: UTF8.self)
-    let stderr = String(decoding: stderrData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-    if stderr.contains("aborted]") || (p.terminationStatus != 0 && stdout.isEmpty) {
-        let reason = stderr.isEmpty ? "cvs exit \(p.terminationStatus)" : stderr.split(separator: "\n").last.map(String.init) ?? stderr
-        return CVSRemoteResult(checked: started, needsUpdate: [], error: reason)
+    return CVSRemoteResult(checked: started, needsUpdate: parseCVSDryRun(r.stdout))
+}
+
+/// Server check of a git repository at `root`: `git fetch`, then the
+/// ahead/behind counts against the upstream branch and the files it has
+/// newer content for (`git diff --name-only HEAD...@{u}`). Every failure —
+/// no upstream, fetch refused, timeout — is the result's `error`, never an
+/// exception. Side effects: spawns git, which talks to the remote.
+func runGitRemoteCheck(in root: String) -> GitRemoteResult {
+    let started = Date()
+    func fail(_ why: String) -> GitRemoteResult {
+        GitRemoteResult(checked: started, upstream: nil, ahead: 0, behind: 0, changed: [], error: why)
     }
-    return CVSRemoteResult(checked: started, needsUpdate: parseCVSDryRun(stdout))
+    do {
+        let up = try runCommand(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], in: root, timeout: 5)
+        guard up.status == 0 else { return fail("no upstream branch") }
+        let upstream = up.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fetch = try runCommand(["git", "fetch", "--quiet"], in: root, timeout: gitRemoteTimeout,
+                                   extraEnvironment: gitBatchEnvironment)
+        guard fetch.status == 0 else { return fail(lastLine(of: fetch, tool: "git fetch")) }
+        let counts = try runCommand(["git", "rev-list", "--left-right", "--count", "HEAD...@{u}"], in: root, timeout: 5)
+        guard counts.status == 0, let ab = parseGitAheadBehind(counts.stdout) else {
+            return fail(lastLine(of: counts, tool: "git rev-list"))
+        }
+        let diff = try runCommand(["git", "diff", "--name-only", "HEAD...@{u}"], in: root, timeout: 10)
+        guard diff.status == 0 else { return fail(lastLine(of: diff, tool: "git diff")) }
+        let changed = Set(diff.stdout.split(separator: "\n").map(String.init))
+        return GitRemoteResult(checked: started, upstream: upstream, ahead: ab.ahead, behind: ab.behind, changed: changed)
+    } catch {
+        return fail("git: \(error)")
+    }
+}
+
+/// What the working copy says about one file in a git repository: its
+/// repo-relative path, porcelain status and last commit — the local half of
+/// `GitFileState`. nil (with a warning) when git itself cannot run; a
+/// non-zero status is answered as "unknown", the honest default. Side
+/// effects: spawns git three times (short, local).
+func readGitFileLocal(dir: String, name: String) -> (repoPath: String, local: CVSFileStatus, commit: GitCommitStamp?)? {
+    do {
+        let prefix = try runCommand(["git", "rev-parse", "--show-prefix"], in: dir, timeout: 5)
+        guard prefix.status == 0 else { warn("conspectus: git rev-parse in \(dir): \(lastLine(of: prefix, tool: "git"))"); return nil }
+        let repoPath = prefix.stdout.trimmingCharacters(in: .whitespacesAndNewlines) + name
+        let status = try runCommand(["git", "status", "--porcelain=v1", "--ignored", "--", name], in: dir, timeout: 10)
+        let local = status.status == 0 ? parseGitPorcelainStatus(status.stdout) : .unknown
+        let log = try runCommand(["git", "log", "-1", "--format=%h%x09%ct", "--", name], in: dir, timeout: 10)
+        return (repoPath, local, log.status == 0 ? GitCommitStamp.parse(log.stdout) : nil)
+    } catch {
+        warn("conspectus: git in \(dir): \(error)")
+        return nil
+    }
 }
 
 // One FIFO per instance: a shared path let any new launch (second window,

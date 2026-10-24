@@ -44,8 +44,8 @@ extension Panel {
         buildImagePreview()
         rightContainer.addSubview(imageView)
         rightContainer.addSubview(folderScroll)
-        buildCVSBar()
-        rightContainer.addSubview(cvsBar)
+        buildVCSBar()
+        rightContainer.addSubview(vcsBar)
         previewFocusRing = PassthroughBorderView(frame: rightContainer.bounds)
         previewFocusRing.autoresizingMask = [.width, .height]
         rightContainer.addSubview(previewFocusRing)   // last -> stays on top
@@ -506,13 +506,14 @@ extension Panel {
         reveal.keyEquivalentModifierMask = [.command, .option]
         reveal.target = self
         goMenu.addItem(reveal)
-        // ⌥⌘U — CVS dry run + confirmed update for the folder yazi is in;
-        // a menu key, so it works from every pane (no yazi keymap needed).
-        let cvsUpdate = NSMenuItem(title: "CVS Update…", action: #selector(cvsUpdateHere),
+        // ⌥⌘U — CVS dry run or git fetch, then the confirmed update, for the
+        // folder yazi is in; a menu key, so it works from every pane (no
+        // yazi keymap needed).
+        let vcsUpdate = NSMenuItem(title: "VCS Update… (CVS / git)", action: #selector(vcsUpdateHere),
                                    keyEquivalent: "u")
-        cvsUpdate.keyEquivalentModifierMask = [.command, .option]
-        cvsUpdate.target = self
-        goMenu.addItem(cvsUpdate)
+        vcsUpdate.keyEquivalentModifierMask = [.command, .option]
+        vcsUpdate.target = self
+        goMenu.addItem(vcsUpdate)
         goMenu.addItem(NSMenuItem.separator())
         addTabItems(goMenu)
         goItem.submenu = goMenu

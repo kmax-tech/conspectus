@@ -182,10 +182,14 @@ extension Panel: NSServicesMenuRequestor {
                     #selector(contextAlfred(_:)), ContextTarget(path: parent, peer: peer, app: nil))
             }
         }
-        // Only inside a CVS checkout — elsewhere lazycvs has nothing to show.
+        // Only inside a CVS checkout — elsewhere lazycvs has nothing to show;
+        // a git repository gets the git half of VCS Update… instead.
         if let dir = cvsWorkingDir(for: path) {
             add("Open in lazycvs", #selector(contextLazycvs(_:)), ContextTarget(path: path, peer: peer, app: nil, dir: dir))
-            add("CVS Update…", #selector(contextCVSUpdate(_:)), ContextTarget(path: path, peer: peer, app: nil, dir: dir))
+            add("CVS Update…", #selector(contextVCSUpdate(_:)), ContextTarget(path: path, peer: peer, app: nil, dir: dir))
+        } else if let root = gitWorkingDir(for: path) {
+            add("Git Update… (fetch, pull --ff-only)", #selector(contextVCSUpdate(_:)),
+                ContextTarget(path: path, peer: peer, app: nil, dir: root))
         }
         menu.addItem(.separator())
         add("Copy", #selector(contextYank(_:)), me)
@@ -324,13 +328,13 @@ extension Panel: NSServicesMenuRequestor {
         openLazycvs(in: dir, at: t.path)
     }
 
-    /// CVS Update…: dry run + confirmed update in the item's checkout dir
-    /// (the folder itself, or a file's folder). Side effects: see `openCVSUpdate`.
-    @objc func contextCVSUpdate(_ sender: Any?) {
+    /// CVS Update… / Git Update…: preview + confirmed update in the item's
+    /// checkout dir or repository root. Side effects: see `openVCSUpdate`.
+    @objc func contextVCSUpdate(_ sender: Any?) {
         guard let t = target(of: sender), let dir = t.dir else {
-            warn("conspectus: CVS Update item without a working dir — ignored"); return
+            warn("conspectus: VCS Update item without a working dir — ignored"); return
         }
-        openCVSUpdate(in: dir)
+        openVCSUpdate(in: dir)
     }
 
     /// Compile and run one AppleScript; failures (no Automation permission,

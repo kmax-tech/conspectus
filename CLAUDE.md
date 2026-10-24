@@ -12,9 +12,10 @@ The thread through every rule: **nothing important should be implicit.**
 - `Sources/ConspectusCore/` — unit-testable logic without AppKit state or
   SwiftTerm: start-dir resolution, palettes/hex parsing, icon mapping,
   listing order, the keymap parser, ANSI parsing, note lookup, typography,
-  tips, offline CVS status. Mostly pure; the few functions that read the
-  filesystem (`loadFolder`, `resolveNote`, `cvsWorkingDir`, `readCVSStatuses`,
-  `isDirectory`) say so in
+  tips, offline CVS status and its git twin (`Git.swift`: parsing, the
+  line's wording, the shared `RemoteCache`). Mostly pure; the few functions
+  that read the filesystem (`loadFolder`, `resolveNote`, `cvsWorkingDir`,
+  `gitWorkingDir`, `readCVSStatuses`, `isDirectory`) say so in
   their doc comment and return data, never mutate app state.
 - `Sources/conspectus/` — the AppKit shell: `main.swift` (bootstrap, env
   vars, FIFO sentinels), `Appearance.swift` (theming/rendering),
@@ -22,7 +23,7 @@ The thread through every rule: **nothing important should be implicit.**
   `Icon.swift`, and `Panel.swift` (state + lifecycle) with themed extensions
   (`Panel+Layout`, `Panel+Focus`, `Panel+Preview`, `Panel+PDFBar`,
   `Panel+Notes`, `Panel+Print`, `Panel+Terminal`, `Panel+History`,
-  `Panel+ContextMenu`, `Panel+CheatSheet`, `Panel+CVSBar`). UI, processes, FIFO — the
+  `Panel+ContextMenu`, `Panel+CheatSheet`, `Panel+VCSBar`). UI, processes, FIFO — the
   side-effect edge of the system. Top-level code stays in `main.swift` (Swift
   requires it); stored properties stay in `Panel.swift`.
 - `Sources/ConspectusShield/` — one ObjC function: the @try/@catch swizzle
