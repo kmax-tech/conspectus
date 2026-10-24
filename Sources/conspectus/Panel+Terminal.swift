@@ -158,6 +158,13 @@ extension Panel {
         layoutOuterPanes(terminalHeight: height)   // frames BEFORE startProcess so cols/rows fit
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"; env["COLORTERM"] = "truecolor"
+        // The panel is an editor-style terminal: opened for one quick command,
+        // closed again. TERM_PROGRAM names us (not the terminal conspectus was
+        // launched from), so the dotfiles' zshrc gives it the same lightweight
+        // shell as VS Code's and Zed's panels (no fzf-tab, no p10k, no
+        // highlighting) — see the "editor terminal lightweight mode" block
+        // in ~/.zshrc.
+        env["TERM_PROGRAM"] = "conspectus"
         t.startProcess(executable: "/bin/zsh",
                        args: ["-l", "-c", script, "zsh"] + args,
                        environment: env.map { "\($0.key)=\($0.value)" })

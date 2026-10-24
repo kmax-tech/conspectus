@@ -416,7 +416,10 @@ zsh started **in the directory yazi is currently visiting** (derived from
 the hover events; in split mode that's the active pane) — for quick
 `git`/`cvs`/one-off commands next to the file manager. Deliberately no live
 cd-follow: closing (⌘J, **⌘W**, or `exit`) kills the shell, reopening starts
-a new one at yazi's current location. ⌘W only ever closes the panel — with
+a new one at yazi's current location. The panel's shells (⌘J, lazycvs, VCS
+Update…) run with **`TERM_PROGRAM=conspectus`**, so a zshrc can give them the
+slim startup it gives VS Code's and Zed's terminals (the dotfiles do: no
+fzf-tab, no p10k, no syntax highlighting — a quick command, not a session). ⌘W only ever closes the panel — with
 the panel closed it does nothing (the "close tab" habit stays safe). The divider is draggable (min 120pt panel,
 min 300pt pane area).
 
