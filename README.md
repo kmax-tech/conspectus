@@ -228,6 +228,27 @@ previews it immediately — this is what indago's `M-o` ("open in conspectus")
 uses. The TUI is yazi; override with the `CONSPECTUS_CMD` env var (e.g.
 `CONSPECTUS_CMD=lf conspectus`).
 
+**Privacy permissions (Downloads, Desktop, Documents, …):** macOS asks per
+folder the first time the app touches it and stores the answer against the
+binary's code signature. A SwiftPM build is ad-hoc signed, i.e. signed with
+the hash of that very build — so every `./build.sh` is a new app to macOS and
+the whole round of dialogs comes back. Name a stable signing identity and
+`build.sh` signs the binary with it after each build (any identity from
+`security find-identity -v -p codesigning`, a free *Apple Development* one
+is enough):
+
+```sh
+export CONSPECTUS_SIGN_IDENTITY="Apple Development: you@example.com (TEAMID)"
+./build.sh
+```
+
+The grants then survive rebuilds (the first launch after switching to the
+signed binary asks once more). To skip the per-folder dialogs altogether, add
+the binary once under System Settings ▸ Privacy & Security ▸ **Full Disk
+Access** (the `+` button; `⌘⇧G` in the file picker takes a path like
+`~/projects/conspectus/.build/release/conspectus`). The `Conspectus.app`
+bundle needs nothing of its own: its launcher execs this same binary.
+
 **yazi columns:** preview modes run yazi at 2 columns by default (its own
 preview column hidden — the Quick Look pane is the preview).
 `CONSPECTUS_COLUMNS=3 conspectus` keeps your full 3-column config instead:
