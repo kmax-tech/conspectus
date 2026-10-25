@@ -136,6 +136,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     var previewPinned = false
     /// Path currently shown in the native text preview — dedup for showTextPreview.
     var lastTextPath: String?
+    /// mtime of the file behind `pdfView.document` at load time — the PDF dedup
+    /// key together with the document URL. The document survives hovers onto
+    /// other files (only its pane hides), so URL alone would hand back a
+    /// stale document after a rebuild happened while another file was shown.
+    var pdfLoadedMtime: Date?
     /// Live-refresh: poll the previewed file's mtime while a file preview is
     /// showing, so an edit (nvim on the left) or a rebuild (latexmk → PDF)
     /// refreshes the preview. Polling, not an fd watcher, ON PURPOSE: latexmk

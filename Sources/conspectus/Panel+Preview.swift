@@ -362,7 +362,7 @@ extension Panel {
     func refreshCurrentPreview() {
         guard previewAttached, let path = lastPath else { return }
         lastTextPath = nil                                             // text/markdown dedup
-        if pdfView?.document?.documentURL == URL(fileURLWithPath: path) { pdfView.document = nil }  // pdf dedup
+        pdfLoadedMtime = nil                                           // pdf dedup (url + mtime)
         update(path)
     }
 
@@ -414,9 +414,15 @@ extension Panel {
         }
         if pdfPreviewMode != "ql", path.lowercased().hasSuffix(".pdf") {
             let url = URL(fileURLWithPath: path)
-            if pdfView.document?.documentURL != url {   // dedup, mirrors the QL check
+            // Dedup keyed on URL + mtime (mirrors the QL check). The document
+            // outlives hovers onto other files, so a rebuild that happened
+            // while the .md next to it was shown must not hand back the old
+            // pages when the hover returns.
+            let mtime = fileMtime(path)
+            if pdfView.document?.documentURL != url || pdfLoadedMtime != mtime {
                 logEvent("requestPDFPreview \(path)")
                 pdfView.document = PDFDocument(url: url)
+                pdfLoadedMtime = mtime
                 // New document: start at page 1 (PDFKit otherwise keeps the
                 // previous scroll offset in continuous mode / on reload).
                 if let first = pdfView.document?.page(at: 0) { pdfView.go(to: first) }

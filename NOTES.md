@@ -467,8 +467,14 @@ pane) and saving didn't refresh the preview (right).
 **Solution:** Poll the previewed file's mtime (`watchPreviewFile`, armed in
 requestFilePreview, cancelled in showFolder/detach). On a change it calls
 `refreshCurrentPreview`, which busts the per-type dedups (text via
-lastTextPath=nil, PDF by clearing the document) and re-runs `update` (so the
+lastTextPath=nil, PDF via pdfLoadedMtime=nil) and re-runs `update` (so the
 120ms debounce + generation cancellation still apply).
+
+**Gotcha — the watch only covers the file being shown (2026-10-25):** the PDF
+document is kept across hovers onto other files (only its pane hides), and the
+dedup in requestFilePreview compared the URL alone. Hover the PDF, hover its
+.md, rebuild, hover the PDF again → the old document came back (130 pages
+shown, 129 on disk). The dedup is now keyed on URL + mtime (`pdfLoadedMtime`).
 
 **Gotcha — why polling, not an fd watch (this is the perlege lesson):** the
 first version used a `DispatchSourceFileSystemObject` on an `O_EVTONLY` fd,
