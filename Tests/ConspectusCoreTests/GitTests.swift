@@ -140,4 +140,22 @@ final class GitTests: XCTestCase {
         XCTAssertEqual(line(.conflict, remote: thisFile).status, .conflict)
         XCTAssertEqual(line(.ignored, remote: thisFile).verdict, "ignored by git")
     }
+
+    // MARK: - lazygitArguments
+
+    func testLazygitArgumentsFilterOnItemBelowRoot() {
+        XCTAssertEqual(lazygitArguments(root: "/r/repo", item: "/r/repo/sub/a.tex"),
+                       ["-p", "/r/repo", "-f", "sub/a.tex"])
+        XCTAssertEqual(lazygitArguments(root: "/r/repo", item: "/r/repo/sub/"),
+                       ["-p", "/r/repo", "-f", "sub"])
+        XCTAssertEqual(lazygitArguments(root: "/r/repo/", item: "/r/repo/sub/a.tex"),
+                       ["-p", "/r/repo/", "-f", "sub/a.tex"])
+    }
+
+    func testLazygitArgumentsRootItselfOpensPlainView() {
+        XCTAssertEqual(lazygitArguments(root: "/r/repo", item: "/r/repo"), ["-p", "/r/repo"])
+        XCTAssertEqual(lazygitArguments(root: "/r/repo", item: "/r/repo/"), ["-p", "/r/repo"])
+        // A sibling that merely shares the prefix string is not inside the root.
+        XCTAssertEqual(lazygitArguments(root: "/r/repo", item: "/r/repo2/a"), ["-p", "/r/repo"])
+    }
 }

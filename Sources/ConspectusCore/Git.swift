@@ -27,6 +27,22 @@ public func gitWorkingDir(for path: String) -> String? {
     return nil
 }
 
+/// The arguments that open lazygit on `item` inside the repository `root`
+/// (Open in lazygit): `-p root` names the repository, and an item below
+/// the root adds `-f <item relative to root>` — lazygit's filter mode, which
+/// shows the commits, reflog and stash touching that file or folder. The
+/// root itself (with or without a trailing slash) opens the plain repository
+/// view: `-f .` would only restrict the UI without narrowing anything.
+public func lazygitArguments(root: String, item: String) -> [String] {
+    var args = ["-p", root]
+    let prefix = root.hasSuffix("/") ? root : root + "/"
+    if item.hasPrefix(prefix) {
+        let rel = String(item.dropFirst(prefix.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if !rel.isEmpty { args += ["-f", rel] }
+    }
+    return args
+}
+
 /// One path's entry of `git status --porcelain=v1 --ignored`, read into
 /// the sign vocabulary: `??` unknown (untracked), `!!` ignored, a `U` on
 /// either side or `AA`/`DD` conflict, `A` added, `D` on either side

@@ -255,6 +255,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// is cramped in the plain-shell height.
     let lazycvsCommand = "lcvs"
     let lazycvsPanelShare: CGFloat = 0.5
+    /// Context menu → Open in lazygit: the git twin. The Homebrew binary on
+    /// the login shell's PATH; it shares lazycvs's panel height.
+    let lazygitCommand = "lazygit"
 
     /// True while the preview pane is part of the window. Source of truth is
     /// the view hierarchy itself, so the flag can never drift from reality.

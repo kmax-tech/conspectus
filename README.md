@@ -135,7 +135,8 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
   sign column for git in yazi or the listing: git.yazi already shows the
   local letters, and "newer upstream" is answered in the line.
 - **VCS Update… (`⌥⌘U`, Go menu; also in the context menu: "CVS Update…"
-  next to "Open in lazycvs", "Git Update…" in a git repository)** — the
+  next to "Open in lazycvs", "Git Update…" next to "Open in lazygit" in a
+  git repository)** — the
   server half the signs leave out. In a CVS checkout the terminal panel runs
   `cvs -n -q update -d` in the folder yazi is in (recursive, as cvs is),
   streaming one line per file that differs — `U`/`P` newer on the server,
@@ -367,7 +368,12 @@ repository, so stopping there scans everything);
 quitting lazycvs closes the panel, an lcvs error stays visible above a shell
 (an lcvs build without `-follow` fails here too: `lcvs build`); an open panel
 is replaced; from the keyboard: yazi's
-`E C` in the dotfiles keymap, via the bundled plugin's `lazycvs` mode, which beeps outside a checkout), **Copy Path** / **Copy
+`E C` in the dotfiles keymap, via the bundled plugin's `lazycvs` mode, which beeps outside a checkout), **Open in lazygit**
+(its git twin, in a git repository: the same panel runs `lazygit -p <root>
+-f <item>` — filter mode, so the log, reflog and stash show only what touched
+the clicked file or folder; the repository root itself opens the plain view.
+No follow channel: lazygit has no mode for a root that moves with yazi.
+Quitting lazygit closes the panel, an error stays visible above a shell), **Copy Path** / **Copy
 Name**, **Copy** / **Cut** / **Paste** (Paste only while yazi's yank buffer
 holds something; its title names the count and the target folder — next to
 it **Show Clipboard (N)** lists the buffer in the preview, clickable like ⌘L's

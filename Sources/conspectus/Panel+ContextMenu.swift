@@ -183,11 +183,12 @@ extension Panel: NSServicesMenuRequestor {
             }
         }
         // Only inside a CVS checkout — elsewhere lazycvs has nothing to show;
-        // a git repository gets the git half of VCS Update… instead.
+        // a git repository gets lazygit and the git half of VCS Update… instead.
         if let dir = cvsWorkingDir(for: path) {
             add("Open in lazycvs", #selector(contextLazycvs(_:)), ContextTarget(path: path, peer: peer, app: nil, dir: dir))
             add("CVS Update…", #selector(contextVCSUpdate(_:)), ContextTarget(path: path, peer: peer, app: nil, dir: dir))
         } else if let root = gitWorkingDir(for: path) {
+            add("Open in lazygit", #selector(contextLazygit(_:)), ContextTarget(path: path, peer: peer, app: nil, dir: root))
             add("Git Update… (fetch, pull --ff-only)", #selector(contextVCSUpdate(_:)),
                 ContextTarget(path: path, peer: peer, app: nil, dir: root))
         }
@@ -326,6 +327,15 @@ extension Panel: NSServicesMenuRequestor {
             warn("conspectus: lazycvs item without a working dir — ignored"); return
         }
         openLazycvs(in: dir, at: t.path)
+    }
+
+    /// Open in lazygit: the terminal panel runs lazygit for the item's
+    /// repository, filtered on the item. Side effects: see `openLazygit`.
+    @objc func contextLazygit(_ sender: Any?) {
+        guard let t = target(of: sender), let dir = t.dir else {
+            warn("conspectus: lazygit item without a repository root — ignored"); return
+        }
+        openLazygit(in: dir, at: t.path)
     }
 
     /// CVS Update… / Git Update…: preview + confirmed update in the item's

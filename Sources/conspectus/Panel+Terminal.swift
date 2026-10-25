@@ -51,6 +51,21 @@ extension Panel {
                             height: outerSplit.frame.height * lazycvsPanelShare)
     }
 
+    /// Context menu → Open in lazygit: the terminal panel opens running
+    /// `lazygit -p <root> [-f <item>]` in `root` — filter mode on the clicked
+    /// file or folder (`lazygitArguments`), the plain repository view for the
+    /// root itself. The git twin of `openLazycvs` without the follow channel:
+    /// lazygit has no mode for a root that moves with yazi. Quitting lazygit
+    /// closes the panel; if it fails (not installed, not a repository) its
+    /// error stays visible above a shell in `root`. An open panel is
+    /// replaced. Side effects: kills a running panel shell, spawns lazygit.
+    func openLazygit(in root: String, at path: String) {
+        closeBottomTerminal()
+        startBottomTerminal(script: "cd \"$1\" && shift && \(lazygitCommand) \"$@\" && exit; exec zsh -i",
+                            args: [root] + lazygitArguments(root: root, item: path),
+                            height: outerSplit.frame.height * lazycvsPanelShare)
+    }
+
     /// Create the lazycvs follow FIFO and hold its write end. Non-blocking:
     /// the open must not wait for lazycvs, and a write must never stall the
     /// main thread if lazycvs stops reading. Returns false (lazycvs then runs
