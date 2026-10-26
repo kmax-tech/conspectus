@@ -511,7 +511,9 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
                 self.styleCheatSheet()
                 self.styleTermPanes()
                 self.updateFocusBorders()
-                if let p = self.lastPath { self.update(p) }
+                // Same path, new palette: bypass the text/pdf dedups, or the
+                // markdown keeps its old-palette colours on the new background.
+                self.refreshCurrentPreview()
                 self.requestYaziRetheme()
             }
         }

@@ -723,7 +723,7 @@ extension Panel {
         split.addSubview(rightContainer)
         rebuildPreview()
         redistributePanes()
-        if let p = lastPath { update(p) }
+        refreshCurrentPreview()   // dedup-free: the palette may have changed while detached
         previewButton?.state = .on
         updateTitle()
     }
