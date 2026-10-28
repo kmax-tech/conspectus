@@ -37,8 +37,12 @@ Rule of thumb: as long as the result of your reading lands in the *note*, stay
 here; the moment it should stay in the *document* — highlight it, find it again,
 keep the position — hand it over with **`E p`**. Both resolve a PDF's companion
 note the same way, so they always agree on which `<stem>.md` belongs to it.
-Deliberately not built here: reading position, highlights, in-document search —
-every piece of document state slows down the loop this app is for.
+The line is **permanence**, not pixels: conspectus may *show* a mark — the
+word a content search hit, in yellow on its page (`@PDFPAGE`, see Coupling
+below) — as long as it is gone with the next hover and nothing is written
+anywhere. Deliberately not built here: reading position, saved highlights,
+in-document search — every piece of document state that has to be kept slows
+down the loop this app is for.
 
 ## How it works
 
