@@ -141,6 +141,14 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// other files (only its pane hides), so URL alone would hand back a
     /// stale document after a rebuild happened while another file was shown.
     var pdfLoadedMtime: Date?
+    /// Page a `@PDFPAGE:` hover asked for, waiting for its PDF to render.
+    /// Set by the FIFO reader, consumed by the PDF branch of
+    /// `requestFilePreview` (which goes there instead of page 1), dropped by
+    /// `update` when a hover onto a DIFFERENT path arrives first. Survives
+    /// the preview debounce and a bare hover onto the same file in either
+    /// order — yazi's `reveal` after a pick re-hovers the file, and that
+    /// must not undo the page.
+    var pendingPDFPage: PDFPageHover?
     /// Live-refresh: poll the previewed file's mtime while a file preview is
     /// showing, so an edit (nvim on the left) or a rebuild (latexmk → PDF)
     /// refreshes the preview. Polling, not an fd watcher, ON PURPOSE: latexmk

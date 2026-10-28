@@ -77,6 +77,21 @@ extension Panel {
                     } else if s.hasPrefix(editorFilePrefix) {
                         let path = String(s.dropFirst(editorFilePrefix.count))
                         DispatchQueue.main.async { self?.editorFileHover(path) }
+                    } else if s.hasPrefix(pdfPagePrefix) {
+                        let body = String(s.dropFirst(pdfPagePrefix.count))
+                        guard let hover = parsePDFPageMessage(body) else {
+                            warn("conspectus: malformed @PDFPAGE FIFO message '\(body)' — ignored")
+                            continue
+                        }
+                        // A hover like any other, remembered page first: the
+                        // main-queue order guarantees the page is set before
+                        // update()'s own main-thread work consults it.
+                        DispatchQueue.main.async {
+                            self?.pendingPDFPage = hover
+                            self?.hoverArrived(hover.path)
+                            self?.followInLazycvs(hover: hover.path)
+                        }
+                        self?.update(hover.path)
                     } else if !s.isEmpty {
                         DispatchQueue.main.async {
                             self?.hoverArrived(s)                            // a pending right-click menu
@@ -287,6 +302,9 @@ extension Panel {
             // (QuickLook assertion), so skip the view work — lastPath keeps
             // tracking, and attachPreview restores the preview from it.
             if !self.previewAttached { return }
+            // A page request belongs to ONE file: a hover elsewhere drops it,
+            // a hover onto the same file (yazi's reveal after a pick) keeps it.
+            if self.pendingPDFPage?.path != path { self.pendingPDFPage = nil }
             if dir {
                 self.showFolder(path, generation: gen)
             } else {
@@ -307,6 +325,26 @@ extension Panel {
                 }
             }
         }
+    }
+
+    /// Jump the PDF preview to the page a `@PDFPAGE:` hover asked for, if one
+    /// is pending for exactly this file — a content-search hit lands on its
+    /// page instead of page 1. Outside the dedup on purpose: the document may
+    /// already be loaded (bare hover first, page message second), and the
+    /// jump must happen either way. A page past the end warns and stays where
+    /// it is, never clamps silently. Side effects: scrolls `pdfView`, clears
+    /// `pendingPDFPage`.
+    func goToPendingPDFPage(for path: String) {
+        guard let hover = pendingPDFPage, hover.path == path else { return }
+        pendingPDFPage = nil
+        guard let doc = pdfView.document else { return }
+        guard let page = doc.page(at: hover.page - 1) else {
+            warn("conspectus: @PDFPAGE asks for page \(hover.page) of \(path), "
+                 + "which has \(doc.pageCount) — staying on page 1")
+            return
+        }
+        logEvent("pdf page \(hover.page) \(path)")
+        pdfView.go(to: page)
     }
 
     /// mtime of `path`, or nil if it can't be stat'd (e.g. momentarily gone
@@ -427,6 +465,7 @@ extension Panel {
                 // previous scroll offset in continuous mode / on reload).
                 if let first = pdfView.document?.page(at: 0) { pdfView.go(to: first) }
             }
+            goToPendingPDFPage(for: path)
             updatePDFBar()
             resolveNoteAsync(for: path, generation: gen)   // companion note → toolbar + ide follow
             hideAllCovers()

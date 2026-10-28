@@ -147,6 +147,14 @@ let editorFilePrefix = "@EDITOR_FILE:"
 /// a hover.
 let lazycvsPrefix = "@LAZYCVS:"
 
+/// FIFO message prefix for a hover WITH a PDF page — `@PDFPAGE:<page>:<path>`
+/// (ConspectusCore.parsePDFPageMessage), written by a content search that
+/// knows the page of its hit: yazi's `S` picker in its ripgrep-all mode
+/// (M-a), whose focus bind sends this instead of the bare path for a PDF hit.
+/// Handled as the same hover a bare path would be, plus the PDF preview opens
+/// on that page instead of page 1. Prefixed, so it never collides with a hover.
+let pdfPagePrefix = "@PDFPAGE:"
+
 /// Quick Look fallback toggle (CONSPECTUS_QUICKLOOK): "on" (default) previews
 /// the long tail — video, audio, office, fonts, anything not text/image/PDF —
 /// through Quick Look. "off" disables it entirely; those files show a short
