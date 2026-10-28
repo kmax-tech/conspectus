@@ -184,8 +184,12 @@ Any other TUI can drive the preview by writing an absolute path to
 `$QLPEEK_FIFO` when its cursor moves. A writer that knows a PDF **page** —
 a content search through ripgrep-all, which prints `Page 3: …` for every
 PDF hit — writes `@PDFPAGE:<page>:<path>` instead, and the native PDF
-preview opens on that page rather than page 1 (yazi's `S` picker does this
-in its `M-a` mode, see the dotfiles `keybindings.md`). The `qlpeek send` script does exactly
+preview opens on that page rather than page 1; with a tab and the searched
+word appended (`@PDFPAGE:3:/a.pdf<TAB>rosen`) every occurrence on that page
+is marked in yellow. The mark is display-only — PDFKit's
+`highlightedSelections`, gone with the next hover, never written to the
+document; a highlight that should *stay* is perlege's job (`E p`). Yazi's
+`S` picker sends this in its `M-a` mode, see the dotfiles `keybindings.md`. The `qlpeek send` script does exactly
 that when the variable is set, so a tool running in the terminal panel
 with `qlpeek send <file>` as its opener lands in the preview pane: lazycvs
 with `alt_open = "qlpeek send $FILE"` shows an old revision of a PDF or an

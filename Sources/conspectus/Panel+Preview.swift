@@ -329,22 +329,50 @@ extension Panel {
 
     /// Jump the PDF preview to the page a `@PDFPAGE:` hover asked for, if one
     /// is pending for exactly this file — a content-search hit lands on its
-    /// page instead of page 1. Outside the dedup on purpose: the document may
-    /// already be loaded (bare hover first, page message second), and the
-    /// jump must happen either way. A page past the end warns and stays where
-    /// it is, never clamps silently. Side effects: scrolls `pdfView`, clears
-    /// `pendingPDFPage`.
+    /// page instead of page 1 — and mark the searched term there. Outside the
+    /// dedup on purpose: the document may already be loaded (bare hover
+    /// first, page message second), and the jump must happen either way. A
+    /// page past the end warns and stays where it is, never clamps silently.
+    /// A render without a pending page clears any earlier mark, so a mark
+    /// never outlives its hit. Side effects: scrolls `pdfView`, sets its
+    /// `highlightedSelections`, clears `pendingPDFPage`.
     func goToPendingPDFPage(for path: String) {
-        guard let hover = pendingPDFPage, hover.path == path else { return }
+        guard let hover = pendingPDFPage, hover.path == path else {
+            pdfView.highlightedSelections = nil
+            return
+        }
         pendingPDFPage = nil
         guard let doc = pdfView.document else { return }
         guard let page = doc.page(at: hover.page - 1) else {
             warn("conspectus: @PDFPAGE asks for page \(hover.page) of \(path), "
                  + "which has \(doc.pageCount) — staying on page 1")
+            pdfView.highlightedSelections = nil
             return
         }
         logEvent("pdf page \(hover.page) \(path)")
         pdfView.go(to: page)
+        pdfView.highlightedSelections = hover.term.map { termSelections($0, on: page) }
+    }
+
+    /// Every occurrence of `term` on `page` as a PDFSelection, literal and
+    /// case-insensitive, coloured for display as a search mark. Page-local
+    /// (`PDFPage.string` + `selection(for:)`) rather than
+    /// `PDFDocument.findString`, which would scan the whole document on the
+    /// main thread for every hover — a 300-page book must stay as cheap as a
+    /// one-pager. Pure: no state touched. A regex pattern that matches
+    /// nothing literally just yields no marks; the page still shows.
+    func termSelections(_ term: String, on page: PDFPage) -> [PDFSelection] {
+        guard let text = page.string, !term.isEmpty else { return [] }
+        var selections: [PDFSelection] = []
+        var from = text.startIndex
+        while let r = text.range(of: term, options: [.caseInsensitive], range: from..<text.endIndex) {
+            if let sel = page.selection(for: NSRange(r, in: text)) {
+                sel.color = NSColor.systemYellow.withAlphaComponent(0.5)
+                selections.append(sel)
+            }
+            from = r.upperBound
+        }
+        return selections
     }
 
     /// mtime of `path`, or nil if it can't be stat'd (e.g. momentarily gone
