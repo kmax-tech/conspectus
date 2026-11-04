@@ -54,8 +54,16 @@ BIN="$REPO/.build/release/conspectus"
 # injected, and init.lua is generated to load the user's init first. The
 # user's own yazi config is never touched; a machine with NO yazi config at
 # all works too (yazi defaults + the bundled plugin).
-src="${YAZI_CONFIG_HOME:-$HOME/.config/yazi}"
+#
+# Inside a conspectus window (the ⌘J terminal) YAZI_CONFIG_HOME IS the
+# overlay, so the original source travels along as CONSPECTUS_YAZI_SRC; an
+# instance started before that variable existed has neither, hence the
+# guard. Without both, a launch from ⌘J rebuilt the overlay from itself —
+# init.lua dofile'd itself and yazi died at start.
 ov="$HOME/.cache/conspectus/yazi-config"
+src="${CONSPECTUS_YAZI_SRC:-${YAZI_CONFIG_HOME:-$HOME/.config/yazi}}"
+[[ $src != "$ov" ]] || src="$HOME/.config/yazi"
+export CONSPECTUS_YAZI_SRC="$src"
 rm -rf "$ov"; mkdir -p "$ov/plugins"
 
 split_mode=0
@@ -199,17 +207,47 @@ SH
   } | ssh "$host" sh -s
 }
 
-# The remote command the sudo transport runs instead of the sftp subsystem:
-# read the password line, write a throwaway askpass helper that prints it,
-# exec-free `sudo -A` so the helper is removed afterwards. Wrapped in
+# The remote command that runs <command> through sudo with the password from
+# the first stdin line: read that line, write a throwaway askpass helper that
+# prints it, exec-free `sudo -A` so the helper is removed afterwards. The
+# sudo transport runs it with sftp-server instead of the sftp subsystem.
+# LC_ALL=C keeps sudo's messages English for sudo_verify. Wrapped in
 # `sh -c '…'` for any login shell, so it holds no single quote or backslash.
 sudo_remote_cmd() {
-  local sudo_user=$1 sftp_server=$2
-  echo "sh -c 'f=\$(mktemp \"\$HOME/.conspectus-askpass.XXXXXX\") || exit 1; echo \"#!/bin/sh\" > \"\$f\"; echo \"exec printenv CONSPECTUS_PW\" >> \"\$f\"; chmod 700 \"\$f\"; IFS= read -r CONSPECTUS_PW; export CONSPECTUS_PW; SUDO_ASKPASS=\"\$f\" sudo -A -p \"\" -u $sudo_user -- $sftp_server; rc=\$?; rm -f \"\$f\"; exit \$rc'"
+  local sudo_user=$1 command=$2
+  echo "sh -c 'f=\$(mktemp \"\$HOME/.conspectus-askpass.XXXXXX\") || exit 1; echo \"#!/bin/sh\" > \"\$f\"; echo \"exec printenv CONSPECTUS_PW\" >> \"\$f\"; chmod 700 \"\$f\"; IFS= read -r CONSPECTUS_PW; export CONSPECTUS_PW; LC_ALL=C SUDO_ASKPASS=\"\$f\" sudo -A -p \"\" -u $sudo_user -- $command; rc=\$?; rm -f \"\$f\"; exit \$rc'"
+}
+
+# Tries the sudo password once over ssh (sftp-server -h, which only prints
+# usage) BEFORE anything is mounted: a mount attempt that sudo refuses leaves
+# an orphaned mount_macfuse behind, and the next mount on that point hangs.
+# Prints `ok`, `wrong`, or sudo's own refusal line.
+sudo_verify() {
+  local host=$1 sudo_user=$2 sftp_server=$3 pw=$4 out
+  out="$(printf '%s\n' "$pw" | ssh "$host" "$(sudo_remote_cmd "$sudo_user" "$sftp_server -h")" 2>&1)" || true
+  case "$out" in
+    *"incorrect password"*|*"Sorry, try again"*) echo wrong ;;
+    *"not in the sudoers"*|*"not allowed"*|*"may not run"*) grep -m1 "sudo:" <<<"$out" || echo "sudo refused" ;;
+    *) echo ok ;;
+  esac
 }
 
 # True when <dir> is a mount point right now.
 is_mounted() { mount | grep -qF " on $1 ("; }
+
+# After a failed mount: macFUSE's mount helper can outlive sshfs — and even
+# start after sshfs has died — and block the next mount on <dir>, so for two
+# seconds every such helper goes too. Side effects: umount, kill.
+mount_cleanup() {
+  local mnt=$1 pid
+  umount -f "$mnt" 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    for pid in $(pgrep -f "mount_macfuse .*volname=$(basename "$mnt") $mnt\$" || true); do
+      kill "$pid" 2>/dev/null || true
+    done
+    sleep 0.2
+  done
+}
 
 # Unmounts what this launcher mounted (sshfs then exits on its own). A mount
 # still in use (another conspectus session, a shell cd'd into it) stays and
@@ -288,42 +326,76 @@ if [[ "${1:-}" == "ssh" ]]; then
     sudo_state="$(sed -n 3p <<<"$probe")"
     [[ $sftp_server != no-sftp-server ]] || { echo "conspectus: no sftp-server found on $host" >&2; exit 1; }
     [[ $sftp_server =~ ^/[A-Za-z0-9/._-]+$ ]] || { echo "conspectus: odd sftp-server path from $host: '$sftp_server'" >&2; exit 1; }
-    pw=""
-    if [[ $sudo_state == password ]]; then
-      IFS= read -rs -p "[sudo] password for ${host#*@} (to become $sudo_user): " pw \
-        || { echo "conspectus: no sudo password given" >&2; exit 1; }
-      echo >&2
-    fi
     mnt+="-sudo"
     [[ $sudo_user == root ]] || mnt+="-$sudo_user"
+    pw=""
+    if [[ $sudo_state == password ]] && ! is_mounted "$mnt"; then   # a reused mount needs none
+      verdict=""
+      for _ in 1 2 3; do
+        IFS= read -rs -p "[sudo] password for ${host#*@} (to become $sudo_user): " pw \
+          || { echo "conspectus: no sudo password given" >&2; exit 1; }
+        echo >&2
+        verdict="$(sudo_verify "$host" "$sudo_user" "$sftp_server" "$pw")"
+        case "$verdict" in
+          ok)    break ;;
+          wrong) echo "Sorry, try again." >&2 ;;
+          *)     echo "conspectus: sudo on $host: $verdict" >&2; exit 1 ;;
+        esac
+      done
+      [[ $verdict == ok ]] || { echo "conspectus: sudo password wrong three times" >&2; exit 1; }
+    fi
     opts+=",ro,ssh_command=$REPO/bin/conspectus"
     sudo_env=(CONSPECTUS_SUDO_TRANSPORT="$(sudo_remote_cmd "$sudo_user" "$sftp_server")" CONSPECTUS_SUDO_PW="$pw")
   fi
   opts+=",volname=$(basename "$mnt")"
 
+  # A conspectus already running (e.g. this is its ⌘J terminal) gets the
+  # remote dir as a new tab, like `con <dir>`; the mount then has no window
+  # to live and die with, so it stays until `umount`. Otherwise a window of
+  # its own, unmounted when it quits.
+  in_app=0
+  pgrep -qx conspectus && in_app=1
+
   # Reuse a mount another session made (and leave it to that session);
-  # otherwise mount now and unmount on the way out. sshfs 2.x under macFUSE 5
-  # cannot daemonize once the mount has started ("continuing in foreground")
-  # and would block here, so it runs in the foreground (-f) as a background
-  # job and the launcher waits for the mount point to appear.
+  # otherwise mount now. sshfs 2.x under macFUSE 5 cannot daemonize once the
+  # mount has started ("continuing in foreground") and would block here, so
+  # it runs in the foreground (-f) as a background job and the launcher waits
+  # for the mount point to appear. For a tab in a running window it is
+  # detached (nohup, output to a log), so closing the terminal keeps it.
   if is_mounted "$mnt"; then
     echo "conspectus: reusing the existing mount $mnt" >&2
   else
     mkdir -p "$mnt"
-    env ${sudo_env[@]+"${sudo_env[@]}"} sshfs "$host:/" "$mnt" -f -o "$opts" &
+    log="$HOME/.cache/conspectus/sshfs-$(basename "$mnt").log"
+    if [[ $in_app -eq 1 ]]; then
+      env ${sudo_env[@]+"${sudo_env[@]}"} nohup sshfs "$host:/" "$mnt" -f -o "$opts" > "$log" 2>&1 &
+    else
+      env ${sudo_env[@]+"${sudo_env[@]}"} sshfs "$host:/" "$mnt" -f -o "$opts" &
+      trap 'ssh_unmount "$mnt"' EXIT
+      trap 'exit 129' HUP
+      trap 'exit 143' TERM
+    fi
     sshfs_pid=$!
-    trap 'ssh_unmount "$mnt"' EXIT
-    trap 'exit 129' HUP
-    trap 'exit 143' TERM
     until is_mounted "$mnt"; do
       if ! kill -0 "$sshfs_pid" 2>/dev/null; then
+        [[ $in_app -eq 0 ]] || cat "$log" >&2
+        mount_cleanup "$mnt"
         echo "conspectus: sshfs $host:/ → $mnt failed" >&2
         exit 1
       fi
       sleep 0.2
     done
   fi
-  "$BIN" "$mnt$rpath"
+  start="$mnt$rpath"
+  if [[ $in_app -eq 1 ]]; then
+    start="${start%/}"
+    [[ -d $start ]] || start="$(dirname "$start")"
+    ya pub-to 0 conspectus-open --str "$start" \
+      || { echo "conspectus: mounted, but ya pub-to failed — open $start yourself" >&2; exit 1; }
+    echo "conspectus: $host is mounted at $mnt and opened as a new tab; it stays mounted — umount $mnt when done" >&2
+    exit
+  fi
+  "$BIN" "$start"
   exit
 fi
 
