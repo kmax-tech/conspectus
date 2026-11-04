@@ -6,10 +6,40 @@
 #   conspectus split [path]   # two yazi panes (dual-pane copy via cross-yank)
 #   conspectus triple [path]  # two yazi panes + preview following the active one
 #   conspectus ssh [--sudo] <host>[:<path>]
+#   conspectus '/ssh:<host>|sudo:root@<host>:<path>'   # TRAMP spelling
 #                             # a remote machine through an sshfs mount,
 #                             # unmounted again when the app quits
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+
+# sudo transport for `conspectus ssh` (see there): sshfs calls this script as
+# its `ssh` with ssh's arguments ending in `-s sftp`. That subsystem request
+# is swapped for the sudo command in CONSPECTUS_SUDO_TRANSPORT, and the sudo
+# password goes in as the first line of the stream, ahead of sftp itself.
+# Handled before anything else, so the overlay config is not rebuilt.
+if [[ -n ${CONSPECTUS_SUDO_TRANSPORT:-} ]]; then
+  args=("$@")
+  n=${#args[@]}
+  [[ $n -ge 2 && ${args[n-2]} == -s && ${args[n-1]} == sftp ]] \
+    || { echo "conspectus: sudo transport: sshfs called ssh with unexpected arguments: $*" >&2; exit 1; }
+  unset 'args[n-1]' 'args[n-2]'
+  # The feeder (password line, then cat) reads sshfs's socket, so it holds
+  # that socket open: when ssh ends (sudo refused a wrong password) the feeder
+  # must be killed, or sshfs never sees EOF and hangs instead of failing.
+  feed_dir="$(mktemp -d)"
+  mkfifo -m 600 "$feed_dir/feed"
+  # <&3: a background job's stdin would otherwise be /dev/null.
+  exec 3<&0
+  { printf '%s\n' "${CONSPECTUS_SUDO_PW:-}"; exec cat; } <&3 > "$feed_dir/feed" &
+  exec 3<&-
+  feeder=$!
+  rc=0
+  ssh "${args[@]}" "$CONSPECTUS_SUDO_TRANSPORT" < "$feed_dir/feed" || rc=$?
+  { kill "$feeder" && wait "$feeder"; } 2>/dev/null || true   # quiet: no "Terminated" line
+  rm -rf "$feed_dir"
+  exit "$rc"
+fi
+
 BIN="$REPO/.build/release/conspectus"
 [[ -x $BIN ]] || { echo "conspectus: not built — run $REPO/build.sh" >&2; exit 1; }
 
@@ -127,31 +157,49 @@ export CONSPECTUS_BIN="$BIN"
 # rather than <path> lets two sessions on the same host share one mount and
 # lets yazi walk up past the start dir.
 #
-# --sudo reads as root: sshfs starts the server's sftp-server through
-# `sudo -n`, which needs a NOPASSWD sudoers rule for exactly that binary (the
-# sftp session has no terminal to type a password into). That mount is
-# read-only and has its own mount point (<host>-sudo), so a slip in yazi
-# cannot delete or overwrite as root.
+# Two spellings, one target: scp-style `conspectus ssh [--sudo] host:path`,
+# and Emacs TRAMP paths `/ssh:host:path`, `/ssh:host|sudo:[user@]host:path`
+# (as the only argument, with or without `ssh` in front).
+#
+# sudo reads as another user (root by default): sshfs's `ssh` is this
+# launcher again (CONSPECTUS_SUDO_TRANSPORT, see the top of the file), which
+# starts the server's sftp-server through `sudo -A -u <user>`. The password
+# is asked here once and sent as the first line of the stream; a remote
+# askpass helper hands it to sudo, so it never appears on a command line.
+# That mount is read-only and has its own mount point (<host>-sudo[-<user>]),
+# so a slip in yazi cannot delete or overwrite as another user.
 
 # One ssh round trip before mounting: prints the remote $HOME (the start dir
-# for a missing or relative <path>), the remote user name and, for --sudo, the
-# sftp-server path plus whether `sudo -n` may run it. Side effects: none on
-# the server.
+# for a missing, `~` or relative <path>) and, for sudo, the sftp-server path
+# plus `nopasswd` / `password` (whether sudo will ask). The script goes in on
+# stdin to `sh -s`, so the remote login shell (bash, zsh, fish) doesn't
+# matter. Side effects: none on the server (sftp-server -h only prints usage).
 ssh_probe() {
-  local host=$1 sudo_mode=$2
-  local script='printf "%s\n" "$HOME"; id -un'
-  if [[ $sudo_mode -eq 1 ]]; then
-    script+='
+  local host=$1 sudo_user=$2
+  {
+    echo 'printf "%s\n" "$HOME"'
+    if [[ -n $sudo_user ]]; then
+      cat <<SH
 for p in /usr/lib/openssh/sftp-server /usr/libexec/openssh/sftp-server /usr/lib/ssh/sftp-server /usr/libexec/sftp-server; do
-  if [ -x "$p" ]; then
-    printf "%s\n" "$p"
-    if sudo -n -l "$p" >/dev/null 2>&1; then echo sudo-ok; else echo sudo-needs-password; fi
+  if [ -x "\$p" ]; then
+    printf "%s\n" "\$p"
+    if LC_ALL=C sudo -n -u $sudo_user -- "\$p" -h </dev/null 2>&1 | grep -q "password is required"; then echo password; else echo nopasswd; fi
     exit 0
   fi
 done
-echo no-sftp-server'
-  fi
-  ssh "$host" "$script"
+echo no-sftp-server
+SH
+    fi
+  } | ssh "$host" sh -s
+}
+
+# The remote command the sudo transport runs instead of the sftp subsystem:
+# read the password line, write a throwaway askpass helper that prints it,
+# exec-free `sudo -A` so the helper is removed afterwards. Wrapped in
+# `sh -c '…'` for any login shell, so it holds no single quote or backslash.
+sudo_remote_cmd() {
+  local sudo_user=$1 sftp_server=$2
+  echo "sh -c 'f=\$(mktemp \"\$HOME/.conspectus-askpass.XXXXXX\") || exit 1; echo \"#!/bin/sh\" > \"\$f\"; echo \"exec printenv CONSPECTUS_PW\" >> \"\$f\"; chmod 700 \"\$f\"; IFS= read -r CONSPECTUS_PW; export CONSPECTUS_PW; SUDO_ASKPASS=\"\$f\" sudo -A -p \"\" -u $sudo_user -- $sftp_server; rc=\$?; rm -f \"\$f\"; exit \$rc'"
 }
 
 # True when <dir> is a mount point right now.
@@ -167,47 +215,84 @@ ssh_unmount() {
     || echo "conspectus: $mnt still in use — left mounted (umount $mnt when done)" >&2
 }
 
+# A TRAMP path in "$1" sets host, rpath and sudo_user (globals, like the rest
+# of this script); anything outside the subset below stops with a message.
+parse_tramp() {
+  local spec=${1#/ssh:} hop sudo_hop sudo_host
+  if [[ $spec == *'|sudo:'* ]]; then
+    hop=${spec%%|sudo:*}
+    sudo_hop=${spec#*|sudo:}
+    [[ $sudo_hop == *:* ]] || { echo "conspectus: no ':' before the path in '$1'" >&2; exit 2; }
+    rpath=${sudo_hop#*:}
+    sudo_hop=${sudo_hop%%:*}
+    sudo_user=root
+    sudo_host=$sudo_hop
+    if [[ $sudo_hop == *@* ]]; then
+      sudo_user=${sudo_hop%%@*}
+      sudo_host=${sudo_hop#*@}
+      [[ -n $sudo_user ]] || sudo_user=root
+    fi
+    host=$hop
+    [[ -z $sudo_host || $sudo_host == "${hop#*@}" ]] \
+      || { echo "conspectus: sudo on another host than the ssh hop ('$sudo_host' vs '${hop#*@}') is not supported" >&2; exit 2; }
+  else
+    [[ $spec == *:* ]] || { echo "conspectus: no ':' before the path in '$1'" >&2; exit 2; }
+    host=${spec%%:*}
+    rpath=${spec#*:}
+  fi
+  [[ $host != *'#'* ]] || { echo "conspectus: TRAMP ports (host#port) are not supported — set Port in ~/.ssh/config" >&2; exit 2; }
+  [[ $spec != *'|'*'|'* ]] || { echo "conspectus: only one hop (ssh, then sudo) is supported" >&2; exit 2; }
+}
+
+[[ "${1:-}" == /ssh:* ]] && set -- ssh "$@"
 if [[ "${1:-}" == "ssh" ]]; then
   shift
-  sudo_mode=0
-  if [[ "${1:-}" == "--sudo" ]]; then sudo_mode=1; shift; fi
-  [[ $# -eq 1 && -n $1 ]] || { echo "usage: conspectus ssh [--sudo] <host>[:<path>]" >&2; exit 2; }
+  usage="usage: conspectus ssh [--sudo] <host>[:<path>]   or   conspectus '/ssh:<host>[|sudo:[<user>@]<host>]:<path>'"
+  sudo_user=""
+  if [[ "${1:-}" == "--sudo" ]]; then sudo_user=root; shift; fi
+  [[ $# -eq 1 && -n $1 ]] || { echo "$usage" >&2; exit 2; }
   command -v sshfs >/dev/null || { echo "conspectus: 'conspectus ssh' needs sshfs (macFUSE + sshfs)" >&2; exit 1; }
-  host="${1%%:*}"
-  rpath=""
-  [[ $1 == *:* ]] && rpath="${1#*:}"
+  if [[ $1 == /ssh:* ]]; then
+    [[ -z $sudo_user ]] || { echo "conspectus: --sudo and a TRAMP path don't mix — write |sudo: into the path" >&2; exit 2; }
+    parse_tramp "$1"
+  else
+    host="${1%%:*}"
+    rpath=""
+    [[ $1 == *:* ]] && rpath="${1#*:}"
+  fi
   [[ -n $host ]] || { echo "conspectus: no host in '$1'" >&2; exit 2; }
+  [[ -z $sudo_user || $sudo_user =~ ^[A-Za-z0-9._-]+$ ]] || { echo "conspectus: odd sudo user '$sudo_user'" >&2; exit 2; }
 
-  probe="$(ssh_probe "$host" "$sudo_mode")" \
+  probe="$(ssh_probe "$host" "$sudo_user")" \
     || { echo "conspectus: ssh $host failed — check 'ssh $host' on its own" >&2; exit 1; }
   rhome="$(sed -n 1p <<<"$probe")"
   [[ $rhome == /* ]] || { echo "conspectus: $host sent no usable \$HOME (got '$rhome')" >&2; exit 1; }
   case "$rpath" in
-    "") rpath="$rhome" ;;
-    /*) ;;
-    *)  rpath="$rhome/$rpath" ;;
+    ""|"~") rpath="$rhome" ;;
+    "~/"*)  rpath="$rhome/${rpath#"~/"}" ;;
+    /*)     ;;
+    *)      rpath="$rhome/$rpath" ;;
   esac
 
   mnt="${CONSPECTUS_SSH_MOUNTS:-$HOME/mnt/ssh}/$host"
   opts="reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,defer_permissions,noappledouble,noapplexattr"
-  sftp_opt=()
-  if [[ $sudo_mode -eq 1 ]]; then
-    sftp_server="$(sed -n 3p <<<"$probe")"
-    sudo_state="$(sed -n 4p <<<"$probe")"
-    case "$sftp_server" in
-      no-sftp-server) echo "conspectus: no sftp-server found on $host" >&2; exit 1 ;;
-    esac
-    if [[ $sudo_state != sudo-ok ]]; then
-      echo "conspectus: sudo on $host needs a password, and sshfs has no terminal to ask in." >&2
-      echo "  A sudoers rule on $host makes it work (as root there: visudo -f /etc/sudoers.d/sftp-server):" >&2
-      echo "    $(sed -n 2p <<<"$probe") ALL=(root) NOPASSWD: $sftp_server" >&2
-      exit 1
+  sudo_env=()
+  if [[ -n $sudo_user ]]; then
+    sftp_server="$(sed -n 2p <<<"$probe")"
+    sudo_state="$(sed -n 3p <<<"$probe")"
+    [[ $sftp_server != no-sftp-server ]] || { echo "conspectus: no sftp-server found on $host" >&2; exit 1; }
+    [[ $sftp_server =~ ^/[A-Za-z0-9/._-]+$ ]] || { echo "conspectus: odd sftp-server path from $host: '$sftp_server'" >&2; exit 1; }
+    pw=""
+    if [[ $sudo_state == password ]]; then
+      IFS= read -rs -p "[sudo] password for ${host#*@} (to become $sudo_user): " pw \
+        || { echo "conspectus: no sudo password given" >&2; exit 1; }
+      echo >&2
     fi
     mnt+="-sudo"
-    opts+=",ro"
-    sftp_opt=(-o "sftp_server=sudo -n $sftp_server")
+    [[ $sudo_user == root ]] || mnt+="-$sudo_user"
+    opts+=",ro,ssh_command=$REPO/bin/conspectus"
+    sudo_env=(CONSPECTUS_SUDO_TRANSPORT="$(sudo_remote_cmd "$sudo_user" "$sftp_server")" CONSPECTUS_SUDO_PW="$pw")
   fi
-
   opts+=",volname=$(basename "$mnt")"
 
   # Reuse a mount another session made (and leave it to that session);
@@ -219,7 +304,7 @@ if [[ "${1:-}" == "ssh" ]]; then
     echo "conspectus: reusing the existing mount $mnt" >&2
   else
     mkdir -p "$mnt"
-    sshfs "$host:/" "$mnt" -f -o "$opts" ${sftp_opt[@]+"${sftp_opt[@]}"} &
+    env ${sudo_env[@]+"${sudo_env[@]}"} sshfs "$host:/" "$mnt" -f -o "$opts" &
     sshfs_pid=$!
     trap 'ssh_unmount "$mnt"' EXIT
     trap 'exit 129' HUP

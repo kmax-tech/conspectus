@@ -919,3 +919,11 @@ section at the top; functions can live anywhere.
 **Solution:** `conspectus ssh` runs `sshfs -f … &` and polls `mount` until the mount point is listed, aborting if the sshfs process dies first. Unmounting on quit (`umount`) ends sshfs by itself.
 
 **Gotchas:** tested without a network by pointing sshfs's `ssh` at a fake one on `PATH` that execs `/usr/libexec/sftp-server` for the `-s sftp` subsystem call — the whole mount path, locally. macFUSE prints one `MFChannelSendMessage … Socket is not connected` line at unmount; noise, not an error.
+
+## 2026-11-04 — sudo over sshfs with a password (TRAMP's `|sudo:`)
+
+**Problem:** sftp has no terminal, so sudo cannot ask for a password; `sudo -S` would read it from stdin, which is the sftp stream itself.
+
+**Solution:** sshfs's `ssh_command` is the launcher again (`CONSPECTUS_SUDO_TRANSPORT`): it drops sshfs's `-s sftp`, runs a remote `sh -c` instead, and feeds the password as the first line ahead of the stream. The remote shell `read`s that one line (byte-wise from a pipe, so no sftp bytes are lost), writes an askpass helper (`exec printenv CONSPECTUS_PW`) and runs `sudo -A -u <user> -- sftp-server`, which then owns the rest of stdin. A probe first asks `LC_ALL=C sudo -n … -h` whether a password is needed at all; NOPASSWD still gets an (empty) line.
+
+**Gotchas:** sshfs hands ssh one socketpair for stdin *and* stdout, so the feeder (`printf; exec cat`) holds sshfs's socket open — when sudo refuses, ssh ends but sshfs never sees EOF and hangs. The feeder therefore runs as a killed-on-exit background job writing into a fifo, not as a pipeline or process substitution. And a background job's stdin is `/dev/null` in a non-interactive bash: the feeder needs an explicit `<&3` (dup of the socket) or ssh sees EOF right after the password.
