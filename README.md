@@ -218,6 +218,7 @@ Swift toolchain to build.
 - **Catppuccin yazi flavors** (`ya pkg add yazi-rs/flavors:catppuccin-mocha`
   and `…:catppuccin-latte`) so yazi follows the light/dark theme with the
   panel; without them your own yazi theme is kept.
+- **[macFUSE](https://macfuse.github.io/) + sshfs** for [`conspectus ssh`](#remote-machines-conspectus-ssh) (browsing a remote machine).
 
 ## Build & run
 
@@ -231,6 +232,7 @@ conspectus split       # two yazi panes side by side (dual-pane copy)
 conspectus split ~/work
 conspectus triple      # two yazi panes + Quick Look preview (3 panes)
 conspectus ide         # yazi | nvim | preview — a small IDE (see below)
+conspectus ssh <host>:projects  # a remote machine over sshfs (see below)
 ./install-app.sh       # assemble /Applications/Conspectus.app (Finder/Dock icon)
 ```
 
@@ -266,6 +268,25 @@ preview column hidden — the Quick Look pane is the preview).
 `CONSPECTUS_COLUMNS=3 conspectus` keeps your full 3-column config instead:
 yazi's look-ahead column *plus* the Quick Look pane. Split mode always uses
 your full config.
+
+## Remote machines (`conspectus ssh`)
+
+```sh
+conspectus ssh <host>                # start in the remote home directory
+conspectus ssh <host>:projects/x     # relative to the remote home
+conspectus ssh <host>:/var/log       # absolute
+conspectus ssh --sudo <host>:/etc    # read as root, read-only
+```
+
+The launcher mounts the remote `/` with sshfs under **`CONSPECTUS_SSH_MOUNTS`**`/<host>` (default `~/mnt/ssh`) and starts the app inside it, so yazi, every preview, the pickers and the openers work on plain local paths. sshfs runs your own `ssh`, so `~/.ssh/config` applies (host aliases, keys, `ControlMaster`); a password or passphrase prompt shows in the launching terminal. Quitting the app unmounts again — unless the mount is still in use (a second session on the same host, a shell cd'd into it), then it stays and the launcher prints the `umount` to run later. A second `conspectus ssh` to the same host reuses the mount and leaves the unmounting to the session that made it. The usual network-mount rules apply: the fzf pickers search two levels deep, and a stalled server can hang a preview — `CONSPECTUS_PREVIEW_SKIP_DIRS` / ⌘⇧P (see [Status / limits](#status--limits)) turn previews off there. Files are never copied; sshfs is mounted with `noappledouble`, so no `._*` files land on the server either.
+
+**`--sudo`** reads files only root may read: the server's `sftp-server` is started through `sudo -n`, as a separate read-only mount (`~/mnt/ssh/<host>-sudo`), so a slip in yazi cannot delete or overwrite as root. The sftp session has no terminal to type a sudo password into, so the server needs a sudoers rule for exactly that binary; without one the launcher stops and prints the line to add (as root on the server: `visudo -f /etc/sudoers.d/sftp-server`), e.g.
+
+```
+max ALL=(root) NOPASSWD: /usr/lib/openssh/sftp-server
+```
+
+That rule means: whoever logs in as that user can read **and write** everything on the server through sftp — the read-only mount protects only this client. On machines you don't administer, that's the admin's call.
 
 ## Dual-pane split
 

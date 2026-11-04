@@ -912,3 +912,10 @@ a null dereference at a random-looking place, not an error message. The
 it. Rule of thumb: constants for headless CLI blocks go into the constants
 section at the top; functions can live anywhere.
 
+## 2026-11-04 — sshfs under macFUSE 5 never returns
+
+**Problem:** `sshfs host:/ mnt` (sshfs 2.x, macFUSE 5.3) mounts fine but then prints `fuse: daemonize requested after mount started; continuing in foreground` and blocks — a launcher that runs it and then starts the app hangs before the app ever opens.
+
+**Solution:** `conspectus ssh` runs `sshfs -f … &` and polls `mount` until the mount point is listed, aborting if the sshfs process dies first. Unmounting on quit (`umount`) ends sshfs by itself.
+
+**Gotchas:** tested without a network by pointing sshfs's `ssh` at a fake one on `PATH` that execs `/usr/libexec/sftp-server` for the `-s sftp` subsystem call — the whole mount path, locally. macFUSE prints one `MFChannelSendMessage … Socket is not connected` line at unmount; noise, not an error.

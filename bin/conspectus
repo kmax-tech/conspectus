@@ -5,6 +5,9 @@
 #                             # (used by indago's M-o "open in conspectus")
 #   conspectus split [path]   # two yazi panes (dual-pane copy via cross-yank)
 #   conspectus triple [path]  # two yazi panes + preview following the active one
+#   conspectus ssh [--sudo] <host>[:<path>]
+#                             # a remote machine through an sshfs mount,
+#                             # unmounted again when the app quits
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$REPO/.build/release/conspectus"
@@ -115,4 +118,122 @@ TOML
 
 export YAZI_CONFIG_HOME="$ov"
 export CONSPECTUS_BIN="$BIN"
+
+# --- conspectus ssh -----------------------------------------------------------
+# The remote machine's / is mounted with sshfs (macFUSE) under
+# $CONSPECTUS_SSH_MOUNTS/<host> and the app starts inside it — every preview,
+# picker and opener then works on plain local paths. sshfs runs the user's own
+# `ssh`, so ~/.ssh/config (aliases, ControlMaster, keys) applies. Mounting /
+# rather than <path> lets two sessions on the same host share one mount and
+# lets yazi walk up past the start dir.
+#
+# --sudo reads as root: sshfs starts the server's sftp-server through
+# `sudo -n`, which needs a NOPASSWD sudoers rule for exactly that binary (the
+# sftp session has no terminal to type a password into). That mount is
+# read-only and has its own mount point (<host>-sudo), so a slip in yazi
+# cannot delete or overwrite as root.
+
+# One ssh round trip before mounting: prints the remote $HOME (the start dir
+# for a missing or relative <path>), the remote user name and, for --sudo, the
+# sftp-server path plus whether `sudo -n` may run it. Side effects: none on
+# the server.
+ssh_probe() {
+  local host=$1 sudo_mode=$2
+  local script='printf "%s\n" "$HOME"; id -un'
+  if [[ $sudo_mode -eq 1 ]]; then
+    script+='
+for p in /usr/lib/openssh/sftp-server /usr/libexec/openssh/sftp-server /usr/lib/ssh/sftp-server /usr/libexec/sftp-server; do
+  if [ -x "$p" ]; then
+    printf "%s\n" "$p"
+    if sudo -n -l "$p" >/dev/null 2>&1; then echo sudo-ok; else echo sudo-needs-password; fi
+    exit 0
+  fi
+done
+echo no-sftp-server'
+  fi
+  ssh "$host" "$script"
+}
+
+# True when <dir> is a mount point right now.
+is_mounted() { mount | grep -qF " on $1 ("; }
+
+# Unmounts what this launcher mounted (sshfs then exits on its own). A mount
+# still in use (another conspectus session, a shell cd'd into it) stays and
+# says so — never forced. Side effects: umount.
+ssh_unmount() {
+  local mnt=$1
+  is_mounted "$mnt" || return 0
+  umount "$mnt" 2>/dev/null \
+    || echo "conspectus: $mnt still in use — left mounted (umount $mnt when done)" >&2
+}
+
+if [[ "${1:-}" == "ssh" ]]; then
+  shift
+  sudo_mode=0
+  if [[ "${1:-}" == "--sudo" ]]; then sudo_mode=1; shift; fi
+  [[ $# -eq 1 && -n $1 ]] || { echo "usage: conspectus ssh [--sudo] <host>[:<path>]" >&2; exit 2; }
+  command -v sshfs >/dev/null || { echo "conspectus: 'conspectus ssh' needs sshfs (macFUSE + sshfs)" >&2; exit 1; }
+  host="${1%%:*}"
+  rpath=""
+  [[ $1 == *:* ]] && rpath="${1#*:}"
+  [[ -n $host ]] || { echo "conspectus: no host in '$1'" >&2; exit 2; }
+
+  probe="$(ssh_probe "$host" "$sudo_mode")" \
+    || { echo "conspectus: ssh $host failed — check 'ssh $host' on its own" >&2; exit 1; }
+  rhome="$(sed -n 1p <<<"$probe")"
+  [[ $rhome == /* ]] || { echo "conspectus: $host sent no usable \$HOME (got '$rhome')" >&2; exit 1; }
+  case "$rpath" in
+    "") rpath="$rhome" ;;
+    /*) ;;
+    *)  rpath="$rhome/$rpath" ;;
+  esac
+
+  mnt="${CONSPECTUS_SSH_MOUNTS:-$HOME/mnt/ssh}/$host"
+  opts="reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,defer_permissions,noappledouble,noapplexattr"
+  sftp_opt=()
+  if [[ $sudo_mode -eq 1 ]]; then
+    sftp_server="$(sed -n 3p <<<"$probe")"
+    sudo_state="$(sed -n 4p <<<"$probe")"
+    case "$sftp_server" in
+      no-sftp-server) echo "conspectus: no sftp-server found on $host" >&2; exit 1 ;;
+    esac
+    if [[ $sudo_state != sudo-ok ]]; then
+      echo "conspectus: sudo on $host needs a password, and sshfs has no terminal to ask in." >&2
+      echo "  A sudoers rule on $host makes it work (as root there: visudo -f /etc/sudoers.d/sftp-server):" >&2
+      echo "    $(sed -n 2p <<<"$probe") ALL=(root) NOPASSWD: $sftp_server" >&2
+      exit 1
+    fi
+    mnt+="-sudo"
+    opts+=",ro"
+    sftp_opt=(-o "sftp_server=sudo -n $sftp_server")
+  fi
+
+  opts+=",volname=$(basename "$mnt")"
+
+  # Reuse a mount another session made (and leave it to that session);
+  # otherwise mount now and unmount on the way out. sshfs 2.x under macFUSE 5
+  # cannot daemonize once the mount has started ("continuing in foreground")
+  # and would block here, so it runs in the foreground (-f) as a background
+  # job and the launcher waits for the mount point to appear.
+  if is_mounted "$mnt"; then
+    echo "conspectus: reusing the existing mount $mnt" >&2
+  else
+    mkdir -p "$mnt"
+    sshfs "$host:/" "$mnt" -f -o "$opts" ${sftp_opt[@]+"${sftp_opt[@]}"} &
+    sshfs_pid=$!
+    trap 'ssh_unmount "$mnt"' EXIT
+    trap 'exit 129' HUP
+    trap 'exit 143' TERM
+    until is_mounted "$mnt"; do
+      if ! kill -0 "$sshfs_pid" 2>/dev/null; then
+        echo "conspectus: sshfs $host:/ → $mnt failed" >&2
+        exit 1
+      fi
+      sleep 0.2
+    done
+  fi
+  "$BIN" "$mnt$rpath"
+  exit
+fi
+
 exec "$BIN" "$@"

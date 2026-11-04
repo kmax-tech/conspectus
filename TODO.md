@@ -12,6 +12,10 @@ Auslöser, ohne Termin.*
 
 ## Notiert, nicht geplant
 
+- **`conspectus ssh`: an echten Hosts erproben** (2026-11-04). Gebaut und lokal getestet gegen einen nachgebauten Server (Mac als „Remote" über `/usr/libexec/sftp-server`); an einem echten Host noch nie gelaufen. Zu prüfen: Passwort-/Passphrase-Abfrage im startenden Terminal, `--sudo` mit NOPASSWD-Regel, Verhalten beim Abreißen der Verbindung (`reconnect`). Auslöser: erster echter Einsatz.
+
+- **yazis eigenes SFTP (`sftp://` in `vfs.toml`) in conspectus** (2026-11-04). yazi 26.5 kann SFTP selbst; das Plugin schickt der App dann eine `sftp://`-URL (`plugins/conspectus.yazi/main.lua:56`), die die Vorschau nicht lesen kann. Möglich: die App erkennt das Schema und zeigt einen Hinweis statt einer kaputten Vorschau. Nicht geplant, weil `conspectus ssh` (sshfs) alles abdeckt. Auslöser: wenn jemand das yazi-SFTP doch direkt nutzt.
+
 - **lazycvs: Revision einer Binärdatei (PDF, Bild) ansehen** (2026-10-21,
   gebaut in `~/projects/lazycvs`: History-Tab `o` / `Ctrl-o` öffnen die
   Revision unter dem Cursor als Temp-Datei; Extraktion läuft byte-genau
