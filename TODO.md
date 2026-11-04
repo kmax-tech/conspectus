@@ -12,6 +12,8 @@ Auslöser, ohne Termin.*
 
 ## Notiert, nicht geplant
 
+- **Automount im Alltag beobachten** (2026-11-04). `~/.config/conspectus/automount` hängt `~/mnt/ceph/storage` beim Hineingehen ein bzw. repariert es (`ceph-mount`, seit ceph_macos ff12f24 selbstheilend). Getestet nur gegen nachgebautes ceph-fuse (sshfs über falsches ssh, tot per `kill -9`, hängend per `kill -STOP`). Offen: ob echtes ceph-fuse nach dem Aufwachen ENXIO liefert oder hängt, und ob 5 s Prüfzeit beim langsamen VPN reichen. Kein Aushängen beim Beenden — bei Bedarf nachrüsten.
+
 - **`conspectus ssh`: an echten Hosts erproben** (2026-11-04). Gebaut und lokal getestet gegen einen nachgebauten Server (Mac als „Remote" über `/usr/libexec/sftp-server`, falsches `sudo` auf `PATH`); an einem echten Host noch nie gelaufen. Zu prüfen: ssh-Passwort/Passphrase im startenden Terminal, TRAMP-Pfad mit `|sudo:` und echtem sudo-Passwort (die Erkennung sucht `password is required` in sudos Meldung), Verhalten beim Abreißen der Verbindung (`reconnect` schickt das Passwort neu). Auslöser: erster echter Einsatz, z. B. `/ssh:leguin|sudo:root@leguin:/home/textimg/ComfyUI/output/`.
 
 - **yazis eigenes SFTP (`sftp://` in `vfs.toml`) in conspectus** (2026-11-04). yazi 26.5 kann SFTP selbst; das Plugin schickt der App dann eine `sftp://`-URL (`plugins/conspectus.yazi/main.lua:56`), die die Vorschau nicht lesen kann. Möglich: die App erkennt das Schema und zeigt einen Hinweis statt einer kaputten Vorschau. Nicht geplant, weil `conspectus ssh` (sshfs) alles abdeckt. Auslöser: wenn jemand das yazi-SFTP doch direkt nutzt.

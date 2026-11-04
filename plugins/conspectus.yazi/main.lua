@@ -3,7 +3,7 @@
 -- bin/conspectus; the user's own yazi config is never touched, and no
 -- external binaries are needed.
 --
--- Five jobs:
+-- Six jobs:
 --   1. Preview coupling: every hover writes the hovered path to the FIFO the
 --      app hands us via $QLPEEK_FIFO, preceded by the tab's sort preference
 --      as `@SORT:<by>:<reverse>:<dir_first>` (the app's folder listing
@@ -32,8 +32,14 @@
 --      same row within the macOS interval ($CONSPECTUS_DOUBLE_CLICK) are one.
 --   5. A clickable path bar: the cwd in the pane's header is a breadcrumb, so
 --      the mouse can go UP as well as down (the columns only ever go down).
+--   6. Automount: a cd into a mount point from the launcher's automount file
+--      has the launcher check it and mount it again when it is missing or
+--      dead (`conspectus automount`); the verdict shows as a notification.
 
 local M = {}
+
+-- Seconds between two automount checks of the same mount point (job 6).
+local AUTOMOUNT_RECHECK = 30
 
 -- Append one line to the app's FIFO. Never blocks: the app holds its FIFO open
 -- read-write for its whole life, so the open-for-append returns at once. A
@@ -388,8 +394,48 @@ function M:setup()
 				f:close()
 			end
 		end
-		if tabs_file then
-			ps.sub("cd", save_tabs)
+		-- Automount: the launcher hands over the mount points from its
+		-- automount file ($CONSPECTUS_AUTOMOUNT_DIRS, one per line). A cd into
+		-- one of them or below runs `conspectus automount <cwd>`, orphaned so a
+		-- slow mount never blocks yazi, at most once per AUTOMOUNT_RECHECK
+		-- seconds per mount point; the verdict comes back as
+		-- `conspectus-automount` (below). Nothing is reloaded here: yazi
+		-- re-lists a remounted cwd by itself (verified with a killed sshfs).
+		local oka, am_dirs = pcall(function() return os.getenv("CONSPECTUS_AUTOMOUNT_DIRS") end)
+		local okl, launcher = pcall(function() return os.getenv("CONSPECTUS_LAUNCHER") end)
+		local mounts = {}
+		if oka and am_dirs and okl and launcher and #launcher > 0 then
+			for line in am_dirs:gmatch("[^\n]+") do mounts[#mounts + 1] = line end
+		end
+		local last_check = {}   -- mount point → os.time() when its last check started
+		local function automount_check()
+			local cwd = tostring(cx.active.current.cwd)
+			local hit = nil   -- the longest mount point covering cwd, like the launcher
+			for _, mp in ipairs(mounts) do
+				if (cwd == mp or cwd:sub(1, #mp + 1) == mp .. "/") and (not hit or #mp > #hit) then
+					hit = mp
+				end
+			end
+			if not hit then return end
+			local now = os.time()
+			if last_check[hit] and now - last_check[hit] < AUTOMOUNT_RECHECK then return end
+			last_check[hit] = now
+			emit("shell", { ya.quote(launcher) .. " automount " .. ya.quote(cwd), orphan = true })
+		end
+		if tabs_file or #mounts > 0 then
+			ps.sub("cd", function()   -- one handler per event and plugin: both jobs here
+				save_tabs()
+				if #mounts > 0 then automount_check() end
+			end)
+		end
+		if #mounts > 0 then
+			ps.sub_remote("conspectus-automount", function(body)
+				if type(body) ~= "string" then return end
+				local kind, text = body:match("^(%a+)\t[^\t]*\t(.*)$")
+				if not kind then return end
+				ya.notify({ title = "automount", timeout = kind == "failed" and 10 or 4,
+					level = kind == "failed" and "error" or "info", content = text })
+			end)
 		end
 
 		-- Restore: the APP decides (CONSPECTUS_TABS_RESTORE) — a start with an

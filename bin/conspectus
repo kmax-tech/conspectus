@@ -46,6 +46,158 @@ if [[ -n ${CONSPECTUS_SUDO_TRANSPORT:-} ]]; then
   exit "$rc"
 fi
 
+# True when <dir> is a mount point right now.
+is_mounted() { mount | grep -qF " on $1 ("; }
+
+# --- automount ----------------------------------------------------------------
+# Network mounts that need not stay mounted: $CONSPECTUS_AUTOMOUNT (default
+# ~/.config/conspectus/automount) lists `<mount point> <command>` per line,
+# `#` starts a comment. When a tab enters such a mount point or anything
+# below it (cd, `con`, a restored tab, a start path), the mount is checked:
+# mounted and its root lists within AUTOMOUNT_PROBE_SECS → nothing to do;
+# missing, failing at once ("Device not configured") or hanging → the command
+# runs in a login zsh (`/bin/zsh -l -c`, as the panes' yazi does, so ~/bin
+# and the like are on PATH even when the app came from the Dock), and must
+# bring the mount back from any of those states.
+# The bundled plugin calls `conspectus automount <dir>` for that, at most
+# once per AUTOMOUNT_RECHECK seconds per mount point (plugins/conspectus.yazi),
+# and the result comes back as a yazi notification.
+AUTOMOUNT_FILE="${CONSPECTUS_AUTOMOUNT:-$HOME/.config/conspectus/automount}"
+AUTOMOUNT_PROBE_SECS=5
+AUTOMOUNT_CMD_SECS=120   # a mount command still running after this is killed
+
+# Prints the automount entries as `<mount point>\t<command>`, `~` expanded and
+# trailing slashes dropped; a line without a command or with a relative mount
+# point is reported and skipped. No file → no entries.
+automount_entries() {
+  [[ -f $AUTOMOUNT_FILE ]] || return 0
+  local line mp cmd n=0
+  while IFS= read -r line || [[ -n $line ]]; do
+    n=$((n + 1))
+    line="${line%%#*}"
+    read -r mp cmd <<<"$line" || true
+    [[ -n $mp ]] || continue
+    [[ $mp == "~" || $mp == "~/"* ]] && mp="$HOME${mp#"~"}"
+    [[ $mp == / ]] || mp="${mp%/}"
+    if [[ $mp != /* || -z $cmd ]]; then
+      echo "conspectus: $AUTOMOUNT_FILE:$n: expected '<absolute mount point> <command>' — line skipped" >&2
+      continue
+    fi
+    printf '%s\t%s\n' "$mp" "$cmd"
+  done < "$AUTOMOUNT_FILE"
+}
+
+# The entry whose mount point is <dir> or contains it (the longest such), as
+# `<mount point>\t<command>`; nothing when none does. Pure string match — the
+# dir itself is never touched, it may be a dead mount.
+automount_entry_for() {
+  local dir="${1%/}" mp cmd best="" best_cmd=""
+  while IFS=$'\t' read -r mp cmd; do
+    if [[ $dir == "$mp" || $dir == "$mp"/* ]] && (( ${#mp} > ${#best} )); then
+      best=$mp; best_cmd=$cmd
+    fi
+  done < <(automount_entries 2>/dev/null)
+  [[ -z $best ]] || printf '%s\t%s\n' "$best" "$best_cmd"
+}
+
+# True when listing <dir> finishes within <secs> without an error. Polled, not
+# GNU timeout (not on a stock Mac). A hung ls may stay stuck in the kernel
+# until the mount is forced off; it is only signalled.
+probe_responds() {
+  local dir=$1 secs=$2 probe i
+  ls "$dir" >/dev/null 2>&1 &
+  probe=$!
+  for ((i = 0; i < secs * 10; i++)); do
+    kill -0 "$probe" 2>/dev/null || { wait "$probe"; return; }
+    sleep 0.1
+  done
+  kill "$probe" 2>/dev/null || true
+  return 1
+}
+
+# Tells the yazi pane that asked ($YAZI_ID, set for its child processes) how
+# the check went — `mounting`, `mounted` or `failed`, with a text — or, from
+# a terminal, stderr. Side effects: a DDS message to that yazi.
+automount_report() {
+  local kind=$1 mp=$2 text=$3
+  if [[ -n ${YAZI_ID:-} ]]; then
+    ya pub-to "$YAZI_ID" conspectus-automount --str "$kind"$'\t'"$mp"$'\t'"$text" 2>/dev/null \
+      || echo "conspectus: automount $mp: $kind: $text" >&2
+  else
+    echo "conspectus: $text" >&2
+  fi
+}
+
+# Makes sure the mount point <mp> answers, running <cmd> when it does not.
+# One check per mount point at a time: a second caller (the other pane, a
+# second tab) waits for the first and then only probes. Returns 0 when the
+# mount answers afterwards. Side effects: runs <cmd> (automount_run), a lock
+# dir in ~/.cache/conspectus, removed on every way out — no EXIT trap, the
+# start path ends in exec, which skips it.
+automount_ensure() {
+  local mp=$1 cmd=$2 name lock i rc=0
+  is_mounted "$mp" && probe_responds "$mp" "$AUTOMOUNT_PROBE_SECS" && return 0
+  name="$(tr -c 'A-Za-z0-9._-' '_' <<<"${mp#/}" | sed 's/_$//')"
+  mkdir -p "$HOME/.cache/conspectus"
+  lock="$HOME/.cache/conspectus/automount-$name.lock"
+  if ! mkdir "$lock" 2>/dev/null; then
+    for ((i = 0; i < (AUTOMOUNT_CMD_SECS + 10) * 5; i++)); do
+      [[ -d $lock ]] || break
+      sleep 0.2
+    done
+    if is_mounted "$mp" && probe_responds "$mp" "$AUTOMOUNT_PROBE_SECS"; then return 0; fi
+    automount_report failed "$mp" "another check of $mp did not bring it back (lock $lock)"
+    return 1
+  fi
+  trap 'rmdir "$lock" 2>/dev/null; exit 130' INT TERM HUP
+  automount_run "$mp" "$cmd" "$HOME/.cache/conspectus/automount-$name.log" || rc=$?
+  rmdir "$lock" 2>/dev/null || true
+  trap - INT TERM HUP
+  return "$rc"
+}
+
+# The unlocked half of automount_ensure: runs <cmd> with output to <log>,
+# stops it after AUTOMOUNT_CMD_SECS, and probes the mount afterwards.
+automount_run() {
+  local mp=$1 cmd=$2 log=$3 pid i rc=0
+  if is_mounted "$mp"; then
+    automount_report mounting "$mp" "$mp does not respond — running: $cmd"
+  else
+    automount_report mounting "$mp" "mounting $mp: $cmd"
+  fi
+  /bin/zsh -l -c "$cmd" > "$log" 2>&1 < /dev/null &
+  pid=$!
+  for ((i = 0; i < AUTOMOUNT_CMD_SECS * 5; i++)); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.2
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    automount_report failed "$mp" "'$cmd' still running after ${AUTOMOUNT_CMD_SECS}s — stopped; see $log"
+    return 1
+  fi
+  wait "$pid" || rc=$?
+  if is_mounted "$mp" && probe_responds "$mp" "$AUTOMOUNT_PROBE_SECS"; then
+    automount_report mounted "$mp" "$mp mounted"
+    return 0
+  fi
+  automount_report failed "$mp" "'$cmd' (exit $rc) left $mp unusable: $(grep -v '^[[:space:]]*$' "$log" | tail -1) — see $log"
+  return 1
+}
+
+# `conspectus automount <dir>`: what the plugin runs. Before the overlay is
+# rebuilt below — the running yazi reads that config.
+if [[ ${1:-} == automount ]]; then
+  [[ $# -eq 2 ]] || { echo "usage: conspectus automount <dir>" >&2; exit 2; }
+  entry="$(automount_entry_for "$2")"
+  if [[ -z $entry ]]; then
+    automount_report failed "$2" "no entry in $AUTOMOUNT_FILE covers $2"
+    exit 1
+  fi
+  automount_ensure "${entry%%$'\t'*}" "${entry#*$'\t'}"
+  exit
+fi
+
 BIN="$REPO/.build/release/conspectus"
 [[ -x $BIN ]] || { echo "conspectus: not built — run $REPO/build.sh" >&2; exit 1; }
 
@@ -163,6 +315,12 @@ TOML
 export YAZI_CONFIG_HOME="$ov"
 export CONSPECTUS_BIN="$BIN"
 
+# The plugin learns the automount points (newline-separated) and how to call
+# back; a malformed line in the file is reported here, once per launch.
+CONSPECTUS_AUTOMOUNT_DIRS="$(automount_entries | cut -f1)"
+export CONSPECTUS_AUTOMOUNT_DIRS
+export CONSPECTUS_LAUNCHER="$REPO/bin/conspectus"
+
 # --- conspectus ssh -----------------------------------------------------------
 # The remote machine's / is mounted with sshfs (macFUSE) under
 # $CONSPECTUS_SSH_MOUNTS/<host> and the app starts inside it — every preview,
@@ -231,9 +389,6 @@ sudo_verify() {
     *) echo ok ;;
   esac
 }
-
-# True when <dir> is a mount point right now.
-is_mounted() { mount | grep -qF " on $1 ("; }
 
 # After a failed mount: macFUSE's mount helper can outlive sshfs — and even
 # start after sshfs has died — and block the next mount on <dir>, so for two
@@ -398,5 +553,14 @@ if [[ "${1:-}" == "ssh" ]]; then
   "$BIN" "$start"
   exit
 fi
+
+# A start path inside an automount point: bring the mount up before yazi
+# lists it. A failure is reported and the app starts anyway.
+for arg in "$@"; do
+  case $arg in split|triple|-*) continue ;; esac
+  [[ $arg == /* ]] || arg="$PWD/$arg"
+  entry="$(automount_entry_for "$arg")"
+  [[ -z $entry ]] || automount_ensure "${entry%%$'\t'*}" "${entry#*$'\t'}" || true
+done
 
 exec "$BIN" "$@"

@@ -289,7 +289,17 @@ The TRAMP subset understood: `/ssh:[user@]host:path` and one sudo hop on the sam
 
 **sudo** (`--sudo` or `|sudo:` in the path) reads files only that user may read, as a separate **read-only** mount (`~/mnt/ssh/<host>-sudo`, `…-sudo-<user>` for a non-root user), so a slip in yazi cannot delete or overwrite as root. Like TRAMP, it asks the sudo password in the launching terminal, once per session — and only if sudo on the server wants one. The password goes to the server as the first line of the sftp stream and reaches sudo through a throwaway askpass helper in the remote home (`~/.conspectus-askpass.*`, removed when sudo ends; a torn connection can leave one behind — it holds no secret, only `exec printenv CONSPECTUS_PW`); the password never appears on a command line. On this Mac it sits in the environment of the sshfs process for the session (needed to reconnect), readable by your own user only. The password is checked before anything is mounted; a wrong one is asked again, three tries like sudo.
 
-## Dual-pane split
+## Network mounts on demand (automount)
+
+A network mount you only need now and then (CephFS, SMB, sshfs) need not stay mounted — and one that stayed often survives sleep or a network change only on paper: it still sits in the mount table, but every access fails with `Device not configured` or hangs. List such mounts in **`CONSPECTUS_AUTOMOUNT`** (default `~/.config/conspectus/automount`), one per line, the mount point first and then the command that mounts it:
+
+```
+# <mount point>  <command>
+~/mnt/ceph/storage  ceph-mount
+```
+
+Whenever a tab enters a mount point or anything below it — `cd`, a click, `con <dir>`, a tab restored at start, or a start path such as `conspectus ~/mnt/ceph/storage/corpora` — the launcher checks it: mounted and its top folder lists within 5 seconds → nothing happens. Otherwise it runs the command in a login zsh (so `~/bin` is on `PATH` even when the app came from the Dock), a notification says it is mounting and whether that worked, and yazi shows the folder as soon as the mount answers again. The command must bring the mount back from every state — missing, failing at once, or hanging (ceph_macos's `ceph-mount` does since its commit ff12f24); one still running after 120 seconds is stopped. A mount point is checked at most once every 30 seconds per pane, and two panes never run its command at the same time; the command's output goes to `~/.cache/conspectus/automount-<mount point>.log`. Nothing is ever unmounted: a mount stays until you unmount it, and a dead one is repaired the next time you enter it. The file is read when conspectus starts, so restart it after editing; the mount point is the first word (no spaces), and `#` starts a comment, in the command too.
+
 ## Dual-pane split
 
 Two **yazi panes** instead of terminal + preview — an orthodox (Norton/Total
