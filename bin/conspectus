@@ -23,18 +23,24 @@ if [[ -n ${CONSPECTUS_SUDO_TRANSPORT:-} ]]; then
   [[ $n -ge 2 && ${args[n-2]} == -s && ${args[n-1]} == sftp ]] \
     || { echo "conspectus: sudo transport: sshfs called ssh with unexpected arguments: $*" >&2; exit 1; }
   unset 'args[n-1]' 'args[n-2]'
-  # The feeder (password line, then cat) reads sshfs's socket, so it holds
-  # that socket open: when ssh ends (sudo refused a wrong password) the feeder
-  # must be killed, or sshfs never sees EOF and hangs instead of failing.
+  # ssh never touches sshfs's socket itself: sshfs hands over ONE socket as
+  # stdin and stdout, and OpenSSH switches its stdin/stdout to O_NONBLOCK —
+  # a flag shared by everyone holding that socket, so a cat reading it would
+  # die on EAGAIN. Two relays through fifos instead: `feeder` (password
+  # line, then socket → ssh) and `drain` (ssh → socket). The feeder holds
+  # the socket open, so when ssh ends (sudo refused a wrong password) it is
+  # killed, or sshfs would never see EOF and hang instead of failing.
   feed_dir="$(mktemp -d)"
-  mkfifo -m 600 "$feed_dir/feed"
-  # <&3: a background job's stdin would otherwise be /dev/null.
-  exec 3<&0
-  { printf '%s\n' "${CONSPECTUS_SUDO_PW:-}"; exec cat; } <&3 > "$feed_dir/feed" &
-  exec 3<&-
+  mkfifo -m 600 "$feed_dir/in" "$feed_dir/out"
+  exec 3<&0 4>&1   # explicit: a background job's stdin would be /dev/null
+  { printf '%s\n' "${CONSPECTUS_SUDO_PW:-}"; exec cat; } <&3 > "$feed_dir/in" &
   feeder=$!
+  cat < "$feed_dir/out" >&4 &
+  drain=$!
+  exec 3<&- 4>&-
   rc=0
-  ssh "${args[@]}" "$CONSPECTUS_SUDO_TRANSPORT" < "$feed_dir/feed" || rc=$?
+  ssh "${args[@]}" "$CONSPECTUS_SUDO_TRANSPORT" < "$feed_dir/in" > "$feed_dir/out" || rc=$?
+  wait "$drain" || true
   { kill "$feeder" && wait "$feeder"; } 2>/dev/null || true   # quiet: no "Terminated" line
   rm -rf "$feed_dir"
   exit "$rc"
