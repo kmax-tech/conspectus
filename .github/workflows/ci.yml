@@ -1,0 +1,42 @@
+# The repo's bar, run on every push and pull request (CLAUDE.md, "Build &
+# verify"): swift build warning-free, swift test green, plus a syntax check
+# of the two scripts the compiler never sees (the bash launcher, the Lua
+# plugin). macOS only — the app is AppKit, SwiftTerm needs it.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    # Pinned, not macos-latest: the Swift toolchain is what the image ships,
+    # and a silent image change should not be the reason a build turns red.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Build (debug, warning-free)
+        # Warnings from our own sources fail the step; dependencies' do not
+        # (SwiftPM builds those with warnings suppressed anyway).
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee build.log
+          if grep -E "Sources/.*: warning:" build.log; then
+            echo "::error::swift build is not warning-free (see above)"
+            exit 1
+          fi
+
+      - name: Test (ConspectusCore)
+        run: swift test
+
+      - name: Launcher syntax
+        run: bash -n bin/conspectus
+
+      - name: Plugin syntax
+        run: |
+          brew install lua
+          luac -p plugins/conspectus.yazi/main.lua plugins/cvs.yazi/main.lua

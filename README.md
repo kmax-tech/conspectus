@@ -243,6 +243,8 @@ conspectus ssh <host>:projects  # a remote machine over sshfs, also TRAMP paths 
 ./install-app.sh       # assemble /Applications/Conspectus.app (Finder/Dock icon)
 ```
 
+The same bar runs on GitHub for every push (`.github/workflows/ci.yml`, macOS runner): `swift build` warning-free in our sources, `swift test`, and a syntax check of the launcher (`bash -n`) and the bundled plugins (`luac -p`).
+
 Start dir is `$HOME` unless a `[path]` is given. A `[path]` that is a *file*
 starts in the file's directory with the cursor on it, so the Quick Look pane
 previews it immediately — this is what indago's `M-o` ("open in conspectus")
