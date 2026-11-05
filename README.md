@@ -67,9 +67,10 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
     as wide as `16.10.`, so the columns sit close). The rows sit **on yazi's
     rows**: every listing line is exactly one terminal cell high, and the
     first row goes on the row where yazi's file list starts (the plugin
-    sends that with every hover — one row below the header, three with the
-    tab bar that yazi shows for more than one tab, since the plugin lays a
-    blank row between the path and the tab bar in conspectus panes); the
+    sends that with every hover — one row below the path, two with the tab
+    bar that yazi shows for more than one tab). In conspectus panes the
+    plugin puts that tab bar **above** the path — tabs, address, content,
+    the order of browsers and editors — where yazi would put it below. The
     selection list (⌘L) and the mount list (⇧⌘K) use the same grid.
     Names longer than 40 characters are cut with `…` like yazi cuts them
     (`lenz09-soziologie-der-zweierbeziehu….pdf` — the extension stays), so

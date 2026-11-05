@@ -72,44 +72,38 @@ local get_sort = ya.sync(function()
 end)
 local sort_warned = false
 
--- Rows of air between the header (the path) and the tab bar; yazi's own
--- layout has none, and the two lines read as one block. Only with the tab
--- bar — a single tab has no bar, and the list follows the path as in yazi.
-local HEADER_GAP_ROWS = 1
-
 -- The terminal row (0-based) where the active tab's file list starts, as the
--- `@LIST_TOP:` body: the header (1 row), then with more than one tab the
--- gap and the tab bar (`Tabs.height()` is 1 then, else 0) — the layout
--- `install_header_gap` builds. The app puts the folder listing's rows on
--- the same rows of its pane.
+-- `@LIST_TOP:` body: the tab bar (`Tabs.height()`: 1 with more than one
+-- tab, else 0) and the header (1 row) — the layout `install_tabs_on_top`
+-- builds. The app puts the folder listing's rows on the same rows of its
+-- pane.
 local get_list_top = ya.sync(function()
-	local bar = #cx.tabs > 1 and 1 or 0
-	return tostring(1 + bar * (HEADER_GAP_ROWS + 1))
+	return tostring((#cx.tabs > 1 and 1 or 0) + 1)
 end)
 
--- Root:layout with HEADER_GAP_ROWS of air after the header, in conspectus
--- panes only (terminal yazi keeps its own layout). yazi's Root:build reads
--- self._chunks[1..4] (header, tabs, tab, status), so the gap is split off
--- here and dropped — the chunk list the builder sees stays four long.
-local function install_header_gap()
+-- Root:layout with the tab bar ABOVE the header, in conspectus panes only
+-- (terminal yazi keeps its own layout): tabs, then the path, then the list
+-- — the order of browsers and editors (tabs, address bar, content), so the
+-- path reads as the list's heading and nothing needs a blank row to
+-- separate it. yazi's Root:build reads self._chunks[1..4] as header, tabs,
+-- tab, status, so the two top chunks are swapped back into that order.
+local function install_tabs_on_top()
 	if type(Root) ~= "table" or type(Root.layout) ~= "function" then
 		ya.notify({ title = "conspectus", timeout = 5, level = "warn",
-			content = "header gap not installed — yazi's Root:layout is missing" })
+			content = "tabs-on-top layout not installed — yazi's Root:layout is missing" })
 		return
 	end
 	Root.layout = function(self)
-		local gap = Tabs.height() > 0 and HEADER_GAP_ROWS or 0
 		local c = ui.Layout()
 			:direction(ui.Layout.VERTICAL)
 			:constraints({
-				ui.Constraint.Length(1),
-				ui.Constraint.Length(gap),
 				ui.Constraint.Length(Tabs.height()),
+				ui.Constraint.Length(1),
 				ui.Constraint.Fill(1),
 				ui.Constraint.Length(1),
 			})
 			:split(self._area)
-		self._chunks = { c[1], c[3], c[4], c[5] }
+		self._chunks = { c[2], c[1], c[3], c[4] }
 	end
 end
 
@@ -367,7 +361,7 @@ function M:setup()
 	if ok and fifo and #fifo > 0 then
 		install_double_click()
 		install_breadcrumb_click()
-		install_header_gap()
+		install_tabs_on_top()
 		ps.sub("hover", function()
 			local path = get_hovered()
 			if not path then return end
