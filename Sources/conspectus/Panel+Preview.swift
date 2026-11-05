@@ -65,6 +65,9 @@ extension Panel {
                     } else if s.hasPrefix(sortPrefix) {
                         let body = String(s.dropFirst(sortPrefix.count))
                         DispatchQueue.main.async { self?.sortChanged(body) }
+                    } else if s.hasPrefix(listTopPrefix) {
+                        let body = String(s.dropFirst(listTopPrefix.count))
+                        DispatchQueue.main.async { self?.listTopChanged(body) }
                     } else if s.hasPrefix(yankPrefix) {
                         let body = String(s.dropFirst(yankPrefix.count))
                         DispatchQueue.main.async { self?.yankChanged(body) }
@@ -116,6 +119,51 @@ extension Panel {
             return
         }
         listingSort = sort
+    }
+
+    /// FIFO handler (main thread): yazi announced how many terminal rows sit
+    /// above its file list (`@LIST_TOP:` body) — the hover that follows puts
+    /// the listing's first row on that row. A malformed body keeps the
+    /// previous value and warns.
+    func listTopChanged(_ body: String) {
+        guard let rows = Int(body), rows >= 0 else {
+            warn("conspectus: malformed @LIST_TOP FIFO message '\(body)' — keeping \(yaziListTop)")
+            return
+        }
+        yaziListTop = rows
+    }
+
+    /// Put a listing (folder, selection, mounts) into the preview's text
+    /// view, aligned to the terminal rows, scrolled to the top. Main thread.
+    /// Side effects: text storage, `textContainerInset`, scroll position.
+    func showListing(_ listing: NSAttributedString) {
+        folderText.textStorage?.setAttributedString(listing)
+        alignListingRows()
+        folderText.scroll(NSPoint.zero)
+    }
+
+    /// Put the listing's rows on the terminal's rows: its first baseline on
+    /// the baseline of terminal row `yaziListTop` — where yazi's file list
+    /// starts — by setting the text view's top inset. The terminal view sits
+    /// `termPadding` below the pane's top and draws row r with its baseline
+    /// `terminalCellBaselineFromBottom` above the cell's bottom; the text
+    /// view may start lower than the pane (the VCS strip above it), and its
+    /// first baseline sits `location(forGlyphAt: 0).y` below the first line
+    /// fragment's top. Rows then stay on the grid because every listing line
+    /// is exactly one cell high (`listingParagraphStyle`). Called after
+    /// every listing and whenever the strip appears or goes. Main thread.
+    /// Side effects: `textContainerInset`.
+    func alignListingRows() {
+        guard let lm = folderText.layoutManager, let tc = folderText.textContainer,
+              let ts = folderText.textStorage, ts.length > 0 else { return }
+        lm.ensureLayout(for: tc)
+        let baselineInFragment = lm.location(forGlyphAt: 0).y
+        let scrollTop = rightContainer.bounds.maxY - folderScroll.frame.maxY   // 0, or the VCS strip
+        let target = termPadding + CGFloat(yaziListTop + 1) * terminalCellHeight() - terminalCellBaselineFromBottom()
+        let inset = max(0, target - scrollTop - baselineInFragment)
+        if abs(folderText.textContainerInset.height - inset) > 0.5 {
+            folderText.textContainerInset = NSSize(width: folderText.textContainerInset.width, height: inset)
+        }
     }
 
     // MARK: NSTextViewDelegate — click a row in the folder listing.
@@ -777,8 +825,7 @@ extension Panel {
             let listing = renderSelectedListing(paths, heading: heading, emptyNote: emptyNote)
             DispatchQueue.main.async {
                 guard self.isCurrentListing(gen) else { return }
-                self.folderText.textStorage?.setAttributedString(listing)
-                self.folderText.scroll(NSPoint.zero)
+                self.showListing(listing)
             }
         }
     }
@@ -821,8 +868,7 @@ extension Panel {
             DispatchQueue.main.async {
                 // Re-check: a newer hover may have won while we rendered.
                 guard self.isCurrentListing(gen) else { return }
-                self.folderText.textStorage?.setAttributedString(listing)
-                self.folderText.scroll(NSPoint.zero)
+                self.showListing(listing)
             }
         }
     }

@@ -92,6 +92,33 @@ func terminalFont(size overrideSize: Double? = nil) -> NSFont {
 /// other terminal and editor in the dotfiles (`typography.md`, "The unit trap").
 let terminalLineSpacing: CGFloat = 1.136
 
+/// The terminal's cell height — SwiftTerm's own formula
+/// (`computeFontDimensions`: ceil of the natural height × `lineSpacing`),
+/// so the listings' rows have exactly the pitch of yazi's rows beside them.
+func terminalCellHeight() -> CGFloat {
+    let f = terminalFont() as CTFont
+    return ceil((CTFontGetAscent(f) + CTFontGetDescent(f) + CTFontGetLeading(f)) * terminalLineSpacing)
+}
+
+/// Where SwiftTerm puts the baseline inside a cell, measured from the
+/// cell's bottom (`drawTerminalContents`: `yOffset = ceil(descent + leading)`);
+/// the spare height of a tall cell sits above the glyphs.
+func terminalCellBaselineFromBottom() -> CGFloat {
+    let f = terminalFont() as CTFont
+    return ceil(CTFontGetDescent(f) + CTFontGetLeading(f))
+}
+
+/// The paragraph style of every listing in the preview pane (folder,
+/// selection, mounts): a fixed line height equal to the terminal's cell, so
+/// row n of the listing sits on row n of yazi's pane once the first row is
+/// aligned (`alignListingRows`). Callers add their tab stops.
+func listingParagraphStyle() -> NSMutableParagraphStyle {
+    let para = NSMutableParagraphStyle()
+    para.minimumLineHeight = terminalCellHeight()
+    para.maximumLineHeight = terminalCellHeight()
+    return para
+}
+
 // Directory look-ahead for the right pane: Quick Look only shows a folder's
 // icon + metadata, so for directories we render the contents ourselves —
 // folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type,
@@ -139,8 +166,7 @@ func renderListing(_ contents: FolderContents, in dir: String,
     let shown = contents.entries.map { truncateName($0.name, isDir: $0.isDir, max: folderListingNameColumn) }
     let longest = shown.map { $0.count }.max() ?? 0
     let advance = ("M" as NSString).size(withAttributes: [.font: font]).width
-    let para = NSMutableParagraphStyle()
-    para.lineHeightMultiple = terminalLineSpacing   // rows as far apart as yazi's beside them
+    let para = listingParagraphStyle()
     let signCells = cvs == nil ? 0 : 2
     para.tabStops = [NSTextTab(textAlignment: .left,
                                location: CGFloat(signCells + 3 + longest + 3) * advance)]
@@ -208,8 +234,7 @@ func renderSelectedListing(_ paths: [String], heading: String, emptyNote: String
         return NSAttributedString(string: "  (\(emptyNote))",
                                   attributes: [.font: font, .foregroundColor: fg])
     }
-    let rows = NSMutableParagraphStyle()
-    rows.lineHeightMultiple = terminalLineSpacing   // rows as far apart as yazi's beside them
+    let rows = listingParagraphStyle()
     let out = NSMutableAttributedString()
     out.append(NSAttributedString(string: "  \(heading)\n\n",
                                   attributes: [.font: font,
@@ -236,7 +261,8 @@ func renderSelectedListing(_ paths: [String], heading: String, emptyNote: String
 func renderMountPending(_ text: String) -> NSAttributedString {
     let pal = activePalette()
     return NSAttributedString(string: "  \(text)\n",
-                              attributes: [.font: terminalFont(), .foregroundColor: nsColor(pal.ansi[3])])
+                              attributes: [.font: terminalFont(), .foregroundColor: nsColor(pal.ansi[3]),
+                                           .paragraphStyle: listingParagraphStyle()])
 }
 
 /// Render the network mounts (⇧⌘K) in the folder-listing style: server icon
@@ -268,8 +294,7 @@ func renderMountListing(_ result: Result<[MountRow], Error>) -> NSAttributedStri
                                         attributes: [.font: font, .foregroundColor: nsColor(pal.ansi[3])])
     let shown = rows.map { ($0.item.mountPoint as NSString).abbreviatingWithTildeInPath }
     let advance = ("M" as NSString).size(withAttributes: [.font: font]).width
-    let para = NSMutableParagraphStyle()
-    para.lineHeightMultiple = terminalLineSpacing   // rows as far apart as yazi's beside them
+    let para = listingParagraphStyle()
     para.tabStops = [NSTextTab(textAlignment: .left,
                                location: CGFloat(3 + (shown.map { $0.count }.max() ?? 0) + 3) * advance)]
     for (row, name) in zip(rows, shown) {

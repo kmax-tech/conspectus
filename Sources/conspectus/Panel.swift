@@ -234,6 +234,11 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     /// read on the main thread by `showFolder` before it hands off to the
     /// loader queue. Main thread only.
     var listingSort = ListingSort.default
+    /// Terminal rows above yazi's file list (header, tab bar) as last
+    /// announced over the FIFO (`@LIST_TOP:`); the folder listing's first row
+    /// goes on that row of the preview pane (`alignListingRows`). Set on the
+    /// main thread by `listTopChanged`. Main thread only.
+    var yaziListTop = 1
     /// The folder-listing row a single click just revealed, kept for the
     /// double-click that may follow: the first click already re-renders the
     /// pane (yazi hovers the row — the listing changes, or a file preview

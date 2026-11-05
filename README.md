@@ -64,7 +64,12 @@ Code layout: `Sources/ConspectusCore` holds the pure, unit-tested helpers
     the tab's sort preference with every hover), Nerd Font glyphs, Catppuccin
     colors, size and modification date as a dimmed column — `today 14:32` /
     `y-day 09:10`, `16.10. 14:32` this year, `15.01. 2024` before (day field
-    as wide as `16.10.`, so the columns sit close).
+    as wide as `16.10.`, so the columns sit close). The rows sit **on yazi's
+    rows**: every listing line is exactly one terminal cell high, and the
+    first row goes on the row where yazi's file list starts (the plugin
+    sends that with every hover — one row below the header, two with the
+    tab bar that yazi shows for more than one tab); the selection list (⌘L)
+    and the mount list (⇧⌘K) use the same grid.
     Names longer than 40 characters are cut with `…` like yazi cuts them
     (`lenz09-soziologie-der-zweierbeziehu….pdf` — the extension stays), so
     the column never wraps; the full name is the row's tooltip.

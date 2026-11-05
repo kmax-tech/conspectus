@@ -53,6 +53,7 @@ extension Panel {
         for v in [preview, pdfPane, textPane, imageView, folderScroll] as [NSView?] {
             v?.frame = area
         }
+        alignListingRows()   // the listing's rows follow the pane's new top
     }
 
     /// Fill the line for `path` and show the strip; hide it for a file

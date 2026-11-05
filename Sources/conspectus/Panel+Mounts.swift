@@ -146,8 +146,7 @@ extension Panel {
             let listing = renderMountListing(Result { try probeNetworkMounts() })
             DispatchQueue.main.async {
                 guard let self = self, self.isCurrentListing(gen) else { return }
-                self.folderText.textStorage?.setAttributedString(listing)
-                self.folderText.scroll(NSPoint.zero)
+                self.showListing(listing)
             }
         }
     }
@@ -159,7 +158,7 @@ extension Panel {
         hideAllCovers()
         lastTextPath = nil
         folderScroll.isHidden = false
-        folderText.textStorage?.setAttributedString(renderMountPending(text))
+        showListing(renderMountPending(text))
     }
 
     /// The network mount whose mount point is `path`, for the context menu's

@@ -72,6 +72,14 @@ local get_sort = ya.sync(function()
 end)
 local sort_warned = false
 
+-- The terminal row (0-based) where the active tab's file list starts, as the
+-- `@LIST_TOP:` body: yazi's Root layout puts the header (1 row) and the tab
+-- bar (1 row with more than one tab, else 0 — `Tabs.height()`) above it. The
+-- app puts the folder listing's rows on the same rows of its pane.
+local get_list_top = ya.sync(function()
+	return tostring(1 + (#cx.tabs > 1 and 1 or 0))
+end)
+
 -- Whether the item UNDER THE CURSOR is a directory — read from yazi's real
 -- state, so it's correct even with files selected (unlike a shell `[ -d "$1" ]`
 -- test, where "$1" is the first SELECTED file, not the hovered one).
@@ -334,6 +342,7 @@ function M:setup()
 			local oks, sort = pcall(get_sort)
 			if oks then
 				fifo_write(fifo, "@SORT:" .. sort)
+				fifo_write(fifo, "@LIST_TOP:" .. get_list_top())
 			elseif not sort_warned then
 				sort_warned = true
 				ya.notify({ title = "conspectus", timeout = 5, level = "warn",

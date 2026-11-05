@@ -118,6 +118,14 @@ let yankPrefix = "@YANK:"
 /// always arrives together. Prefixed, so it never collides with a hover.
 let sortPrefix = "@SORT:"
 
+/// FIFO message prefix for where yazi's file list starts: `@LIST_TOP:<rows>`,
+/// the number of terminal rows above the list — yazi's header, plus its tab
+/// bar when more than one tab is open. Sent with every `@SORT:`; the preview
+/// puts the folder listing's rows on the same rows of its pane, so a folder
+/// shown beside yazi lines up with it (`alignListingRows`). Prefixed, so it
+/// never collides with a hover.
+let listTopPrefix = "@LIST_TOP:"
+
 /// FIFO message prefix for yazi's SELECTION (Space/v marks) — the plugin's
 /// answer to the app's `panesync-selected` DDS request (⌘L), as
 /// `@SELECTED:<path>\t<path>…` (empty = nothing selected). Request/answer, not
