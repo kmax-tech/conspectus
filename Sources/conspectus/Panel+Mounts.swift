@@ -211,6 +211,32 @@ extension Panel {
         mount(mp)
     }
 
+    /// Go ▸ Network Mounts with ⌥: Mount … in Terminal.
+    @objc func mountInTerminalFromMenu(_ sender: Any?) {
+        guard let mp = (sender as? NSMenuItem)?.representedObject as? String else { return }
+        mountInTerminal(mp)
+    }
+
+    /// Mount an automount point in the ⌘J terminal: the panel opens running
+    /// the launcher's `conspectus mount <mount point>` — the same entry and
+    /// check as Mount, but with the terminal attached, so a command that
+    /// asks a password (sudo on the server) can. The shell stays open
+    /// afterwards with the result above it; ⇧⌘K then shows the new state.
+    /// An open panel is replaced. Side effects: kills a running panel shell,
+    /// spawns the launcher.
+    func mountInTerminal(_ mountPoint: String) {
+        guard let launcher = launcherPath else {
+            warn("conspectus: cannot mount \(mountPoint) — started without the launcher (CONSPECTUS_LAUNCHER unset)")
+            NSSound.beep()
+            return
+        }
+        logEvent("mount in terminal \(mountPoint)")
+        closeBottomTerminal()
+        startBottomTerminal(script: "cd \"$1\"; \"$2\" mount \"$3\"; exec zsh -i",
+                            args: [currentYaziDir(), launcher, mountPoint],
+                            height: termPanelHeight)
+    }
+
     /// Unmount off main, then show the updated mount list. A refused unmount
     /// (files still open, a shell cd'd into it) opens a sheet with umount's
     /// reason and offers Force Unmount; a failed force only says why.
@@ -272,16 +298,21 @@ extension Panel {
     }
 
     /// The sheet for a failed mount: the launcher's report, which names the
-    /// log with the mount command's output. Side effects: beeps, opens a sheet.
+    /// log with the mount command's output, and Run in Terminal — the same
+    /// mount in the ⌘J panel, where a password prompt works. Side effects:
+    /// beeps, opens a sheet; Run in Terminal runs `mountInTerminal`.
     private func refuseMount(_ mountPoint: String, _ reason: String) {
         warn("conspectus: cannot mount \(mountPoint) — \(reason)")
         NSSound.beep()
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Cannot mount “\((mountPoint as NSString).lastPathComponent)”"
-        alert.informativeText = reason
+        alert.informativeText = reason + "\n\nRun in Terminal runs the same mount in the ⌘J panel, where it can ask for a password."
         alert.addButton(withTitle: "OK")
-        alert.beginSheetModal(for: window)
+        alert.addButton(withTitle: "Run in Terminal")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            if response == .alertSecondButtonReturn { self?.mountInTerminal(mountPoint) }
+        }
     }
 }
 
@@ -323,6 +354,17 @@ extension Panel: NSMenuDelegate {
             mi.target = self
             mi.representedObject = item.mountPoint
             menu.addItem(mi)
+            if item.mounted == nil, launcherPath != nil {
+                // ⌥ held: the same mount in the ⌘J terminal, for a command
+                // that asks a password.
+                let alt = NSMenuItem(title: "Mount \(name) in Terminal",
+                                     action: #selector(mountInTerminalFromMenu(_:)), keyEquivalent: "")
+                alt.keyEquivalentModifierMask = [.option]
+                alt.isAlternate = true
+                alt.target = self
+                alt.representedObject = item.mountPoint
+                menu.addItem(alt)
+            }
         }
     }
 }

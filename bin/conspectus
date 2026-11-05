@@ -76,6 +76,10 @@ is_mounted() { "$BIN" --mount-table | cut -f1 | grep -qxF "$1"; }
 AUTOMOUNT_FILE="${CONSPECTUS_AUTOMOUNT:-$HOME/.config/conspectus/automount}"
 AUTOMOUNT_PROBE_SECS=5
 AUTOMOUNT_CMD_SECS=120   # a mount command still running after this is killed
+# `conspectus mount <dir>` sets this: the command runs in the foreground
+# with the terminal attached (a password prompt works) and no time limit —
+# the user is there, Ctrl-C ends it. Output goes to the terminal, not a log.
+AUTOMOUNT_INTERACTIVE=0
 
 # Prints the automount entries as `<mount point>\t<command>`, `~` expanded and
 # trailing slashes dropped; a line without a command or with a relative mount
@@ -177,6 +181,15 @@ automount_run() {
   else
     automount_report mounting "$mp" "mounting $mp: $cmd"
   fi
+  if [[ $AUTOMOUNT_INTERACTIVE -eq 1 ]]; then
+    /bin/zsh -l -c "$cmd" || rc=$?
+    if is_mounted "$mp" && probe_responds "$mp" "$AUTOMOUNT_PROBE_SECS"; then
+      automount_report mounted "$mp" "$mp mounted"
+      return 0
+    fi
+    automount_report failed "$mp" "'$cmd' (exit $rc) left $mp unusable"
+    return 1
+  fi
   /bin/zsh -l -c "$cmd" > "$log" 2>&1 < /dev/null &
   pid=$!
   for ((i = 0; i < AUTOMOUNT_CMD_SECS * 5; i++)); do
@@ -205,6 +218,23 @@ if [[ ${1:-} == automount ]]; then
   if [[ -z $entry ]]; then
     automount_report failed "$2" "no entry in $AUTOMOUNT_FILE covers $2"
     exit 1
+  fi
+  automount_ensure "${entry%%$'\t'*}" "${entry#*$'\t'}"
+  exit
+fi
+
+# `conspectus mount <dir>`: the same check, run by hand in a terminal — the
+# app's "Run in Terminal" (⌘J panel) for a mount whose command asks a
+# password. Reports go to the terminal, never to a yazi.
+if [[ ${1:-} == mount ]]; then
+  [[ $# -eq 2 ]] || { echo "usage: conspectus mount <dir>   (an entry of $AUTOMOUNT_FILE)" >&2; exit 2; }
+  entry="$(automount_entry_for "$2")"
+  [[ -n $entry ]] || { echo "conspectus: no entry in $AUTOMOUNT_FILE covers $2" >&2; exit 1; }
+  AUTOMOUNT_INTERACTIVE=1
+  unset YAZI_ID
+  if is_mounted "${entry%%$'\t'*}" && probe_responds "${entry%%$'\t'*}" "$AUTOMOUNT_PROBE_SECS"; then
+    echo "conspectus: ${entry%%$'\t'*} is mounted and answers" >&2
+    exit 0
   fi
   automount_ensure "${entry%%$'\t'*}" "${entry#*$'\t'}"
   exit
