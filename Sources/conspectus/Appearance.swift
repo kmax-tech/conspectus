@@ -140,6 +140,7 @@ func renderListing(_ contents: FolderContents, in dir: String,
     let longest = shown.map { $0.count }.max() ?? 0
     let advance = ("M" as NSString).size(withAttributes: [.font: font]).width
     let para = NSMutableParagraphStyle()
+    para.lineHeightMultiple = terminalLineSpacing   // rows as far apart as yazi's beside them
     let signCells = cvs == nil ? 0 : 2
     para.tabStops = [NSTextTab(textAlignment: .left,
                                location: CGFloat(signCells + 3 + longest + 3) * advance)]
@@ -207,6 +208,8 @@ func renderSelectedListing(_ paths: [String], heading: String, emptyNote: String
         return NSAttributedString(string: "  (\(emptyNote))",
                                   attributes: [.font: font, .foregroundColor: fg])
     }
+    let rows = NSMutableParagraphStyle()
+    rows.lineHeightMultiple = terminalLineSpacing   // rows as far apart as yazi's beside them
     let out = NSMutableAttributedString()
     out.append(NSAttributedString(string: "  \(heading)\n\n",
                                   attributes: [.font: font,
@@ -219,10 +222,11 @@ func renderSelectedListing(_ paths: [String], heading: String, emptyNote: String
         let url = URL(fileURLWithPath: path, isDirectory: isDir)
         out.append(NSAttributedString(string: icon.glyph + "  " + name + (isDir ? "/" : ""),
                                       attributes: [.font: font, .foregroundColor: icon.color,
-                                                   .link: url]))
+                                                   .link: url, .paragraphStyle: rows]))
         out.append(NSAttributedString(string: "   " + ns.deletingLastPathComponent + "\n",
                                       attributes: [.font: font,
-                                                   .foregroundColor: fg.withAlphaComponent(listingDimAlpha)]))
+                                                   .foregroundColor: fg.withAlphaComponent(listingDimAlpha),
+                                                   .paragraphStyle: rows]))
     }
     return out
 }
