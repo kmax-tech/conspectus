@@ -64,6 +64,8 @@ let cheatSheetGroups: [CheatSheetGroup] = [
                     ("", "  (the only cross-directory view — yazi highlights marks"),
                     ("", "  only inside their own directory; the yellow badge just counts)"),
                     ("⌘⇧L", "yazi's clipboard (y / x / Copy / Cut) as the same list"),
+                    ("⌘⇧K", "network mounts (SMB, NFS, sshfs, Ceph) in the preview — red = no answer"),
+                    ("", "  within 3 s; right-click a mount point (there or in yazi): Unmount"),
                     ("⌘J", "terminal panel (opens in yazi's dir)"),
                     ("⌘R", "re-theme yazi panes now (automatic on light↔dark; waits while tasks or a selection exist)"),
                     ("", "yazi tabs survive ⌘R and app restarts (bare start restores; [path] = clean)"),

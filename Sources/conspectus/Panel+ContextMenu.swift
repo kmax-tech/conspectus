@@ -165,6 +165,12 @@ extension Panel: NSServicesMenuRequestor {
         menu.addItem(.separator())
         add(isDir ? "Open in Finder" : "Reveal in Finder", #selector(contextReveal(_:)), me)
         add("Get Info", #selector(contextGetInfo(_:)), me)
+        // Only on the mount point of a network mount (the mount list's rows,
+        // or the folder in yazi) — below it, Unmount would pull the floor
+        // from under a different item than the one clicked.
+        if isDir, networkMountAt(path) != nil {
+            add("Unmount “\((path as NSString).lastPathComponent)”", #selector(contextUnmount(_:)), me)
+        }
         menu.addItem(.separator())
         menu.addItem(NSSharingServicePicker(items: [url]).standardShareMenuItem)   // Finder's Share submenu
         let services = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")

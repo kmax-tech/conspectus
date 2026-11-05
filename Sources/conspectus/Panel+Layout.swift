@@ -514,6 +514,11 @@ extension Panel {
         vcsUpdate.keyEquivalentModifierMask = [.command, .option]
         vcsUpdate.target = self
         goMenu.addItem(vcsUpdate)
+        // ⇧⌘K is Finder's Go ▸ Network: here the network mounts as a list in
+        // the preview, with Unmount on a row's context menu.
+        let mounts = NSMenuItem(title: "Network Mounts", action: #selector(showMountList), keyEquivalent: "K")
+        mounts.target = self
+        goMenu.addItem(mounts)
         goMenu.addItem(NSMenuItem.separator())
         addTabItems(goMenu)
         goItem.submenu = goMenu

@@ -230,3 +230,57 @@ func renderSelectedListing(_ paths: [String], heading: String, emptyNote: String
     }
     return out
 }
+
+/// Render the network mounts (⇧⌘K) in the folder-listing style: server icon
+/// and mount point per row, source and file system type dimmed behind it.
+/// The icon is green when the mount answered within `mountProbeSeconds`, red
+/// with "no answer" when it did not. Rows carry the listing's .link contract
+/// (click reveals the mount point in yazi, double-click enters it), so the
+/// context menu on a row offers Unmount. `nil` is the "checking…" state shown
+/// while the probes run. Does no I/O.
+func renderMountListing(_ result: Result<[MountRow], Error>?) -> NSAttributedString {
+    let pal = activePalette()
+    let fg = nsColor(pal.fg), dim = fg.withAlphaComponent(listingDimAlpha)
+    let font = terminalFont()
+    let heading: String
+    let rows: [MountRow]
+    switch result {
+    case nil:
+        heading = "checking network mounts …"; rows = []
+    case .failure(let error):
+        return NSAttributedString(string: "  (cannot read the mount table: \(error))",
+                                  attributes: [.font: font, .foregroundColor: nsColor(pal.ansi[1])])
+    case .success(let r) where r.isEmpty:
+        return NSAttributedString(string: "  (no network mounts)", attributes: [.font: font, .foregroundColor: fg])
+    case .success(let r):
+        heading = "\(r.count) network mount\(r.count == 1 ? "" : "s") — right-click: Unmount"; rows = r
+    }
+    let out = NSMutableAttributedString(string: "  \(heading)\n\n",
+                                        attributes: [.font: font, .foregroundColor: nsColor(pal.ansi[3])])
+    let shown = rows.map { ($0.mount.mountPoint as NSString).abbreviatingWithTildeInPath }
+    let advance = ("M" as NSString).size(withAttributes: [.font: font]).width
+    let para = NSMutableParagraphStyle()
+    para.lineHeightMultiple = terminalLineSpacing   // rows as far apart as yazi's beside them
+    para.tabStops = [NSTextTab(textAlignment: .left,
+                               location: CGFloat(3 + (shown.map { $0.count }.max() ?? 0) + 3) * advance)]
+    for (row, name) in zip(rows, shown) {
+        let url = URL(fileURLWithPath: row.mount.mountPoint, isDirectory: true)
+        let red = nsColor(pal.ansi[1])
+        out.append(NSAttributedString(string: "\u{f233}  ",   // nf-fa-server
+                                      attributes: [.font: font, .foregroundColor: row.responds ? nsColor(pal.ansi[2]) : red,
+                                                   .link: url, .paragraphStyle: para]))
+        out.append(NSAttributedString(string: name,
+                                      attributes: [.font: font, .foregroundColor: nsColor(pal.ansi[4]),
+                                                   .link: url, .paragraphStyle: para]))
+        out.append(NSAttributedString(string: "\t\(row.mount.source)  \(row.mount.fsType)",
+                                      attributes: [.font: font, .foregroundColor: dim,
+                                                   .link: url, .paragraphStyle: para]))
+        if !row.responds {
+            out.append(NSAttributedString(string: "  no answer within \(Int(mountProbeSeconds)) s",
+                                          attributes: [.font: font, .foregroundColor: red,
+                                                       .link: url, .paragraphStyle: para]))
+        }
+        out.append(NSAttributedString(string: "\n", attributes: [.font: font, .paragraphStyle: para]))
+    }
+    return out
+}
