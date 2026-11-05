@@ -85,6 +85,13 @@ func terminalFont(size overrideSize: Double? = nil) -> NSFont {
     return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
 }
 
+/// Line height of the terminal panes as a multiple of the font's *natural*
+/// line height (SwiftTerm's `lineSpacing`: ascent + descent + leading). Same
+/// unit and value as wezterm's `line_height`: JetBrains Mono's natural height
+/// is 1.32 × size, so 1.32 × 1.136 = 1.5 × size — the line height of every
+/// other terminal and editor in the dotfiles (`typography.md`, "The unit trap").
+let terminalLineSpacing: CGFloat = 1.136
+
 // Directory look-ahead for the right pane: Quick Look only shows a folder's
 // icon + metadata, so for directories we render the contents ourselves —
 // folders first, natural sort, Nerd Font glyphs, Catppuccin colors per type,

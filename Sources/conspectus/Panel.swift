@@ -295,6 +295,7 @@ final class Panel: NSObject, NSApplicationDelegate, LocalProcessTerminalViewDele
     func makeTerm() -> LocalProcessTerminalView {
         let t = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 700, height: 900))
         t.font = terminalFont()           // Nerd Font before startProcess so cols/rows are sized right
+        t.lineSpacing = terminalLineSpacing  // same reason: it sets the cell height
         applyTheme(t)                     // Catppuccin, following system light/dark
         t.processDelegate = self
         return t

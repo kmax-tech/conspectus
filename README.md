@@ -590,7 +590,9 @@ the active instance automatically — no focus tracking involved. Note that
   catppuccin flavors only if they are installed; otherwise your own theme (or
   yazi's default) is kept.
 - Font: JetBrainsMono Nerd Font Mono by default; override with `CONSPECTUS_FONT` /
-  `CONSPECTUS_FONT_SIZE`.
+  `CONSPECTUS_FONT_SIZE`. Line height 1.136 × the font's natural height
+  (`terminalLineSpacing`), the same value as wezterm's `line_height` — 1.5 ×
+  the size for JetBrains Mono.
 - Split ratio: the preview keeps **a third** of the width, the terminal panes
   share the remaining two thirds — at every pane count, so toggling ⌘D/⌘E does
   not resize the preview behind your back. `CONSPECTUS_SPLIT` is the terminals'
