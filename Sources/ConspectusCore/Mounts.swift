@@ -52,6 +52,40 @@ public func networkMount(at path: String, in table: [MountEntry]) -> MountEntry?
     return table.first { isNetworkMount($0) && $0.mountPoint == p }
 }
 
+/// One row of the mount list (⇧⌘K, Go ▸ Network Mounts): a mounted network
+/// mount, or a mount point from the launcher's automount file that is not
+/// mounted right now (`mounted == nil`) — the row that offers Mount.
+public struct MountListItem: Equatable {
+    public let mountPoint: String
+    public let mounted: MountEntry?
+
+    public init(mountPoint: String, mounted: MountEntry?) {
+        self.mountPoint = mountPoint
+        self.mounted = mounted
+    }
+}
+
+/// The mount list: every network mount of the table plus every automount
+/// point that is not mounted, sorted by mount point. An automount point that
+/// is mounted appears once, as the mounted row. `automountPoints` are
+/// absolute paths (the launcher expands `~` before handing them over).
+public func mountListItems(table: [MountEntry], automountPoints: [String]) -> [MountListItem] {
+    var items = networkMounts(table).map { MountListItem(mountPoint: $0.mountPoint, mounted: $0) }
+    let mountedPoints = Set(items.map { $0.mountPoint })
+    for mp in Set(automountPoints.map { ($0 as NSString).standardizingPath }) where !mountedPoints.contains(mp) {
+        items.append(MountListItem(mountPoint: mp, mounted: nil))
+    }
+    return items.sorted { $0.mountPoint < $1.mountPoint }
+}
+
+/// True when `path` IS an automount point (not something below it) that is
+/// not mounted right now — what the context menu offers to mount.
+public func isUnmountedAutomountPoint(_ path: String, in table: [MountEntry], automountPoints: [String]) -> Bool {
+    let p = (path as NSString).standardizingPath
+    return automountPoints.contains { ($0 as NSString).standardizingPath == p }
+        && networkMount(at: p, in: table) == nil
+}
+
 /// `getfsstat` failed; `errno` says why.
 public struct MountTableError: Error, CustomStringConvertible {
     public let errno: Int32

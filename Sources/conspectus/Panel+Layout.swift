@@ -514,10 +514,17 @@ extension Panel {
         vcsUpdate.keyEquivalentModifierMask = [.command, .option]
         vcsUpdate.target = self
         goMenu.addItem(vcsUpdate)
-        // ⇧⌘K is Finder's Go ▸ Network: here the network mounts as a list in
-        // the preview, with Unmount on a row's context menu.
-        let mounts = NSMenuItem(title: "Network Mounts", action: #selector(showMountList), keyEquivalent: "K")
-        mounts.target = self
+        // Network Mounts is a submenu built when it opens (Panel+Mounts,
+        // `menuNeedsUpdate`): Show in Preview (⇧⌘K, Finder's Go ▸ Network),
+        // then Mount / Unmount per mount. A fixed first item keeps the key
+        // registered while the menu is closed.
+        let mounts = NSMenuItem(title: mountMenuTitle, action: nil, keyEquivalent: "")
+        let mountMenu = NSMenu(title: mountMenuTitle)
+        mountMenu.delegate = self
+        let showMounts = NSMenuItem(title: "Show in Preview", action: #selector(showMountList), keyEquivalent: "K")
+        showMounts.target = self
+        mountMenu.addItem(showMounts)
+        mounts.submenu = mountMenu
         goMenu.addItem(mounts)
         goMenu.addItem(NSMenuItem.separator())
         addTabItems(goMenu)

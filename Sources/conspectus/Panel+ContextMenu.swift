@@ -170,6 +170,11 @@ extension Panel: NSServicesMenuRequestor {
         // from under a different item than the one clicked.
         if isDir, networkMountAt(path) != nil {
             add("Unmount “\((path as NSString).lastPathComponent)”", #selector(contextUnmount(_:)), me)
+        } else if isMountableAutomountPoint(path) {
+            // Mount for an automount point that is not mounted (a dimmed row
+            // of the list, or its folder in yazi — which may not exist yet:
+            // the mount command creates it).
+            add("Mount “\((path as NSString).lastPathComponent)”", #selector(contextMount(_:)), me)
         }
         menu.addItem(.separator())
         menu.addItem(NSSharingServicePicker(items: [url]).standardShareMenuItem)   // Finder's Share submenu

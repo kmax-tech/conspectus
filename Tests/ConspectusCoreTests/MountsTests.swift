@@ -43,6 +43,29 @@ final class MountsTests: XCTestCase {
         XCTAssertNil(networkMount(at: "/", in: table), "a local mount point is never offered")
     }
 
+    func testMountListItemsAddsUnmountedAutomountPointsOnce() {
+        let items = mountListItems(table: [root, ceph, smb],
+                                   automountPoints: ["/Users/max/mnt/ceph/storage", "/Users/max/mnt/ssh/leguin/", "/Users/max/mnt/ssh/leguin"])
+        XCTAssertEqual(items, [MountListItem(mountPoint: "/Users/max/mnt/ceph/storage", mounted: ceph),
+                               MountListItem(mountPoint: "/Users/max/mnt/ssh/leguin", mounted: nil),
+                               MountListItem(mountPoint: "/Volumes/storage", mounted: smb)],
+                       "a mounted automount point is one mounted row; an unmounted one is listed once, sorted in; local mounts never")
+    }
+
+    func testMountListItemsWithoutAutomountIsTheNetworkMounts() {
+        XCTAssertEqual(mountListItems(table: [root, sshfs], automountPoints: []),
+                       [MountListItem(mountPoint: sshfs.mountPoint, mounted: sshfs)])
+        XCTAssertEqual(mountListItems(table: [root], automountPoints: []), [])
+    }
+
+    func testIsUnmountedAutomountPoint() {
+        let points = ["/Users/max/mnt/ceph/storage", "/Users/max/mnt/ssh/leguin"]
+        XCTAssertTrue(isUnmountedAutomountPoint("/Users/max/mnt/ssh/leguin/", in: [root, ceph], automountPoints: points))
+        XCTAssertFalse(isUnmountedAutomountPoint("/Users/max/mnt/ceph/storage", in: [root, ceph], automountPoints: points), "mounted: Unmount, not Mount")
+        XCTAssertFalse(isUnmountedAutomountPoint("/Users/max/mnt/ssh/leguin/home", in: [root], automountPoints: points), "below the point is not the point")
+        XCTAssertFalse(isUnmountedAutomountPoint("/Users/max/mnt/other", in: [root], automountPoints: points), "unknown folders are not mountable")
+    }
+
     func testReadMountTableSeesTheRootFileSystem() throws {
         let table = try readMountTable()
         XCTAssertTrue(table.contains { $0.mountPoint == "/" }, "every Mac has / in its mount table")

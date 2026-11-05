@@ -233,6 +233,25 @@ let previewSkipDirs: [String] = {
     return dirs
 }()
 
+/// The mount points of the launcher's automount file (CONSPECTUS_AUTOMOUNT),
+/// as the launcher hands them over: CONSPECTUS_AUTOMOUNT_DIRS, one absolute
+/// path per line, already `~`-expanded. They are the rows of the mount list
+/// and Go ▸ Network Mounts that offer Mount while unmounted. Unset or empty
+/// (no file, started without the launcher) is the normal case: no such rows.
+let automountPoints: [String] = {
+    let raw = ProcessInfo.processInfo.environment["CONSPECTUS_AUTOMOUNT_DIRS"] ?? ""
+    return raw.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+}()
+
+/// The launcher script (CONSPECTUS_LAUNCHER, set by bin/conspectus): what
+/// Mount runs as `conspectus automount <mount point>`, so the mount command,
+/// its lock and its log stay the launcher's. nil when the app was started
+/// without the launcher — then Mount is not offered.
+let launcherPath: String? = {
+    guard let p = ProcessInfo.processInfo.environment["CONSPECTUS_LAUNCHER"], !p.isEmpty else { return nil }
+    return p
+}()
+
 /// Split ratio (CONSPECTUS_SPLIT): the terminal panes' *combined* share of the
 /// window width, as a fraction — the preview keeps the rest. Applies at every
 /// pane count, not just at startup: the preview holds its share when panes are
@@ -338,6 +357,22 @@ if let i = CommandLine.arguments.firstIndex(of: "--cvs-status") {
         let out = read.statuses.filter { $0.value != .clean }.sorted { $0.key < $1.key }
             .map { "\($0.value.rawValue)\t\($0.key)\n" }.joined()
         FileHandle.standardOutput.write(Data(out.utf8))
+    }
+    exit(0)
+}
+
+// Headless mount table: `conspectus --mount-table` prints one
+// `<mount point>\t<source>\t<fs type>` line per mount and exits. The
+// launcher's `is_mounted` reads this instead of `mount`: that command asks
+// every mount with MNT_WAIT and sits two minutes on a FUSE mount whose
+// daemon does not answer — the very mount automount is about to repair.
+// `readMountTable` is MNT_NOWAIT and never touches a server.
+if CommandLine.arguments.contains("--mount-table") {
+    do {
+        let out = try readMountTable().map { "\($0.mountPoint)\t\($0.source)\t\($0.fsType)\n" }.joined()
+        FileHandle.standardOutput.write(Data(out.utf8))
+    } catch {
+        die("conspectus: --mount-table: \(error)")
     }
     exit(0)
 }

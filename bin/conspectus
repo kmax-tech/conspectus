@@ -9,6 +9,10 @@
 #   conspectus '/ssh:<host>|sudo:root@<host>:<path>'   # TRAMP spelling
 #                             # a remote machine through an sshfs mount,
 #                             # unmounted again when the app quits
+#   conspectus ssh-mount [--sudo] <host>
+#                             # only the mount, nothing opened; a dead mount
+#                             # is detached and mounted again — the mount
+#                             # command for an automount line (see below)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -47,7 +51,14 @@ if [[ -n ${CONSPECTUS_SUDO_TRANSPORT:-} ]]; then
 fi
 
 # True when <dir> is a mount point right now.
-is_mounted() { mount | grep -qF " on $1 ("; }
+BIN="$REPO/.build/release/conspectus"
+[[ -x $BIN ]] || { echo "conspectus: not built — run $REPO/build.sh" >&2; exit 1; }
+
+# True when <dir> is a mount point. Asks the app for the kernel's mount
+# table (getfsstat MNT_NOWAIT) — not `mount`, which waits for every mount's
+# statfs and sits two minutes on a FUSE mount whose daemon does not answer,
+# the very mount the checks below are about to repair.
+is_mounted() { "$BIN" --mount-table | cut -f1 | grep -qxF "$1"; }
 
 # --- automount ----------------------------------------------------------------
 # Network mounts that need not stay mounted: $CONSPECTUS_AUTOMOUNT (default
@@ -112,6 +123,7 @@ probe_responds() {
     sleep 0.1
   done
   kill "$probe" 2>/dev/null || true
+  wait "$probe" 2>/dev/null || true   # reap it quietly: bash would print "Terminated: 15 ls …" otherwise
   return 1
 }
 
@@ -197,9 +209,6 @@ if [[ ${1:-} == automount ]]; then
   automount_ensure "${entry%%$'\t'*}" "${entry#*$'\t'}"
   exit
 fi
-
-BIN="$REPO/.build/release/conspectus"
-[[ -x $BIN ]] || { echo "conspectus: not built — run $REPO/build.sh" >&2; exit 1; }
 
 # Overlay config under YAZI_CONFIG_HOME: the user's live config is symlinked
 # in, the bundled conspectus.yazi plugin (hover -> FIFO, panesync-cd) is
@@ -444,9 +453,15 @@ parse_tramp() {
 }
 
 [[ "${1:-}" == /ssh:* ]] && set -- ssh "$@"
-if [[ "${1:-}" == "ssh" ]]; then
+if [[ "${1:-}" == "ssh" || "${1:-}" == "ssh-mount" ]]; then
+  # ssh-mount: the mount alone, detached, nothing opened — what an automount
+  # line runs (`~/mnt/ssh/<host>  conspectus ssh-mount <host>`). Like every
+  # automount command it must bring the mount back from any state, so a
+  # mounted but dead one is detached first.
+  mount_only=0
+  [[ $1 == ssh-mount ]] && mount_only=1
   shift
-  usage="usage: conspectus ssh [--sudo] <host>[:<path>]   or   conspectus '/ssh:<host>[|sudo:[<user>@]<host>]:<path>'"
+  usage="usage: conspectus ssh [--sudo] <host>[:<path>]   or   conspectus '/ssh:<host>[|sudo:[<user>@]<host>]:<path>'   or   conspectus ssh-mount [--sudo] <host>"
   sudo_user=""
   if [[ "${1:-}" == "--sudo" ]]; then sudo_user=root; shift; fi
   [[ $# -eq 1 && -n $1 ]] || { echo "$usage" >&2; exit 2; }
@@ -474,8 +489,6 @@ if [[ "${1:-}" == "ssh" ]]; then
   esac
 
   mnt="${CONSPECTUS_SSH_MOUNTS:-$HOME/mnt/ssh}/$host"
-  opts="reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,defer_permissions,noappledouble,noapplexattr"
-  sudo_env=()
   if [[ -n $sudo_user ]]; then
     sftp_server="$(sed -n 2p <<<"$probe")"
     sudo_state="$(sed -n 3p <<<"$probe")"
@@ -483,8 +496,29 @@ if [[ "${1:-}" == "ssh" ]]; then
     [[ $sftp_server =~ ^/[A-Za-z0-9/._-]+$ ]] || { echo "conspectus: odd sftp-server path from $host: '$sftp_server'" >&2; exit 1; }
     mnt+="-sudo"
     [[ $sudo_user == root ]] || mnt+="-$sudo_user"
+  fi
+  # ssh-mount on a mount that is there: answering → done; dead (sleep, a
+  # network change) → detached, then mounted again below like a new one.
+  if [[ $mount_only -eq 1 ]] && is_mounted "$mnt"; then
+    if probe_responds "$mnt" "$AUTOMOUNT_PROBE_SECS"; then
+      echo "conspectus: $mnt is mounted and answers" >&2
+      exit 0
+    fi
+    echo "conspectus: $mnt does not answer — detaching it before mounting again" >&2
+    # Its sshfs goes first: `umount -f` of a FUSE mount whose daemon hangs
+    # waits two minutes for it (macFUSE's timeout), longer than automount
+    # gives the whole command; with the daemon dead it detaches in seconds.
+    pkill -9 -f "^sshfs [^ ]+ $mnt -f -o " 2>/dev/null || true
+    mount_cleanup "$mnt"
+  fi
+  opts="reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,defer_permissions,noappledouble,noapplexattr"
+  sudo_env=()
+  if [[ -n $sudo_user ]]; then
     pw=""
     if [[ $sudo_state == password ]] && ! is_mounted "$mnt"; then   # a reused mount needs none
+      # The password is read from the terminal; from the app's Mount (no
+      # terminal) that cannot work, so say so instead of "no password given".
+      [[ -t 0 ]] || { echo "conspectus: sudo on $host wants a password, which needs a terminal — run 'conspectus ssh-mount --sudo $host' there" >&2; exit 1; }
       verdict=""
       for _ in 1 2 3; do
         IFS= read -rs -p "[sudo] password for ${host#*@} (to become $sudo_user): " pw \
@@ -510,6 +544,7 @@ if [[ "${1:-}" == "ssh" ]]; then
   # its own, unmounted when it quits.
   in_app=0
   pgrep -qx conspectus && in_app=1
+  [[ $mount_only -eq 0 ]] || in_app=1   # ssh-mount: always detached, no window of its own
 
   # Reuse a mount another session made (and leave it to that session);
   # otherwise mount now. sshfs 2.x under macFUSE 5 cannot daemonize once the
@@ -540,6 +575,10 @@ if [[ "${1:-}" == "ssh" ]]; then
       fi
       sleep 0.2
     done
+  fi
+  if [[ $mount_only -eq 1 ]]; then
+    echo "conspectus: $host is mounted at $mnt; it stays mounted — umount $mnt (or ⇧⌘K → Unmount) when done" >&2
+    exit
   fi
   start="$mnt$rpath"
   if [[ $in_app -eq 1 ]]; then
