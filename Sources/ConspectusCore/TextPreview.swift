@@ -106,7 +106,10 @@ public func decodeText(_ data: Data) -> String {
     let bom = [UInt8](data.prefix(2))
     if bom == [0xFF, 0xFE] || bom == [0xFE, 0xFF],
        let s = String(data: data, encoding: .utf16) { return s }
-    if let s = String(data: data, encoding: .utf8) { return s }
+    // Drop the UTF-8 BOM ourselves: Foundation on macOS 26 strips it, the
+    // one on macOS 15 keeps U+FEFF as the first character (CI, 2026-11-06).
+    let utf8Body = [UInt8](data.prefix(3)) == [0xEF, 0xBB, 0xBF] ? data.dropFirst(3) : data
+    if let s = String(data: utf8Body, encoding: .utf8) { return s }
     if let s = String(data: data, encoding: .windowsCP1252) { return s }
     guard let s = String(data: data, encoding: .isoLatin1) else {
         fatalError("Latin-1 decode failed — impossible, every byte maps")
