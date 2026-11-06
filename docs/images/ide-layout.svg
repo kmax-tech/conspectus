@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540" role="img" aria-labelledby="title desc">
+  <title id="title">Conspectus: browse, write, read</title>
+  <desc id="desc">Schematic IDE layout. Yazi selects paper.pdf on the left, Neovim edits paper.md in the middle, and the PDF stays visible on the right. Command N keeps the note open; Command P pins the preview.</desc>
+  <rect width="1200" height="540" rx="20" fill="#1e1e2e"/>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <text x="34" y="45" font-size="24" font-weight="700" fill="#cdd6f4">conspectus</text>
+    <text x="1166" y="43" text-anchor="end" font-size="15" fill="#a6adc8">IDE mode · schematic</text>
+    <rect x="24" y="68" width="1152" height="396" rx="10" fill="#181825" stroke="#45475a"/>
+    <path d="M370 68V464 M776 68V464" stroke="#45475a"/>
+    <g font-size="18" font-weight="700" fill="#89b4fa">
+      <text x="44" y="101">1  Browse · yazi</text>
+      <text x="392" y="101">2  Write · Neovim</text>
+      <text x="798" y="101">3  Read · native preview</text>
+    </g>
+    <path d="M24 118H1176" stroke="#45475a"/>
+    <g font-family="Menlo, monospace" font-size="17" fill="#cdd6f4">
+      <text x="44" y="153" fill="#a6adc8">~/Documents/papers</text>
+      <text x="44" y="199">notes/</text>
+      <rect x="36" y="218" width="320" height="36" rx="5" fill="#45475a"/>
+      <text x="48" y="242" fill="#a6e3a1">paper.pdf</text>
+      <text x="44" y="284">paper.md</text>
+      <text x="44" y="326">survey.pdf</text>
+      <text x="44" y="368">survey.md</text>
+      <text x="392" y="153" fill="#a6adc8">paper.md</text>
+      <text x="392" y="202" fill="#cba6f7"># Reading notes</text>
+      <text x="392" y="248">The main idea:</text>
+      <text x="392" y="286">- What does it claim?</text>
+      <text x="392" y="324">- What supports it?</text>
+      <text x="392" y="362">- What is still open?</text>
+      <text x="392" y="436" fill="#a6e3a1">:w  save note</text>
+    </g>
+    <rect x="820" y="135" width="312" height="308" rx="3" fill="#eff1f5"/>
+    <text x="846" y="172" font-size="18" font-weight="700" fill="#4c4f69">A paper worth reading</text>
+    <text x="846" y="198" font-size="12" fill="#6c6f85">Abstract</text>
+    <g stroke="#9ca0b0" stroke-width="4">
+      <path d="M846 218H1106 M846 230H1106 M846 242H1084"/>
+      <path d="M846 276H966 M846 289H966 M846 302H966 M846 315H958 M846 328H966 M846 341H966 M846 354H951 M846 367H966 M846 380H962"/>
+      <path d="M986 276H1106 M986 289H1106 M986 302H1106 M986 315H1098 M986 328H1106 M986 341H1106 M986 354H1091 M986 367H1106 M986 380H1102"/>
+    </g>
+    <text x="976" y="424" text-anchor="middle" font-size="12" fill="#6c6f85">paper.pdf · 1 / 12</text>
+    <text x="34" y="503" font-size="17" fill="#cdd6f4">Move onto a PDF → its existing note follows.   ⌘N keep note   ·   ⌘P pin preview   ·   ⌘K help</text>
+  </g>
+</svg>

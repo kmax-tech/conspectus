@@ -10,7 +10,7 @@ BIN="$REPO/.build/release/conspectus"
 # SwiftPM default is an ad-hoc signature, which is just the hash of this
 # build; TCC stores each grant against that hash, so every rebuild is a new
 # app to it and asks for everything again. Off unless the identity is named
-# (see README, "Privacy permissions").
+# (see docs/handbook.md, "Privacy permissions").
 if [ -n "${CONSPECTUS_SIGN_IDENTITY:-}" ]; then
   codesign --force --sign "$CONSPECTUS_SIGN_IDENTITY" "$BIN"
   echo "signed: $CONSPECTUS_SIGN_IDENTITY"
